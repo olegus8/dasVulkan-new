@@ -13,5 +13,6 @@ out/
 
 # runtime / scratch
 *.log
+*.ppm
 _smoke_*.das
 imgui.ini
