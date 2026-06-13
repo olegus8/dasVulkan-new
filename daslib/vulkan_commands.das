@@ -110,11 +110,44 @@ def create_image_view(device : Device; var create_info : ImageViewCreateInfo; va
     return <- b
 }
 
+def create_pipeline_layout(device : Device; var create_info : PipelineLayoutCreateInfo; var result : VkResult? = null) : PipelineLayout {
+    var vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkPipelineLayout
+    vk_check(vkCreatePipelineLayout(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_sampler(device : Device; var create_info : SamplerCreateInfo; var result : VkResult? = null) : Sampler {
     var vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSampler
     vk_check(vkCreateSampler(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+def create_descriptor_set_layout(device : Device; var create_info : DescriptorSetLayoutCreateInfo; var result : VkResult? = null) : DescriptorSetLayout {
+    var vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkDescriptorSetLayout
+    vk_check(vkCreateDescriptorSetLayout(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+def create_descriptor_pool(device : Device; var create_info : DescriptorPoolCreateInfo; var result : VkResult? = null) : DescriptorPool {
+    var vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkDescriptorPool
+    vk_check(vkCreateDescriptorPool(boost_value_to_vk(device), vci, null, h), result)
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
@@ -175,11 +208,33 @@ def create_swapchain_k_h_r(device : Device; var create_info : SwapchainCreateInf
     return <- b
 }
 
+def create_indirect_commands_layout_e_x_t(device : Device; var create_info : IndirectCommandsLayoutCreateInfoEXT; var result : VkResult? = null) : IndirectCommandsLayoutEXT {
+    var vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkIndirectCommandsLayoutEXT
+    vk_check(vkCreateIndirectCommandsLayoutEXT(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_indirect_execution_set_e_x_t(device : Device; var create_info : IndirectExecutionSetCreateInfoEXT; var result : VkResult? = null) : IndirectExecutionSetEXT {
     var vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkIndirectExecutionSetEXT
     vk_check(vkCreateIndirectExecutionSetEXT(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+def create_descriptor_update_template(device : Device; var create_info : DescriptorUpdateTemplateCreateInfo; var result : VkResult? = null) : DescriptorUpdateTemplate {
+    var vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkDescriptorUpdateTemplate
+    vk_check(vkCreateDescriptorUpdateTemplate(boost_value_to_vk(device), vci, null, h), result)
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))

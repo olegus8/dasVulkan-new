@@ -383,6 +383,55 @@ def vk_view_destroy(var b : DescriptorImageInfo) {
     pass
 }
 
+struct WriteDescriptorSet {
+    next : void?
+    dstSet : DescriptorSet
+    dstBinding : uint
+    dstArrayElement : uint
+    descriptorType : VkDescriptorType
+    pImageInfo : array<DescriptorImageInfo>
+    pBufferInfo : array<DescriptorBufferInfo>
+    pTexelBufferView : array<BufferView>
+    _vk_view_pImageInfo : array<VkDescriptorImageInfo>
+    _vk_view_pBufferInfo : array<VkDescriptorBufferInfo>
+    _vk_view_pTexelBufferView : array<VkBufferView>
+}
+def vk_view_create_unsafe(var b : WriteDescriptorSet) : VkWriteDescriptorSet {
+    var vk = VkWriteDescriptorSet()
+    vk.pNext = b.next
+    vk.dstSet = boost_value_to_vk(b.dstSet)
+    vk.dstBinding = b.dstBinding
+    vk.dstArrayElement = b.dstArrayElement
+    vk.descriptorType = b.descriptorType
+    b._vk_view_pImageInfo |> resize(length(b.pImageInfo))
+    for (vki in range(length(b.pImageInfo))) {
+        b._vk_view_pImageInfo[vki] = vk_view_create_unsafe(b.pImageInfo[vki])
+    }
+    vk.descriptorCount = uint(length(b.pImageInfo))
+    vk.pImageInfo = array_addr(b._vk_view_pImageInfo)
+    b._vk_view_pBufferInfo |> resize(length(b.pBufferInfo))
+    for (vki in range(length(b.pBufferInfo))) {
+        b._vk_view_pBufferInfo[vki] = vk_view_create_unsafe(b.pBufferInfo[vki])
+    }
+    vk.descriptorCount = uint(length(b.pBufferInfo))
+    vk.pBufferInfo = array_addr(b._vk_view_pBufferInfo)
+    b._vk_view_pTexelBufferView <- [for (h in b.pTexelBufferView); boost_value_to_vk(h)]
+    vk.descriptorCount = uint(length(b.pTexelBufferView))
+    vk.pTexelBufferView = array_addr(b._vk_view_pTexelBufferView)
+    return <- vk
+}
+def vk_view_destroy(var b : WriteDescriptorSet) {
+    for (vki in range(length(b.pImageInfo))) {
+        vk_view_destroy(b.pImageInfo[vki])
+    }
+    delete b._vk_view_pImageInfo
+    for (vki in range(length(b.pBufferInfo))) {
+        vk_view_destroy(b.pBufferInfo[vki])
+    }
+    delete b._vk_view_pBufferInfo
+    unsafe { delete b._vk_view_pTexelBufferView }
+}
+
 struct CopyDescriptorSet {
     next : void?
     srcSet : DescriptorSet
@@ -735,6 +784,134 @@ def vk_view_destroy(var b : SparseImageMemoryBind) {
     pass
 }
 
+struct SparseBufferMemoryBindInfo {
+    buffer : Buffer
+    pBinds : array<SparseMemoryBind>
+    _vk_view_pBinds : array<VkSparseMemoryBind>
+}
+def vk_view_create_unsafe(var b : SparseBufferMemoryBindInfo) : VkSparseBufferMemoryBindInfo {
+    var vk = VkSparseBufferMemoryBindInfo()
+    vk.buffer = boost_value_to_vk(b.buffer)
+    b._vk_view_pBinds |> resize(length(b.pBinds))
+    for (vki in range(length(b.pBinds))) {
+        b._vk_view_pBinds[vki] = vk_view_create_unsafe(b.pBinds[vki])
+    }
+    vk.bindCount = uint(length(b.pBinds))
+    vk.pBinds = array_addr(b._vk_view_pBinds)
+    return <- vk
+}
+def vk_view_destroy(var b : SparseBufferMemoryBindInfo) {
+    for (vki in range(length(b.pBinds))) {
+        vk_view_destroy(b.pBinds[vki])
+    }
+    delete b._vk_view_pBinds
+}
+
+struct SparseImageOpaqueMemoryBindInfo {
+    image : Image
+    pBinds : array<SparseMemoryBind>
+    _vk_view_pBinds : array<VkSparseMemoryBind>
+}
+def vk_view_create_unsafe(var b : SparseImageOpaqueMemoryBindInfo) : VkSparseImageOpaqueMemoryBindInfo {
+    var vk = VkSparseImageOpaqueMemoryBindInfo()
+    vk.image = boost_value_to_vk(b.image)
+    b._vk_view_pBinds |> resize(length(b.pBinds))
+    for (vki in range(length(b.pBinds))) {
+        b._vk_view_pBinds[vki] = vk_view_create_unsafe(b.pBinds[vki])
+    }
+    vk.bindCount = uint(length(b.pBinds))
+    vk.pBinds = array_addr(b._vk_view_pBinds)
+    return <- vk
+}
+def vk_view_destroy(var b : SparseImageOpaqueMemoryBindInfo) {
+    for (vki in range(length(b.pBinds))) {
+        vk_view_destroy(b.pBinds[vki])
+    }
+    delete b._vk_view_pBinds
+}
+
+struct SparseImageMemoryBindInfo {
+    image : Image
+    pBinds : array<SparseImageMemoryBind>
+    _vk_view_pBinds : array<VkSparseImageMemoryBind>
+}
+def vk_view_create_unsafe(var b : SparseImageMemoryBindInfo) : VkSparseImageMemoryBindInfo {
+    var vk = VkSparseImageMemoryBindInfo()
+    vk.image = boost_value_to_vk(b.image)
+    b._vk_view_pBinds |> resize(length(b.pBinds))
+    for (vki in range(length(b.pBinds))) {
+        b._vk_view_pBinds[vki] = vk_view_create_unsafe(b.pBinds[vki])
+    }
+    vk.bindCount = uint(length(b.pBinds))
+    vk.pBinds = array_addr(b._vk_view_pBinds)
+    return <- vk
+}
+def vk_view_destroy(var b : SparseImageMemoryBindInfo) {
+    for (vki in range(length(b.pBinds))) {
+        vk_view_destroy(b.pBinds[vki])
+    }
+    delete b._vk_view_pBinds
+}
+
+struct BindSparseInfo {
+    next : void?
+    pWaitSemaphores : array<Semaphore>
+    pBufferBinds : array<SparseBufferMemoryBindInfo>
+    pImageOpaqueBinds : array<SparseImageOpaqueMemoryBindInfo>
+    pImageBinds : array<SparseImageMemoryBindInfo>
+    pSignalSemaphores : array<Semaphore>
+    _vk_view_pWaitSemaphores : array<VkSemaphore>
+    _vk_view_pBufferBinds : array<VkSparseBufferMemoryBindInfo>
+    _vk_view_pImageOpaqueBinds : array<VkSparseImageOpaqueMemoryBindInfo>
+    _vk_view_pImageBinds : array<VkSparseImageMemoryBindInfo>
+    _vk_view_pSignalSemaphores : array<VkSemaphore>
+}
+def vk_view_create_unsafe(var b : BindSparseInfo) : VkBindSparseInfo {
+    var vk = VkBindSparseInfo()
+    vk.pNext = b.next
+    b._vk_view_pWaitSemaphores <- [for (h in b.pWaitSemaphores); boost_value_to_vk(h)]
+    vk.waitSemaphoreCount = uint(length(b.pWaitSemaphores))
+    vk.pWaitSemaphores = array_addr(b._vk_view_pWaitSemaphores)
+    b._vk_view_pBufferBinds |> resize(length(b.pBufferBinds))
+    for (vki in range(length(b.pBufferBinds))) {
+        b._vk_view_pBufferBinds[vki] = vk_view_create_unsafe(b.pBufferBinds[vki])
+    }
+    vk.bufferBindCount = uint(length(b.pBufferBinds))
+    vk.pBufferBinds = array_addr(b._vk_view_pBufferBinds)
+    b._vk_view_pImageOpaqueBinds |> resize(length(b.pImageOpaqueBinds))
+    for (vki in range(length(b.pImageOpaqueBinds))) {
+        b._vk_view_pImageOpaqueBinds[vki] = vk_view_create_unsafe(b.pImageOpaqueBinds[vki])
+    }
+    vk.imageOpaqueBindCount = uint(length(b.pImageOpaqueBinds))
+    vk.pImageOpaqueBinds = array_addr(b._vk_view_pImageOpaqueBinds)
+    b._vk_view_pImageBinds |> resize(length(b.pImageBinds))
+    for (vki in range(length(b.pImageBinds))) {
+        b._vk_view_pImageBinds[vki] = vk_view_create_unsafe(b.pImageBinds[vki])
+    }
+    vk.imageBindCount = uint(length(b.pImageBinds))
+    vk.pImageBinds = array_addr(b._vk_view_pImageBinds)
+    b._vk_view_pSignalSemaphores <- [for (h in b.pSignalSemaphores); boost_value_to_vk(h)]
+    vk.signalSemaphoreCount = uint(length(b.pSignalSemaphores))
+    vk.pSignalSemaphores = array_addr(b._vk_view_pSignalSemaphores)
+    return <- vk
+}
+def vk_view_destroy(var b : BindSparseInfo) {
+    unsafe { delete b._vk_view_pWaitSemaphores }
+    for (vki in range(length(b.pBufferBinds))) {
+        vk_view_destroy(b.pBufferBinds[vki])
+    }
+    delete b._vk_view_pBufferBinds
+    for (vki in range(length(b.pImageOpaqueBinds))) {
+        vk_view_destroy(b.pImageOpaqueBinds[vki])
+    }
+    delete b._vk_view_pImageOpaqueBinds
+    for (vki in range(length(b.pImageBinds))) {
+        vk_view_destroy(b.pImageBinds[vki])
+    }
+    delete b._vk_view_pImageBinds
+    unsafe { delete b._vk_view_pSignalSemaphores }
+}
+
 struct ImageCopy {
     srcSubresource : VkImageSubresourceLayers
     srcOffset : VkOffset3D
@@ -851,6 +1028,37 @@ def vk_view_destroy(var b : CopyMemoryToImageIndirectCommandKHR) {
     pass
 }
 
+struct CopyMemoryToImageIndirectInfoKHR {
+    next : void?
+    srcCopyFlags : VkAddressCopyFlagsKHR
+    copyAddressRange : VkStridedDeviceAddressRangeKHR
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pImageSubresources : array<ImageSubresourceLayers>
+    _vk_view_pImageSubresources : array<VkImageSubresourceLayers>
+}
+def vk_view_create_unsafe(var b : CopyMemoryToImageIndirectInfoKHR) : VkCopyMemoryToImageIndirectInfoKHR {
+    var vk = VkCopyMemoryToImageIndirectInfoKHR()
+    vk.pNext = b.next
+    vk.srcCopyFlags = b.srcCopyFlags
+    vk.copyAddressRange = b.copyAddressRange
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pImageSubresources |> resize(length(b.pImageSubresources))
+    for (vki in range(length(b.pImageSubresources))) {
+        b._vk_view_pImageSubresources[vki] = vk_view_create_unsafe(b.pImageSubresources[vki])
+    }
+    vk.copyCount = uint(length(b.pImageSubresources))
+    vk.pImageSubresources = array_addr(b._vk_view_pImageSubresources)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyMemoryToImageIndirectInfoKHR) {
+    for (vki in range(length(b.pImageSubresources))) {
+        vk_view_destroy(b.pImageSubresources[vki])
+    }
+    delete b._vk_view_pImageSubresources
+}
+
 struct ImageResolve {
     srcSubresource : VkImageSubresourceLayers
     srcOffset : VkOffset3D
@@ -892,6 +1100,31 @@ def vk_view_destroy(var b : DescriptorSetLayoutBinding) {
     unsafe { delete b._vk_view_pImmutableSamplers }
 }
 
+struct DescriptorSetLayoutCreateInfo {
+    next : void?
+    flags : VkDescriptorSetLayoutCreateFlags
+    pBindings : array<DescriptorSetLayoutBinding>
+    _vk_view_pBindings : array<VkDescriptorSetLayoutBinding>
+}
+def vk_view_create_unsafe(var b : DescriptorSetLayoutCreateInfo) : VkDescriptorSetLayoutCreateInfo {
+    var vk = VkDescriptorSetLayoutCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pBindings |> resize(length(b.pBindings))
+    for (vki in range(length(b.pBindings))) {
+        b._vk_view_pBindings[vki] = vk_view_create_unsafe(b.pBindings[vki])
+    }
+    vk.bindingCount = uint(length(b.pBindings))
+    vk.pBindings = array_addr(b._vk_view_pBindings)
+    return <- vk
+}
+def vk_view_destroy(var b : DescriptorSetLayoutCreateInfo) {
+    for (vki in range(length(b.pBindings))) {
+        vk_view_destroy(b.pBindings[vki])
+    }
+    delete b._vk_view_pBindings
+}
+
 struct DescriptorPoolSize {
     type_ : VkDescriptorType
     descriptorCount : uint
@@ -904,6 +1137,33 @@ def vk_view_create_unsafe(var b : DescriptorPoolSize) : VkDescriptorPoolSize {
 }
 def vk_view_destroy(var b : DescriptorPoolSize) {
     pass
+}
+
+struct DescriptorPoolCreateInfo {
+    next : void?
+    flags : VkDescriptorPoolCreateFlags
+    maxSets : uint
+    pPoolSizes : array<DescriptorPoolSize>
+    _vk_view_pPoolSizes : array<VkDescriptorPoolSize>
+}
+def vk_view_create_unsafe(var b : DescriptorPoolCreateInfo) : VkDescriptorPoolCreateInfo {
+    var vk = VkDescriptorPoolCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.maxSets = b.maxSets
+    b._vk_view_pPoolSizes |> resize(length(b.pPoolSizes))
+    for (vki in range(length(b.pPoolSizes))) {
+        b._vk_view_pPoolSizes[vki] = vk_view_create_unsafe(b.pPoolSizes[vki])
+    }
+    vk.poolSizeCount = uint(length(b.pPoolSizes))
+    vk.pPoolSizes = array_addr(b._vk_view_pPoolSizes)
+    return <- vk
+}
+def vk_view_destroy(var b : DescriptorPoolCreateInfo) {
+    for (vki in range(length(b.pPoolSizes))) {
+        vk_view_destroy(b.pPoolSizes[vki])
+    }
+    delete b._vk_view_pPoolSizes
 }
 
 struct DescriptorSetAllocateInfo {
@@ -1029,6 +1289,43 @@ def vk_view_destroy(var b : VertexInputAttributeDescription) {
     pass
 }
 
+struct PipelineVertexInputStateCreateInfo {
+    next : void?
+    flags : VkPipelineVertexInputStateCreateFlags
+    pVertexBindingDescriptions : array<VertexInputBindingDescription>
+    pVertexAttributeDescriptions : array<VertexInputAttributeDescription>
+    _vk_view_pVertexBindingDescriptions : array<VkVertexInputBindingDescription>
+    _vk_view_pVertexAttributeDescriptions : array<VkVertexInputAttributeDescription>
+}
+def vk_view_create_unsafe(var b : PipelineVertexInputStateCreateInfo) : VkPipelineVertexInputStateCreateInfo {
+    var vk = VkPipelineVertexInputStateCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pVertexBindingDescriptions |> resize(length(b.pVertexBindingDescriptions))
+    for (vki in range(length(b.pVertexBindingDescriptions))) {
+        b._vk_view_pVertexBindingDescriptions[vki] = vk_view_create_unsafe(b.pVertexBindingDescriptions[vki])
+    }
+    vk.vertexBindingDescriptionCount = uint(length(b.pVertexBindingDescriptions))
+    vk.pVertexBindingDescriptions = array_addr(b._vk_view_pVertexBindingDescriptions)
+    b._vk_view_pVertexAttributeDescriptions |> resize(length(b.pVertexAttributeDescriptions))
+    for (vki in range(length(b.pVertexAttributeDescriptions))) {
+        b._vk_view_pVertexAttributeDescriptions[vki] = vk_view_create_unsafe(b.pVertexAttributeDescriptions[vki])
+    }
+    vk.vertexAttributeDescriptionCount = uint(length(b.pVertexAttributeDescriptions))
+    vk.pVertexAttributeDescriptions = array_addr(b._vk_view_pVertexAttributeDescriptions)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineVertexInputStateCreateInfo) {
+    for (vki in range(length(b.pVertexBindingDescriptions))) {
+        vk_view_destroy(b.pVertexBindingDescriptions[vki])
+    }
+    delete b._vk_view_pVertexBindingDescriptions
+    for (vki in range(length(b.pVertexAttributeDescriptions))) {
+        vk_view_destroy(b.pVertexAttributeDescriptions[vki])
+    }
+    delete b._vk_view_pVertexAttributeDescriptions
+}
+
 struct PipelineInputAssemblyStateCreateInfo {
     next : void?
     flags : VkPipelineInputAssemblyStateCreateFlags
@@ -1061,6 +1358,43 @@ def vk_view_create_unsafe(var b : PipelineTessellationStateCreateInfo) : VkPipel
 }
 def vk_view_destroy(var b : PipelineTessellationStateCreateInfo) {
     pass
+}
+
+struct PipelineViewportStateCreateInfo {
+    next : void?
+    flags : VkPipelineViewportStateCreateFlags
+    pViewports : array<Viewport>
+    pScissors : array<Rect2D>
+    _vk_view_pViewports : array<VkViewport>
+    _vk_view_pScissors : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : PipelineViewportStateCreateInfo) : VkPipelineViewportStateCreateInfo {
+    var vk = VkPipelineViewportStateCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pViewports |> resize(length(b.pViewports))
+    for (vki in range(length(b.pViewports))) {
+        b._vk_view_pViewports[vki] = vk_view_create_unsafe(b.pViewports[vki])
+    }
+    vk.viewportCount = uint(length(b.pViewports))
+    vk.pViewports = array_addr(b._vk_view_pViewports)
+    b._vk_view_pScissors |> resize(length(b.pScissors))
+    for (vki in range(length(b.pScissors))) {
+        b._vk_view_pScissors[vki] = vk_view_create_unsafe(b.pScissors[vki])
+    }
+    vk.scissorCount = uint(length(b.pScissors))
+    vk.pScissors = array_addr(b._vk_view_pScissors)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineViewportStateCreateInfo) {
+    for (vki in range(length(b.pViewports))) {
+        vk_view_destroy(b.pViewports[vki])
+    }
+    delete b._vk_view_pViewports
+    for (vki in range(length(b.pScissors))) {
+        vk_view_destroy(b.pScissors[vki])
+    }
+    delete b._vk_view_pScissors
 }
 
 struct PipelineRasterizationStateCreateInfo {
@@ -1267,6 +1601,37 @@ def vk_view_create_unsafe(var b : PipelineCreateInfoKHR) : VkPipelineCreateInfoK
 }
 def vk_view_destroy(var b : PipelineCreateInfoKHR) {
     pass
+}
+
+struct PipelineLayoutCreateInfo {
+    next : void?
+    flags : VkPipelineLayoutCreateFlags
+    pSetLayouts : array<DescriptorSetLayout>
+    pPushConstantRanges : array<PushConstantRange>
+    _vk_view_pSetLayouts : array<VkDescriptorSetLayout>
+    _vk_view_pPushConstantRanges : array<VkPushConstantRange>
+}
+def vk_view_create_unsafe(var b : PipelineLayoutCreateInfo) : VkPipelineLayoutCreateInfo {
+    var vk = VkPipelineLayoutCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pSetLayouts <- [for (h in b.pSetLayouts); boost_value_to_vk(h)]
+    vk.setLayoutCount = uint(length(b.pSetLayouts))
+    vk.pSetLayouts = array_addr(b._vk_view_pSetLayouts)
+    b._vk_view_pPushConstantRanges |> resize(length(b.pPushConstantRanges))
+    for (vki in range(length(b.pPushConstantRanges))) {
+        b._vk_view_pPushConstantRanges[vki] = vk_view_create_unsafe(b.pPushConstantRanges[vki])
+    }
+    vk.pushConstantRangeCount = uint(length(b.pPushConstantRanges))
+    vk.pPushConstantRanges = array_addr(b._vk_view_pPushConstantRanges)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineLayoutCreateInfo) {
+    unsafe { delete b._vk_view_pSetLayouts }
+    for (vki in range(length(b.pPushConstantRanges))) {
+        vk_view_destroy(b.pPushConstantRanges[vki])
+    }
+    delete b._vk_view_pPushConstantRanges
 }
 
 struct SamplerCreateInfo {
@@ -2619,6 +2984,51 @@ def vk_view_destroy(var b : IndirectCommandsStreamNV) {
     pass
 }
 
+struct GeneratedCommandsInfoNV {
+    next : void?
+    pipelineBindPoint : VkPipelineBindPoint
+    pipeline : Pipeline
+    indirectCommandsLayout : IndirectCommandsLayoutNV
+    pStreams : array<IndirectCommandsStreamNV>
+    sequencesCount : uint
+    preprocessBuffer : Buffer
+    preprocessOffset : uint64
+    preprocessSize : uint64
+    sequencesCountBuffer : Buffer
+    sequencesCountOffset : uint64
+    sequencesIndexBuffer : Buffer
+    sequencesIndexOffset : uint64
+    _vk_view_pStreams : array<VkIndirectCommandsStreamNV>
+}
+def vk_view_create_unsafe(var b : GeneratedCommandsInfoNV) : VkGeneratedCommandsInfoNV {
+    var vk = VkGeneratedCommandsInfoNV()
+    vk.pNext = b.next
+    vk.pipelineBindPoint = b.pipelineBindPoint
+    vk.pipeline = boost_value_to_vk(b.pipeline)
+    vk.indirectCommandsLayout = boost_value_to_vk(b.indirectCommandsLayout)
+    b._vk_view_pStreams |> resize(length(b.pStreams))
+    for (vki in range(length(b.pStreams))) {
+        b._vk_view_pStreams[vki] = vk_view_create_unsafe(b.pStreams[vki])
+    }
+    vk.streamCount = uint(length(b.pStreams))
+    vk.pStreams = array_addr(b._vk_view_pStreams)
+    vk.sequencesCount = b.sequencesCount
+    vk.preprocessBuffer = boost_value_to_vk(b.preprocessBuffer)
+    vk.preprocessOffset = b.preprocessOffset
+    vk.preprocessSize = b.preprocessSize
+    vk.sequencesCountBuffer = boost_value_to_vk(b.sequencesCountBuffer)
+    vk.sequencesCountOffset = b.sequencesCountOffset
+    vk.sequencesIndexBuffer = boost_value_to_vk(b.sequencesIndexBuffer)
+    vk.sequencesIndexOffset = b.sequencesIndexOffset
+    return <- vk
+}
+def vk_view_destroy(var b : GeneratedCommandsInfoNV) {
+    for (vki in range(length(b.pStreams))) {
+        vk_view_destroy(b.pStreams[vki])
+    }
+    delete b._vk_view_pStreams
+}
+
 struct GeneratedCommandsMemoryRequirementsInfoNV {
     next : void?
     pipelineBindPoint : VkPipelineBindPoint
@@ -2839,6 +3249,50 @@ def vk_view_create_unsafe(var b : ConformanceVersion) : VkConformanceVersion {
 }
 def vk_view_destroy(var b : ConformanceVersion) {
     pass
+}
+
+struct PresentRegionsKHR {
+    next : void?
+    pRegions : array<PresentRegionKHR>
+    _vk_view_pRegions : array<VkPresentRegionKHR>
+}
+def vk_view_create_unsafe(var b : PresentRegionsKHR) : VkPresentRegionsKHR {
+    var vk = VkPresentRegionsKHR()
+    vk.pNext = b.next
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.swapchainCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : PresentRegionsKHR) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct PresentRegionKHR {
+    pRectangles : array<RectLayerKHR>
+    _vk_view_pRectangles : array<VkRectLayerKHR>
+}
+def vk_view_create_unsafe(var b : PresentRegionKHR) : VkPresentRegionKHR {
+    var vk = VkPresentRegionKHR()
+    b._vk_view_pRectangles |> resize(length(b.pRectangles))
+    for (vki in range(length(b.pRectangles))) {
+        b._vk_view_pRectangles[vki] = vk_view_create_unsafe(b.pRectangles[vki])
+    }
+    vk.rectangleCount = uint(length(b.pRectangles))
+    vk.pRectangles = array_addr(b._vk_view_pRectangles)
+    return <- vk
+}
+def vk_view_destroy(var b : PresentRegionKHR) {
+    for (vki in range(length(b.pRectangles))) {
+        vk_view_destroy(b.pRectangles[vki])
+    }
+    delete b._vk_view_pRectangles
 }
 
 struct RectLayerKHR {
@@ -3423,6 +3877,60 @@ def vk_view_destroy(var b : BindImageMemoryInfo) {
     pass
 }
 
+struct BindImageMemoryDeviceGroupInfo {
+    next : void?
+    pDeviceIndices : array<uint>
+    pSplitInstanceBindRegions : array<Rect2D>
+    _vk_view_pDeviceIndices : array<uint>
+    _vk_view_pSplitInstanceBindRegions : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : BindImageMemoryDeviceGroupInfo) : VkBindImageMemoryDeviceGroupInfo {
+    var vk = VkBindImageMemoryDeviceGroupInfo()
+    vk.pNext = b.next
+    b._vk_view_pDeviceIndices := b.pDeviceIndices
+    vk.deviceIndexCount = uint(length(b.pDeviceIndices))
+    vk.pDeviceIndices = array_addr(b._vk_view_pDeviceIndices)
+    b._vk_view_pSplitInstanceBindRegions |> resize(length(b.pSplitInstanceBindRegions))
+    for (vki in range(length(b.pSplitInstanceBindRegions))) {
+        b._vk_view_pSplitInstanceBindRegions[vki] = vk_view_create_unsafe(b.pSplitInstanceBindRegions[vki])
+    }
+    vk.splitInstanceBindRegionCount = uint(length(b.pSplitInstanceBindRegions))
+    vk.pSplitInstanceBindRegions = array_addr(b._vk_view_pSplitInstanceBindRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : BindImageMemoryDeviceGroupInfo) {
+    delete b._vk_view_pDeviceIndices
+    for (vki in range(length(b.pSplitInstanceBindRegions))) {
+        vk_view_destroy(b.pSplitInstanceBindRegions[vki])
+    }
+    delete b._vk_view_pSplitInstanceBindRegions
+}
+
+struct DeviceGroupRenderPassBeginInfo {
+    next : void?
+    deviceMask : uint
+    pDeviceRenderAreas : array<Rect2D>
+    _vk_view_pDeviceRenderAreas : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : DeviceGroupRenderPassBeginInfo) : VkDeviceGroupRenderPassBeginInfo {
+    var vk = VkDeviceGroupRenderPassBeginInfo()
+    vk.pNext = b.next
+    vk.deviceMask = b.deviceMask
+    b._vk_view_pDeviceRenderAreas |> resize(length(b.pDeviceRenderAreas))
+    for (vki in range(length(b.pDeviceRenderAreas))) {
+        b._vk_view_pDeviceRenderAreas[vki] = vk_view_create_unsafe(b.pDeviceRenderAreas[vki])
+    }
+    vk.deviceRenderAreaCount = uint(length(b.pDeviceRenderAreas))
+    vk.pDeviceRenderAreas = array_addr(b._vk_view_pDeviceRenderAreas)
+    return <- vk
+}
+def vk_view_destroy(var b : DeviceGroupRenderPassBeginInfo) {
+    for (vki in range(length(b.pDeviceRenderAreas))) {
+        vk_view_destroy(b.pDeviceRenderAreas[vki])
+    }
+    delete b._vk_view_pDeviceRenderAreas
+}
+
 struct DeviceGroupCommandBufferBeginInfo {
     next : void?
     deviceMask : uint
@@ -3604,6 +4112,41 @@ def vk_view_create_unsafe(var b : DescriptorUpdateTemplateEntry) : VkDescriptorU
 }
 def vk_view_destroy(var b : DescriptorUpdateTemplateEntry) {
     pass
+}
+
+struct DescriptorUpdateTemplateCreateInfo {
+    next : void?
+    flags : VkDescriptorUpdateTemplateCreateFlags
+    pDescriptorUpdateEntries : array<DescriptorUpdateTemplateEntry>
+    templateType : VkDescriptorUpdateTemplateType
+    descriptorSetLayout : DescriptorSetLayout
+    pipelineBindPoint : VkPipelineBindPoint
+    pipelineLayout : PipelineLayout
+    set : uint
+    _vk_view_pDescriptorUpdateEntries : array<VkDescriptorUpdateTemplateEntry>
+}
+def vk_view_create_unsafe(var b : DescriptorUpdateTemplateCreateInfo) : VkDescriptorUpdateTemplateCreateInfo {
+    var vk = VkDescriptorUpdateTemplateCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pDescriptorUpdateEntries |> resize(length(b.pDescriptorUpdateEntries))
+    for (vki in range(length(b.pDescriptorUpdateEntries))) {
+        b._vk_view_pDescriptorUpdateEntries[vki] = vk_view_create_unsafe(b.pDescriptorUpdateEntries[vki])
+    }
+    vk.descriptorUpdateEntryCount = uint(length(b.pDescriptorUpdateEntries))
+    vk.pDescriptorUpdateEntries = array_addr(b._vk_view_pDescriptorUpdateEntries)
+    vk.templateType = b.templateType
+    vk.descriptorSetLayout = boost_value_to_vk(b.descriptorSetLayout)
+    vk.pipelineBindPoint = b.pipelineBindPoint
+    vk.pipelineLayout = boost_value_to_vk(b.pipelineLayout)
+    vk.set = b.set
+    return <- vk
+}
+def vk_view_destroy(var b : DescriptorUpdateTemplateCreateInfo) {
+    for (vki in range(length(b.pDescriptorUpdateEntries))) {
+        vk_view_destroy(b.pDescriptorUpdateEntries[vki])
+    }
+    delete b._vk_view_pDescriptorUpdateEntries
 }
 
 struct XYColorEXT {
@@ -3810,6 +4353,89 @@ def vk_view_destroy(var b : PastPresentationTimingInfoEXT) {
     pass
 }
 
+struct PastPresentationTimingPropertiesEXT {
+    next : void?
+    timingPropertiesCounter : uint64
+    timeDomainsCounter : uint64
+    pPresentationTimings : array<PastPresentationTimingEXT>
+    _vk_view_pPresentationTimings : array<VkPastPresentationTimingEXT>
+}
+def vk_view_create_unsafe(var b : PastPresentationTimingPropertiesEXT) : VkPastPresentationTimingPropertiesEXT {
+    var vk = VkPastPresentationTimingPropertiesEXT()
+    vk.pNext = b.next
+    vk.timingPropertiesCounter = b.timingPropertiesCounter
+    vk.timeDomainsCounter = b.timeDomainsCounter
+    b._vk_view_pPresentationTimings |> resize(length(b.pPresentationTimings))
+    for (vki in range(length(b.pPresentationTimings))) {
+        b._vk_view_pPresentationTimings[vki] = vk_view_create_unsafe(b.pPresentationTimings[vki])
+    }
+    vk.presentationTimingCount = uint(length(b.pPresentationTimings))
+    vk.pPresentationTimings = array_addr(b._vk_view_pPresentationTimings)
+    return <- vk
+}
+def vk_view_destroy(var b : PastPresentationTimingPropertiesEXT) {
+    for (vki in range(length(b.pPresentationTimings))) {
+        vk_view_destroy(b.pPresentationTimings[vki])
+    }
+    delete b._vk_view_pPresentationTimings
+}
+
+struct PastPresentationTimingEXT {
+    next : void?
+    presentId : uint64
+    targetTime : uint64
+    pPresentStages : array<PresentStageTimeEXT>
+    timeDomain : VkTimeDomainKHR
+    timeDomainId : uint64
+    reportComplete : uint
+    _vk_view_pPresentStages : array<VkPresentStageTimeEXT>
+}
+def vk_view_create_unsafe(var b : PastPresentationTimingEXT) : VkPastPresentationTimingEXT {
+    var vk = VkPastPresentationTimingEXT()
+    vk.pNext = b.next
+    vk.presentId = b.presentId
+    vk.targetTime = b.targetTime
+    b._vk_view_pPresentStages |> resize(length(b.pPresentStages))
+    for (vki in range(length(b.pPresentStages))) {
+        b._vk_view_pPresentStages[vki] = vk_view_create_unsafe(b.pPresentStages[vki])
+    }
+    vk.presentStageCount = uint(length(b.pPresentStages))
+    vk.pPresentStages = array_addr(b._vk_view_pPresentStages)
+    vk.timeDomain = b.timeDomain
+    vk.timeDomainId = b.timeDomainId
+    vk.reportComplete = b.reportComplete
+    return <- vk
+}
+def vk_view_destroy(var b : PastPresentationTimingEXT) {
+    for (vki in range(length(b.pPresentStages))) {
+        vk_view_destroy(b.pPresentStages[vki])
+    }
+    delete b._vk_view_pPresentStages
+}
+
+struct PresentTimingsInfoEXT {
+    next : void?
+    pTimingInfos : array<PresentTimingInfoEXT>
+    _vk_view_pTimingInfos : array<VkPresentTimingInfoEXT>
+}
+def vk_view_create_unsafe(var b : PresentTimingsInfoEXT) : VkPresentTimingsInfoEXT {
+    var vk = VkPresentTimingsInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pTimingInfos |> resize(length(b.pTimingInfos))
+    for (vki in range(length(b.pTimingInfos))) {
+        b._vk_view_pTimingInfos[vki] = vk_view_create_unsafe(b.pTimingInfos[vki])
+    }
+    vk.swapchainCount = uint(length(b.pTimingInfos))
+    vk.pTimingInfos = array_addr(b._vk_view_pTimingInfos)
+    return <- vk
+}
+def vk_view_destroy(var b : PresentTimingsInfoEXT) {
+    for (vki in range(length(b.pTimingInfos))) {
+        vk_view_destroy(b.pTimingInfos[vki])
+    }
+    delete b._vk_view_pTimingInfos
+}
+
 struct PresentTimingInfoEXT {
     next : void?
     flags : VkPresentTimingInfoFlagsEXT
@@ -3938,6 +4564,29 @@ def vk_view_destroy(var b : PastPresentationTimingGOOGLE) {
     pass
 }
 
+struct PresentTimesInfoGOOGLE {
+    next : void?
+    pTimes : array<PresentTimeGOOGLE>
+    _vk_view_pTimes : array<VkPresentTimeGOOGLE>
+}
+def vk_view_create_unsafe(var b : PresentTimesInfoGOOGLE) : VkPresentTimesInfoGOOGLE {
+    var vk = VkPresentTimesInfoGOOGLE()
+    vk.pNext = b.next
+    b._vk_view_pTimes |> resize(length(b.pTimes))
+    for (vki in range(length(b.pTimes))) {
+        b._vk_view_pTimes[vki] = vk_view_create_unsafe(b.pTimes[vki])
+    }
+    vk.swapchainCount = uint(length(b.pTimes))
+    vk.pTimes = array_addr(b._vk_view_pTimes)
+    return <- vk
+}
+def vk_view_destroy(var b : PresentTimesInfoGOOGLE) {
+    for (vki in range(length(b.pTimes))) {
+        vk_view_destroy(b.pTimes[vki])
+    }
+    delete b._vk_view_pTimes
+}
+
 struct PresentTimeGOOGLE {
     presentID : uint
     desiredPresentTime : uint64
@@ -3966,6 +4615,31 @@ def vk_view_destroy(var b : ViewportWScalingNV) {
     pass
 }
 
+struct PipelineViewportWScalingStateCreateInfoNV {
+    next : void?
+    viewportWScalingEnable : uint
+    pViewportWScalings : array<ViewportWScalingNV>
+    _vk_view_pViewportWScalings : array<VkViewportWScalingNV>
+}
+def vk_view_create_unsafe(var b : PipelineViewportWScalingStateCreateInfoNV) : VkPipelineViewportWScalingStateCreateInfoNV {
+    var vk = VkPipelineViewportWScalingStateCreateInfoNV()
+    vk.pNext = b.next
+    vk.viewportWScalingEnable = b.viewportWScalingEnable
+    b._vk_view_pViewportWScalings |> resize(length(b.pViewportWScalings))
+    for (vki in range(length(b.pViewportWScalings))) {
+        b._vk_view_pViewportWScalings[vki] = vk_view_create_unsafe(b.pViewportWScalings[vki])
+    }
+    vk.viewportCount = uint(length(b.pViewportWScalings))
+    vk.pViewportWScalings = array_addr(b._vk_view_pViewportWScalings)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineViewportWScalingStateCreateInfoNV) {
+    for (vki in range(length(b.pViewportWScalings))) {
+        vk_view_destroy(b.pViewportWScalings[vki])
+    }
+    delete b._vk_view_pViewportWScalings
+}
+
 struct ViewportSwizzleNV {
     x : VkViewportCoordinateSwizzleNV
     y : VkViewportCoordinateSwizzleNV
@@ -3984,6 +4658,31 @@ def vk_view_destroy(var b : ViewportSwizzleNV) {
     pass
 }
 
+struct PipelineViewportSwizzleStateCreateInfoNV {
+    next : void?
+    flags : VkPipelineViewportSwizzleStateCreateFlagsNV
+    pViewportSwizzles : array<ViewportSwizzleNV>
+    _vk_view_pViewportSwizzles : array<VkViewportSwizzleNV>
+}
+def vk_view_create_unsafe(var b : PipelineViewportSwizzleStateCreateInfoNV) : VkPipelineViewportSwizzleStateCreateInfoNV {
+    var vk = VkPipelineViewportSwizzleStateCreateInfoNV()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pViewportSwizzles |> resize(length(b.pViewportSwizzles))
+    for (vki in range(length(b.pViewportSwizzles))) {
+        b._vk_view_pViewportSwizzles[vki] = vk_view_create_unsafe(b.pViewportSwizzles[vki])
+    }
+    vk.viewportCount = uint(length(b.pViewportSwizzles))
+    vk.pViewportSwizzles = array_addr(b._vk_view_pViewportSwizzles)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineViewportSwizzleStateCreateInfoNV) {
+    for (vki in range(length(b.pViewportSwizzles))) {
+        vk_view_destroy(b.pViewportSwizzles[vki])
+    }
+    delete b._vk_view_pViewportSwizzles
+}
+
 struct PhysicalDeviceDiscardRectanglePropertiesEXT {
     next : void?
     maxDiscardRectangles : uint
@@ -3996,6 +4695,33 @@ def vk_view_create_unsafe(var b : PhysicalDeviceDiscardRectanglePropertiesEXT) :
 }
 def vk_view_destroy(var b : PhysicalDeviceDiscardRectanglePropertiesEXT) {
     pass
+}
+
+struct PipelineDiscardRectangleStateCreateInfoEXT {
+    next : void?
+    flags : VkPipelineDiscardRectangleStateCreateFlagsEXT
+    discardRectangleMode : VkDiscardRectangleModeEXT
+    pDiscardRectangles : array<Rect2D>
+    _vk_view_pDiscardRectangles : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : PipelineDiscardRectangleStateCreateInfoEXT) : VkPipelineDiscardRectangleStateCreateInfoEXT {
+    var vk = VkPipelineDiscardRectangleStateCreateInfoEXT()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.discardRectangleMode = b.discardRectangleMode
+    b._vk_view_pDiscardRectangles |> resize(length(b.pDiscardRectangles))
+    for (vki in range(length(b.pDiscardRectangles))) {
+        b._vk_view_pDiscardRectangles[vki] = vk_view_create_unsafe(b.pDiscardRectangles[vki])
+    }
+    vk.discardRectangleCount = uint(length(b.pDiscardRectangles))
+    vk.pDiscardRectangles = array_addr(b._vk_view_pDiscardRectangles)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineDiscardRectangleStateCreateInfoEXT) {
+    for (vki in range(length(b.pDiscardRectangles))) {
+        vk_view_destroy(b.pDiscardRectangles[vki])
+    }
+    delete b._vk_view_pDiscardRectangles
 }
 
 struct PhysicalDeviceMultiviewPerViewAttributesPropertiesNVX {
@@ -4026,6 +4752,29 @@ def vk_view_create_unsafe(var b : InputAttachmentAspectReference) : VkInputAttac
 }
 def vk_view_destroy(var b : InputAttachmentAspectReference) {
     pass
+}
+
+struct RenderPassInputAttachmentAspectCreateInfo {
+    next : void?
+    pAspectReferences : array<InputAttachmentAspectReference>
+    _vk_view_pAspectReferences : array<VkInputAttachmentAspectReference>
+}
+def vk_view_create_unsafe(var b : RenderPassInputAttachmentAspectCreateInfo) : VkRenderPassInputAttachmentAspectCreateInfo {
+    var vk = VkRenderPassInputAttachmentAspectCreateInfo()
+    vk.pNext = b.next
+    b._vk_view_pAspectReferences |> resize(length(b.pAspectReferences))
+    for (vki in range(length(b.pAspectReferences))) {
+        b._vk_view_pAspectReferences[vki] = vk_view_create_unsafe(b.pAspectReferences[vki])
+    }
+    vk.aspectReferenceCount = uint(length(b.pAspectReferences))
+    vk.pAspectReferences = array_addr(b._vk_view_pAspectReferences)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassInputAttachmentAspectCreateInfo) {
+    for (vki in range(length(b.pAspectReferences))) {
+        vk_view_destroy(b.pAspectReferences[vki])
+    }
+    delete b._vk_view_pAspectReferences
 }
 
 struct PhysicalDeviceSurfaceInfo2KHR {
@@ -4622,6 +5371,33 @@ def vk_view_destroy(var b : SampleLocationEXT) {
     pass
 }
 
+struct SampleLocationsInfoEXT {
+    next : void?
+    sampleLocationsPerPixel : VkSampleCountFlags
+    sampleLocationGridSize : VkExtent2D
+    pSampleLocations : array<SampleLocationEXT>
+    _vk_view_pSampleLocations : array<VkSampleLocationEXT>
+}
+def vk_view_create_unsafe(var b : SampleLocationsInfoEXT) : VkSampleLocationsInfoEXT {
+    var vk = VkSampleLocationsInfoEXT()
+    vk.pNext = b.next
+    vk.sampleLocationsPerPixel = b.sampleLocationsPerPixel
+    vk.sampleLocationGridSize = b.sampleLocationGridSize
+    b._vk_view_pSampleLocations |> resize(length(b.pSampleLocations))
+    for (vki in range(length(b.pSampleLocations))) {
+        b._vk_view_pSampleLocations[vki] = vk_view_create_unsafe(b.pSampleLocations[vki])
+    }
+    vk.sampleLocationsCount = uint(length(b.pSampleLocations))
+    vk.pSampleLocations = array_addr(b._vk_view_pSampleLocations)
+    return <- vk
+}
+def vk_view_destroy(var b : SampleLocationsInfoEXT) {
+    for (vki in range(length(b.pSampleLocations))) {
+        vk_view_destroy(b.pSampleLocations[vki])
+    }
+    delete b._vk_view_pSampleLocations
+}
+
 struct AttachmentSampleLocationsEXT {
     attachmentIndex : uint
     sampleLocationsInfo : VkSampleLocationsInfoEXT
@@ -4648,6 +5424,41 @@ def vk_view_create_unsafe(var b : SubpassSampleLocationsEXT) : VkSubpassSampleLo
 }
 def vk_view_destroy(var b : SubpassSampleLocationsEXT) {
     pass
+}
+
+struct RenderPassSampleLocationsBeginInfoEXT {
+    next : void?
+    pAttachmentInitialSampleLocations : array<AttachmentSampleLocationsEXT>
+    pPostSubpassSampleLocations : array<SubpassSampleLocationsEXT>
+    _vk_view_pAttachmentInitialSampleLocations : array<VkAttachmentSampleLocationsEXT>
+    _vk_view_pPostSubpassSampleLocations : array<VkSubpassSampleLocationsEXT>
+}
+def vk_view_create_unsafe(var b : RenderPassSampleLocationsBeginInfoEXT) : VkRenderPassSampleLocationsBeginInfoEXT {
+    var vk = VkRenderPassSampleLocationsBeginInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pAttachmentInitialSampleLocations |> resize(length(b.pAttachmentInitialSampleLocations))
+    for (vki in range(length(b.pAttachmentInitialSampleLocations))) {
+        b._vk_view_pAttachmentInitialSampleLocations[vki] = vk_view_create_unsafe(b.pAttachmentInitialSampleLocations[vki])
+    }
+    vk.attachmentInitialSampleLocationsCount = uint(length(b.pAttachmentInitialSampleLocations))
+    vk.pAttachmentInitialSampleLocations = array_addr(b._vk_view_pAttachmentInitialSampleLocations)
+    b._vk_view_pPostSubpassSampleLocations |> resize(length(b.pPostSubpassSampleLocations))
+    for (vki in range(length(b.pPostSubpassSampleLocations))) {
+        b._vk_view_pPostSubpassSampleLocations[vki] = vk_view_create_unsafe(b.pPostSubpassSampleLocations[vki])
+    }
+    vk.postSubpassSampleLocationsCount = uint(length(b.pPostSubpassSampleLocations))
+    vk.pPostSubpassSampleLocations = array_addr(b._vk_view_pPostSubpassSampleLocations)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassSampleLocationsBeginInfoEXT) {
+    for (vki in range(length(b.pAttachmentInitialSampleLocations))) {
+        vk_view_destroy(b.pAttachmentInitialSampleLocations[vki])
+    }
+    delete b._vk_view_pAttachmentInitialSampleLocations
+    for (vki in range(length(b.pPostSubpassSampleLocations))) {
+        vk_view_destroy(b.pPostSubpassSampleLocations[vki])
+    }
+    delete b._vk_view_pPostSubpassSampleLocations
 }
 
 struct PipelineSampleLocationsStateCreateInfoEXT {
@@ -5862,6 +6673,29 @@ def vk_view_destroy(var b : VertexInputBindingDivisorDescription) {
     pass
 }
 
+struct PipelineVertexInputDivisorStateCreateInfo {
+    next : void?
+    pVertexBindingDivisors : array<VertexInputBindingDivisorDescription>
+    _vk_view_pVertexBindingDivisors : array<VkVertexInputBindingDivisorDescription>
+}
+def vk_view_create_unsafe(var b : PipelineVertexInputDivisorStateCreateInfo) : VkPipelineVertexInputDivisorStateCreateInfo {
+    var vk = VkPipelineVertexInputDivisorStateCreateInfo()
+    vk.pNext = b.next
+    b._vk_view_pVertexBindingDivisors |> resize(length(b.pVertexBindingDivisors))
+    for (vki in range(length(b.pVertexBindingDivisors))) {
+        b._vk_view_pVertexBindingDivisors[vki] = vk_view_create_unsafe(b.pVertexBindingDivisors[vki])
+    }
+    vk.vertexBindingDivisorCount = uint(length(b.pVertexBindingDivisors))
+    vk.pVertexBindingDivisors = array_addr(b._vk_view_pVertexBindingDivisors)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineVertexInputDivisorStateCreateInfo) {
+    for (vki in range(length(b.pVertexBindingDivisors))) {
+        vk_view_destroy(b.pVertexBindingDivisors[vki])
+    }
+    delete b._vk_view_pVertexBindingDivisors
+}
+
 struct PhysicalDeviceVertexAttributeDivisorPropertiesEXT {
     next : void?
     maxVertexAttribDivisor : uint
@@ -6250,6 +7084,29 @@ def vk_view_destroy(var b : PhysicalDeviceExclusiveScissorFeaturesNV) {
     pass
 }
 
+struct PipelineViewportExclusiveScissorStateCreateInfoNV {
+    next : void?
+    pExclusiveScissors : array<Rect2D>
+    _vk_view_pExclusiveScissors : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : PipelineViewportExclusiveScissorStateCreateInfoNV) : VkPipelineViewportExclusiveScissorStateCreateInfoNV {
+    var vk = VkPipelineViewportExclusiveScissorStateCreateInfoNV()
+    vk.pNext = b.next
+    b._vk_view_pExclusiveScissors |> resize(length(b.pExclusiveScissors))
+    for (vki in range(length(b.pExclusiveScissors))) {
+        b._vk_view_pExclusiveScissors[vki] = vk_view_create_unsafe(b.pExclusiveScissors[vki])
+    }
+    vk.exclusiveScissorCount = uint(length(b.pExclusiveScissors))
+    vk.pExclusiveScissors = array_addr(b._vk_view_pExclusiveScissors)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineViewportExclusiveScissorStateCreateInfoNV) {
+    for (vki in range(length(b.pExclusiveScissors))) {
+        vk_view_destroy(b.pExclusiveScissors[vki])
+    }
+    delete b._vk_view_pExclusiveScissors
+}
+
 struct PhysicalDeviceCornerSampledImageFeaturesNV {
     next : void?
     cornerSampledImage : uint
@@ -6458,6 +7315,56 @@ def vk_view_create_unsafe(var b : CoarseSampleLocationNV) : VkCoarseSampleLocati
 }
 def vk_view_destroy(var b : CoarseSampleLocationNV) {
     pass
+}
+
+struct CoarseSampleOrderCustomNV {
+    shadingRate : VkShadingRatePaletteEntryNV
+    sampleCount : uint
+    pSampleLocations : array<CoarseSampleLocationNV>
+    _vk_view_pSampleLocations : array<VkCoarseSampleLocationNV>
+}
+def vk_view_create_unsafe(var b : CoarseSampleOrderCustomNV) : VkCoarseSampleOrderCustomNV {
+    var vk = VkCoarseSampleOrderCustomNV()
+    vk.shadingRate = b.shadingRate
+    vk.sampleCount = b.sampleCount
+    b._vk_view_pSampleLocations |> resize(length(b.pSampleLocations))
+    for (vki in range(length(b.pSampleLocations))) {
+        b._vk_view_pSampleLocations[vki] = vk_view_create_unsafe(b.pSampleLocations[vki])
+    }
+    vk.sampleLocationCount = uint(length(b.pSampleLocations))
+    vk.pSampleLocations = array_addr(b._vk_view_pSampleLocations)
+    return <- vk
+}
+def vk_view_destroy(var b : CoarseSampleOrderCustomNV) {
+    for (vki in range(length(b.pSampleLocations))) {
+        vk_view_destroy(b.pSampleLocations[vki])
+    }
+    delete b._vk_view_pSampleLocations
+}
+
+struct PipelineViewportCoarseSampleOrderStateCreateInfoNV {
+    next : void?
+    sampleOrderType : VkCoarseSampleOrderTypeNV
+    pCustomSampleOrders : array<CoarseSampleOrderCustomNV>
+    _vk_view_pCustomSampleOrders : array<VkCoarseSampleOrderCustomNV>
+}
+def vk_view_create_unsafe(var b : PipelineViewportCoarseSampleOrderStateCreateInfoNV) : VkPipelineViewportCoarseSampleOrderStateCreateInfoNV {
+    var vk = VkPipelineViewportCoarseSampleOrderStateCreateInfoNV()
+    vk.pNext = b.next
+    vk.sampleOrderType = b.sampleOrderType
+    b._vk_view_pCustomSampleOrders |> resize(length(b.pCustomSampleOrders))
+    for (vki in range(length(b.pCustomSampleOrders))) {
+        b._vk_view_pCustomSampleOrders[vki] = vk_view_create_unsafe(b.pCustomSampleOrders[vki])
+    }
+    vk.customSampleOrderCount = uint(length(b.pCustomSampleOrders))
+    vk.pCustomSampleOrders = array_addr(b._vk_view_pCustomSampleOrders)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineViewportCoarseSampleOrderStateCreateInfoNV) {
+    for (vki in range(length(b.pCustomSampleOrders))) {
+        vk_view_destroy(b.pCustomSampleOrders[vki])
+    }
+    delete b._vk_view_pCustomSampleOrders
 }
 
 struct PhysicalDeviceMeshShaderFeaturesNV {
@@ -6937,6 +7844,29 @@ def vk_view_destroy(var b : PhysicalDeviceRayTracingMaintenance1FeaturesKHR) {
     pass
 }
 
+struct DrmFormatModifierPropertiesListEXT {
+    next : void?
+    pDrmFormatModifierProperties : array<DrmFormatModifierPropertiesEXT>
+    _vk_view_pDrmFormatModifierProperties : array<VkDrmFormatModifierPropertiesEXT>
+}
+def vk_view_create_unsafe(var b : DrmFormatModifierPropertiesListEXT) : VkDrmFormatModifierPropertiesListEXT {
+    var vk = VkDrmFormatModifierPropertiesListEXT()
+    vk.pNext = b.next
+    b._vk_view_pDrmFormatModifierProperties |> resize(length(b.pDrmFormatModifierProperties))
+    for (vki in range(length(b.pDrmFormatModifierProperties))) {
+        b._vk_view_pDrmFormatModifierProperties[vki] = vk_view_create_unsafe(b.pDrmFormatModifierProperties[vki])
+    }
+    vk.drmFormatModifierCount = uint(length(b.pDrmFormatModifierProperties))
+    vk.pDrmFormatModifierProperties = array_addr(b._vk_view_pDrmFormatModifierProperties)
+    return <- vk
+}
+def vk_view_destroy(var b : DrmFormatModifierPropertiesListEXT) {
+    for (vki in range(length(b.pDrmFormatModifierProperties))) {
+        vk_view_destroy(b.pDrmFormatModifierProperties[vki])
+    }
+    delete b._vk_view_pDrmFormatModifierProperties
+}
+
 struct DrmFormatModifierPropertiesEXT {
     drmFormatModifier : uint64
     drmFormatModifierPlaneCount : uint
@@ -6989,6 +7919,31 @@ def vk_view_create_unsafe(var b : ImageDrmFormatModifierListCreateInfoEXT) : VkI
 }
 def vk_view_destroy(var b : ImageDrmFormatModifierListCreateInfoEXT) {
     delete b._vk_view_pDrmFormatModifiers
+}
+
+struct ImageDrmFormatModifierExplicitCreateInfoEXT {
+    next : void?
+    drmFormatModifier : uint64
+    pPlaneLayouts : array<SubresourceLayout>
+    _vk_view_pPlaneLayouts : array<VkSubresourceLayout>
+}
+def vk_view_create_unsafe(var b : ImageDrmFormatModifierExplicitCreateInfoEXT) : VkImageDrmFormatModifierExplicitCreateInfoEXT {
+    var vk = VkImageDrmFormatModifierExplicitCreateInfoEXT()
+    vk.pNext = b.next
+    vk.drmFormatModifier = b.drmFormatModifier
+    b._vk_view_pPlaneLayouts |> resize(length(b.pPlaneLayouts))
+    for (vki in range(length(b.pPlaneLayouts))) {
+        b._vk_view_pPlaneLayouts[vki] = vk_view_create_unsafe(b.pPlaneLayouts[vki])
+    }
+    vk.drmFormatModifierPlaneCount = uint(length(b.pPlaneLayouts))
+    vk.pPlaneLayouts = array_addr(b._vk_view_pPlaneLayouts)
+    return <- vk
+}
+def vk_view_destroy(var b : ImageDrmFormatModifierExplicitCreateInfoEXT) {
+    for (vki in range(length(b.pPlaneLayouts))) {
+        vk_view_destroy(b.pPlaneLayouts[vki])
+    }
+    delete b._vk_view_pPlaneLayouts
 }
 
 struct ImageDrmFormatModifierPropertiesEXT {
@@ -7143,6 +8098,29 @@ def vk_view_create_unsafe(var b : RenderPassFragmentDensityMapCreateInfoEXT) : V
 }
 def vk_view_destroy(var b : RenderPassFragmentDensityMapCreateInfoEXT) {
     pass
+}
+
+struct RenderPassFragmentDensityMapOffsetEndInfoEXT {
+    next : void?
+    pFragmentDensityOffsets : array<Offset2D>
+    _vk_view_pFragmentDensityOffsets : array<VkOffset2D>
+}
+def vk_view_create_unsafe(var b : RenderPassFragmentDensityMapOffsetEndInfoEXT) : VkRenderPassFragmentDensityMapOffsetEndInfoEXT {
+    var vk = VkRenderPassFragmentDensityMapOffsetEndInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pFragmentDensityOffsets |> resize(length(b.pFragmentDensityOffsets))
+    for (vki in range(length(b.pFragmentDensityOffsets))) {
+        b._vk_view_pFragmentDensityOffsets[vki] = vk_view_create_unsafe(b.pFragmentDensityOffsets[vki])
+    }
+    vk.fragmentDensityOffsetCount = uint(length(b.pFragmentDensityOffsets))
+    vk.pFragmentDensityOffsets = array_addr(b._vk_view_pFragmentDensityOffsets)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassFragmentDensityMapOffsetEndInfoEXT) {
+    for (vki in range(length(b.pFragmentDensityOffsets))) {
+        vk_view_destroy(b.pFragmentDensityOffsets[vki])
+    }
+    delete b._vk_view_pFragmentDensityOffsets
 }
 
 struct PhysicalDeviceScalarBlockLayoutFeatures {
@@ -9232,6 +10210,23 @@ def vk_view_destroy(var b : PartitionedAccelerationStructureUpdateInstanceDataNV
     pass
 }
 
+struct WriteDescriptorSetPartitionedAccelerationStructureNV {
+    next : void?
+    pAccelerationStructures : array<uint64>
+    _vk_view_pAccelerationStructures : array<uint64>
+}
+def vk_view_create_unsafe(var b : WriteDescriptorSetPartitionedAccelerationStructureNV) : VkWriteDescriptorSetPartitionedAccelerationStructureNV {
+    var vk = VkWriteDescriptorSetPartitionedAccelerationStructureNV()
+    vk.pNext = b.next
+    b._vk_view_pAccelerationStructures := b.pAccelerationStructures
+    vk.accelerationStructureCount = uint(length(b.pAccelerationStructures))
+    vk.pAccelerationStructures = array_addr(b._vk_view_pAccelerationStructures)
+    return <- vk
+}
+def vk_view_destroy(var b : WriteDescriptorSetPartitionedAccelerationStructureNV) {
+    delete b._vk_view_pAccelerationStructures
+}
+
 struct PartitionedAccelerationStructureInstancesInputNV {
     next : void?
     flags : VkBuildAccelerationStructureFlagsKHR
@@ -9546,6 +10541,153 @@ def vk_view_create_unsafe(var b : ImageResolve2) : VkImageResolve2 {
 }
 def vk_view_destroy(var b : ImageResolve2) {
     pass
+}
+
+struct CopyBufferInfo2 {
+    next : void?
+    srcBuffer : Buffer
+    dstBuffer : Buffer
+    pRegions : array<BufferCopy2>
+    _vk_view_pRegions : array<VkBufferCopy2>
+}
+def vk_view_create_unsafe(var b : CopyBufferInfo2) : VkCopyBufferInfo2 {
+    var vk = VkCopyBufferInfo2()
+    vk.pNext = b.next
+    vk.srcBuffer = boost_value_to_vk(b.srcBuffer)
+    vk.dstBuffer = boost_value_to_vk(b.dstBuffer)
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyBufferInfo2) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct CopyImageInfo2 {
+    next : void?
+    srcImage : Image
+    srcImageLayout : VkImageLayout
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pRegions : array<ImageCopy2>
+    _vk_view_pRegions : array<VkImageCopy2>
+}
+def vk_view_create_unsafe(var b : CopyImageInfo2) : VkCopyImageInfo2 {
+    var vk = VkCopyImageInfo2()
+    vk.pNext = b.next
+    vk.srcImage = boost_value_to_vk(b.srcImage)
+    vk.srcImageLayout = b.srcImageLayout
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyImageInfo2) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct CopyBufferToImageInfo2 {
+    next : void?
+    srcBuffer : Buffer
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pRegions : array<BufferImageCopy2>
+    _vk_view_pRegions : array<VkBufferImageCopy2>
+}
+def vk_view_create_unsafe(var b : CopyBufferToImageInfo2) : VkCopyBufferToImageInfo2 {
+    var vk = VkCopyBufferToImageInfo2()
+    vk.pNext = b.next
+    vk.srcBuffer = boost_value_to_vk(b.srcBuffer)
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyBufferToImageInfo2) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct CopyImageToBufferInfo2 {
+    next : void?
+    srcImage : Image
+    srcImageLayout : VkImageLayout
+    dstBuffer : Buffer
+    pRegions : array<BufferImageCopy2>
+    _vk_view_pRegions : array<VkBufferImageCopy2>
+}
+def vk_view_create_unsafe(var b : CopyImageToBufferInfo2) : VkCopyImageToBufferInfo2 {
+    var vk = VkCopyImageToBufferInfo2()
+    vk.pNext = b.next
+    vk.srcImage = boost_value_to_vk(b.srcImage)
+    vk.srcImageLayout = b.srcImageLayout
+    vk.dstBuffer = boost_value_to_vk(b.dstBuffer)
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyImageToBufferInfo2) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct ResolveImageInfo2 {
+    next : void?
+    srcImage : Image
+    srcImageLayout : VkImageLayout
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pRegions : array<ImageResolve2>
+    _vk_view_pRegions : array<VkImageResolve2>
+}
+def vk_view_create_unsafe(var b : ResolveImageInfo2) : VkResolveImageInfo2 {
+    var vk = VkResolveImageInfo2()
+    vk.pNext = b.next
+    vk.srcImage = boost_value_to_vk(b.srcImage)
+    vk.srcImageLayout = b.srcImageLayout
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : ResolveImageInfo2) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
 }
 
 struct PhysicalDeviceShaderImageAtomicInt64FeaturesEXT {
@@ -9984,6 +11126,49 @@ def vk_view_destroy(var b : IndirectExecutionSetShaderLayoutInfoEXT) {
     unsafe { delete b._vk_view_pSetLayouts }
 }
 
+struct IndirectExecutionSetShaderInfoEXT {
+    next : void?
+    pInitialShaders : array<ShaderEXT>
+    pSetLayoutInfos : array<IndirectExecutionSetShaderLayoutInfoEXT>
+    maxShaderCount : uint
+    pPushConstantRanges : array<PushConstantRange>
+    _vk_view_pInitialShaders : array<VkShaderEXT>
+    _vk_view_pSetLayoutInfos : array<VkIndirectExecutionSetShaderLayoutInfoEXT>
+    _vk_view_pPushConstantRanges : array<VkPushConstantRange>
+}
+def vk_view_create_unsafe(var b : IndirectExecutionSetShaderInfoEXT) : VkIndirectExecutionSetShaderInfoEXT {
+    var vk = VkIndirectExecutionSetShaderInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pInitialShaders <- [for (h in b.pInitialShaders); boost_value_to_vk(h)]
+    vk.shaderCount = uint(length(b.pInitialShaders))
+    vk.pInitialShaders = array_addr(b._vk_view_pInitialShaders)
+    b._vk_view_pSetLayoutInfos |> resize(length(b.pSetLayoutInfos))
+    for (vki in range(length(b.pSetLayoutInfos))) {
+        b._vk_view_pSetLayoutInfos[vki] = vk_view_create_unsafe(b.pSetLayoutInfos[vki])
+    }
+    vk.shaderCount = uint(length(b.pSetLayoutInfos))
+    vk.pSetLayoutInfos = array_addr(b._vk_view_pSetLayoutInfos)
+    vk.maxShaderCount = b.maxShaderCount
+    b._vk_view_pPushConstantRanges |> resize(length(b.pPushConstantRanges))
+    for (vki in range(length(b.pPushConstantRanges))) {
+        b._vk_view_pPushConstantRanges[vki] = vk_view_create_unsafe(b.pPushConstantRanges[vki])
+    }
+    vk.pushConstantRangeCount = uint(length(b.pPushConstantRanges))
+    vk.pPushConstantRanges = array_addr(b._vk_view_pPushConstantRanges)
+    return <- vk
+}
+def vk_view_destroy(var b : IndirectExecutionSetShaderInfoEXT) {
+    unsafe { delete b._vk_view_pInitialShaders }
+    for (vki in range(length(b.pSetLayoutInfos))) {
+        vk_view_destroy(b.pSetLayoutInfos[vki])
+    }
+    delete b._vk_view_pSetLayoutInfos
+    for (vki in range(length(b.pPushConstantRanges))) {
+        vk_view_destroy(b.pPushConstantRanges[vki])
+    }
+    delete b._vk_view_pPushConstantRanges
+}
+
 struct IndirectExecutionSetCreateInfoEXT {
     next : void?
     type_ : VkIndirectExecutionSetInfoTypeEXT
@@ -10062,6 +11247,37 @@ def vk_view_create_unsafe(var b : WriteIndirectExecutionSetShaderEXT) : VkWriteI
 }
 def vk_view_destroy(var b : WriteIndirectExecutionSetShaderEXT) {
     pass
+}
+
+struct IndirectCommandsLayoutCreateInfoEXT {
+    next : void?
+    flags : VkIndirectCommandsLayoutUsageFlagsEXT
+    shaderStages : VkShaderStageFlags
+    indirectStride : uint
+    pipelineLayout : PipelineLayout
+    pTokens : array<IndirectCommandsLayoutTokenEXT>
+    _vk_view_pTokens : array<VkIndirectCommandsLayoutTokenEXT>
+}
+def vk_view_create_unsafe(var b : IndirectCommandsLayoutCreateInfoEXT) : VkIndirectCommandsLayoutCreateInfoEXT {
+    var vk = VkIndirectCommandsLayoutCreateInfoEXT()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.shaderStages = b.shaderStages
+    vk.indirectStride = b.indirectStride
+    vk.pipelineLayout = boost_value_to_vk(b.pipelineLayout)
+    b._vk_view_pTokens |> resize(length(b.pTokens))
+    for (vki in range(length(b.pTokens))) {
+        b._vk_view_pTokens[vki] = vk_view_create_unsafe(b.pTokens[vki])
+    }
+    vk.tokenCount = uint(length(b.pTokens))
+    vk.pTokens = array_addr(b._vk_view_pTokens)
+    return <- vk
+}
+def vk_view_destroy(var b : IndirectCommandsLayoutCreateInfoEXT) {
+    for (vki in range(length(b.pTokens))) {
+        vk_view_destroy(b.pTokens[vki])
+    }
+    delete b._vk_view_pTokens
 }
 
 struct IndirectCommandsLayoutTokenEXT {
@@ -10304,6 +11520,23 @@ def vk_view_destroy(var b : PhysicalDeviceColorWriteEnableFeaturesEXT) {
     pass
 }
 
+struct PipelineColorWriteCreateInfoEXT {
+    next : void?
+    pColorWriteEnables : array<uint>
+    _vk_view_pColorWriteEnables : array<uint>
+}
+def vk_view_create_unsafe(var b : PipelineColorWriteCreateInfoEXT) : VkPipelineColorWriteCreateInfoEXT {
+    var vk = VkPipelineColorWriteCreateInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pColorWriteEnables := b.pColorWriteEnables
+    vk.attachmentCount = uint(length(b.pColorWriteEnables))
+    vk.pColorWriteEnables = array_addr(b._vk_view_pColorWriteEnables)
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineColorWriteCreateInfoEXT) {
+    delete b._vk_view_pColorWriteEnables
+}
+
 struct MemoryBarrier2 {
     next : void?
     srcStageMask : VkPipelineStageFlags2
@@ -10402,6 +11635,55 @@ def vk_view_destroy(var b : MemoryBarrierAccessFlags3KHR) {
     pass
 }
 
+struct DependencyInfo {
+    next : void?
+    dependencyFlags : VkDependencyFlags
+    pMemoryBarriers : array<MemoryBarrier2>
+    pBufferMemoryBarriers : array<BufferMemoryBarrier2>
+    pImageMemoryBarriers : array<ImageMemoryBarrier2>
+    _vk_view_pMemoryBarriers : array<VkMemoryBarrier2>
+    _vk_view_pBufferMemoryBarriers : array<VkBufferMemoryBarrier2>
+    _vk_view_pImageMemoryBarriers : array<VkImageMemoryBarrier2>
+}
+def vk_view_create_unsafe(var b : DependencyInfo) : VkDependencyInfo {
+    var vk = VkDependencyInfo()
+    vk.pNext = b.next
+    vk.dependencyFlags = b.dependencyFlags
+    b._vk_view_pMemoryBarriers |> resize(length(b.pMemoryBarriers))
+    for (vki in range(length(b.pMemoryBarriers))) {
+        b._vk_view_pMemoryBarriers[vki] = vk_view_create_unsafe(b.pMemoryBarriers[vki])
+    }
+    vk.memoryBarrierCount = uint(length(b.pMemoryBarriers))
+    vk.pMemoryBarriers = array_addr(b._vk_view_pMemoryBarriers)
+    b._vk_view_pBufferMemoryBarriers |> resize(length(b.pBufferMemoryBarriers))
+    for (vki in range(length(b.pBufferMemoryBarriers))) {
+        b._vk_view_pBufferMemoryBarriers[vki] = vk_view_create_unsafe(b.pBufferMemoryBarriers[vki])
+    }
+    vk.bufferMemoryBarrierCount = uint(length(b.pBufferMemoryBarriers))
+    vk.pBufferMemoryBarriers = array_addr(b._vk_view_pBufferMemoryBarriers)
+    b._vk_view_pImageMemoryBarriers |> resize(length(b.pImageMemoryBarriers))
+    for (vki in range(length(b.pImageMemoryBarriers))) {
+        b._vk_view_pImageMemoryBarriers[vki] = vk_view_create_unsafe(b.pImageMemoryBarriers[vki])
+    }
+    vk.imageMemoryBarrierCount = uint(length(b.pImageMemoryBarriers))
+    vk.pImageMemoryBarriers = array_addr(b._vk_view_pImageMemoryBarriers)
+    return <- vk
+}
+def vk_view_destroy(var b : DependencyInfo) {
+    for (vki in range(length(b.pMemoryBarriers))) {
+        vk_view_destroy(b.pMemoryBarriers[vki])
+    }
+    delete b._vk_view_pMemoryBarriers
+    for (vki in range(length(b.pBufferMemoryBarriers))) {
+        vk_view_destroy(b.pBufferMemoryBarriers[vki])
+    }
+    delete b._vk_view_pBufferMemoryBarriers
+    for (vki in range(length(b.pImageMemoryBarriers))) {
+        vk_view_destroy(b.pImageMemoryBarriers[vki])
+    }
+    delete b._vk_view_pImageMemoryBarriers
+}
+
 struct SemaphoreSubmitInfo {
     next : void?
     semaphore : Semaphore
@@ -10436,6 +11718,55 @@ def vk_view_create_unsafe(var b : CommandBufferSubmitInfo) : VkCommandBufferSubm
 }
 def vk_view_destroy(var b : CommandBufferSubmitInfo) {
     pass
+}
+
+struct SubmitInfo2 {
+    next : void?
+    flags : VkSubmitFlags
+    pWaitSemaphoreInfos : array<SemaphoreSubmitInfo>
+    pCommandBufferInfos : array<CommandBufferSubmitInfo>
+    pSignalSemaphoreInfos : array<SemaphoreSubmitInfo>
+    _vk_view_pWaitSemaphoreInfos : array<VkSemaphoreSubmitInfo>
+    _vk_view_pCommandBufferInfos : array<VkCommandBufferSubmitInfo>
+    _vk_view_pSignalSemaphoreInfos : array<VkSemaphoreSubmitInfo>
+}
+def vk_view_create_unsafe(var b : SubmitInfo2) : VkSubmitInfo2 {
+    var vk = VkSubmitInfo2()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pWaitSemaphoreInfos |> resize(length(b.pWaitSemaphoreInfos))
+    for (vki in range(length(b.pWaitSemaphoreInfos))) {
+        b._vk_view_pWaitSemaphoreInfos[vki] = vk_view_create_unsafe(b.pWaitSemaphoreInfos[vki])
+    }
+    vk.waitSemaphoreInfoCount = uint(length(b.pWaitSemaphoreInfos))
+    vk.pWaitSemaphoreInfos = array_addr(b._vk_view_pWaitSemaphoreInfos)
+    b._vk_view_pCommandBufferInfos |> resize(length(b.pCommandBufferInfos))
+    for (vki in range(length(b.pCommandBufferInfos))) {
+        b._vk_view_pCommandBufferInfos[vki] = vk_view_create_unsafe(b.pCommandBufferInfos[vki])
+    }
+    vk.commandBufferInfoCount = uint(length(b.pCommandBufferInfos))
+    vk.pCommandBufferInfos = array_addr(b._vk_view_pCommandBufferInfos)
+    b._vk_view_pSignalSemaphoreInfos |> resize(length(b.pSignalSemaphoreInfos))
+    for (vki in range(length(b.pSignalSemaphoreInfos))) {
+        b._vk_view_pSignalSemaphoreInfos[vki] = vk_view_create_unsafe(b.pSignalSemaphoreInfos[vki])
+    }
+    vk.signalSemaphoreInfoCount = uint(length(b.pSignalSemaphoreInfos))
+    vk.pSignalSemaphoreInfos = array_addr(b._vk_view_pSignalSemaphoreInfos)
+    return <- vk
+}
+def vk_view_destroy(var b : SubmitInfo2) {
+    for (vki in range(length(b.pWaitSemaphoreInfos))) {
+        vk_view_destroy(b.pWaitSemaphoreInfos[vki])
+    }
+    delete b._vk_view_pWaitSemaphoreInfos
+    for (vki in range(length(b.pCommandBufferInfos))) {
+        vk_view_destroy(b.pCommandBufferInfos[vki])
+    }
+    delete b._vk_view_pCommandBufferInfos
+    for (vki in range(length(b.pSignalSemaphoreInfos))) {
+        vk_view_destroy(b.pSignalSemaphoreInfos[vki])
+    }
+    delete b._vk_view_pSignalSemaphoreInfos
 }
 
 struct QueueFamilyCheckpointProperties2NV {
@@ -10494,6 +11825,39 @@ def vk_view_create_unsafe(var b : PhysicalDeviceHostImageCopyFeatures) : VkPhysi
 }
 def vk_view_destroy(var b : PhysicalDeviceHostImageCopyFeatures) {
     pass
+}
+
+struct CopyImageToImageInfo {
+    next : void?
+    flags : VkHostImageCopyFlags
+    srcImage : Image
+    srcImageLayout : VkImageLayout
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pRegions : array<ImageCopy2>
+    _vk_view_pRegions : array<VkImageCopy2>
+}
+def vk_view_create_unsafe(var b : CopyImageToImageInfo) : VkCopyImageToImageInfo {
+    var vk = VkCopyImageToImageInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.srcImage = boost_value_to_vk(b.srcImage)
+    vk.srcImageLayout = b.srcImageLayout
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyImageToImageInfo) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
 }
 
 struct HostImageLayoutTransitionInfo {
@@ -10690,6 +12054,29 @@ def vk_view_create_unsafe(var b : QueueFamilyQueryResultStatusPropertiesKHR) : V
 }
 def vk_view_destroy(var b : QueueFamilyQueryResultStatusPropertiesKHR) {
     pass
+}
+
+struct VideoProfileListInfoKHR {
+    next : void?
+    pProfiles : array<VideoProfileInfoKHR>
+    _vk_view_pProfiles : array<VkVideoProfileInfoKHR>
+}
+def vk_view_create_unsafe(var b : VideoProfileListInfoKHR) : VkVideoProfileListInfoKHR {
+    var vk = VkVideoProfileListInfoKHR()
+    vk.pNext = b.next
+    b._vk_view_pProfiles |> resize(length(b.pProfiles))
+    for (vki in range(length(b.pProfiles))) {
+        b._vk_view_pProfiles[vki] = vk_view_create_unsafe(b.pProfiles[vki])
+    }
+    vk.profileCount = uint(length(b.pProfiles))
+    vk.pProfiles = array_addr(b._vk_view_pProfiles)
+    return <- vk
+}
+def vk_view_destroy(var b : VideoProfileListInfoKHR) {
+    for (vki in range(length(b.pProfiles))) {
+        vk_view_destroy(b.pProfiles[vki])
+    }
+    delete b._vk_view_pProfiles
 }
 
 struct PhysicalDeviceVideoFormatInfoKHR {
@@ -11220,6 +12607,37 @@ def vk_view_create_unsafe(var b : VideoEncodeQualityLevelPropertiesKHR) : VkVide
 }
 def vk_view_destroy(var b : VideoEncodeQualityLevelPropertiesKHR) {
     pass
+}
+
+struct VideoEncodeRateControlInfoKHR {
+    next : void?
+    flags : VkVideoEncodeRateControlFlagsKHR
+    rateControlMode : VkVideoEncodeRateControlModeFlagsKHR
+    pLayers : array<VideoEncodeRateControlLayerInfoKHR>
+    virtualBufferSizeInMs : uint
+    initialVirtualBufferSizeInMs : uint
+    _vk_view_pLayers : array<VkVideoEncodeRateControlLayerInfoKHR>
+}
+def vk_view_create_unsafe(var b : VideoEncodeRateControlInfoKHR) : VkVideoEncodeRateControlInfoKHR {
+    var vk = VkVideoEncodeRateControlInfoKHR()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.rateControlMode = b.rateControlMode
+    b._vk_view_pLayers |> resize(length(b.pLayers))
+    for (vki in range(length(b.pLayers))) {
+        b._vk_view_pLayers[vki] = vk_view_create_unsafe(b.pLayers[vki])
+    }
+    vk.layerCount = uint(length(b.pLayers))
+    vk.pLayers = array_addr(b._vk_view_pLayers)
+    vk.virtualBufferSizeInMs = b.virtualBufferSizeInMs
+    vk.initialVirtualBufferSizeInMs = b.initialVirtualBufferSizeInMs
+    return <- vk
+}
+def vk_view_destroy(var b : VideoEncodeRateControlInfoKHR) {
+    for (vki in range(length(b.pLayers))) {
+        vk_view_destroy(b.pLayers[vki])
+    }
+    delete b._vk_view_pLayers
 }
 
 struct VideoEncodeRateControlLayerInfoKHR {
@@ -12508,6 +13926,29 @@ def vk_view_destroy(var b : FormatProperties3) {
     pass
 }
 
+struct DrmFormatModifierPropertiesList2EXT {
+    next : void?
+    pDrmFormatModifierProperties : array<DrmFormatModifierProperties2EXT>
+    _vk_view_pDrmFormatModifierProperties : array<VkDrmFormatModifierProperties2EXT>
+}
+def vk_view_create_unsafe(var b : DrmFormatModifierPropertiesList2EXT) : VkDrmFormatModifierPropertiesList2EXT {
+    var vk = VkDrmFormatModifierPropertiesList2EXT()
+    vk.pNext = b.next
+    b._vk_view_pDrmFormatModifierProperties |> resize(length(b.pDrmFormatModifierProperties))
+    for (vki in range(length(b.pDrmFormatModifierProperties))) {
+        b._vk_view_pDrmFormatModifierProperties[vki] = vk_view_create_unsafe(b.pDrmFormatModifierProperties[vki])
+    }
+    vk.drmFormatModifierCount = uint(length(b.pDrmFormatModifierProperties))
+    vk.pDrmFormatModifierProperties = array_addr(b._vk_view_pDrmFormatModifierProperties)
+    return <- vk
+}
+def vk_view_destroy(var b : DrmFormatModifierPropertiesList2EXT) {
+    for (vki in range(length(b.pDrmFormatModifierProperties))) {
+        vk_view_destroy(b.pDrmFormatModifierProperties[vki])
+    }
+    delete b._vk_view_pDrmFormatModifierProperties
+}
+
 struct DrmFormatModifierProperties2EXT {
     drmFormatModifier : uint64
     drmFormatModifierPlaneCount : uint
@@ -13649,6 +15090,31 @@ def vk_view_destroy(var b : OpticalFlowSessionCreateInfoNV) {
     pass
 }
 
+struct OpticalFlowExecuteInfoNV {
+    next : void?
+    flags : VkOpticalFlowExecuteFlagsNV
+    pRegions : array<Rect2D>
+    _vk_view_pRegions : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : OpticalFlowExecuteInfoNV) : VkOpticalFlowExecuteInfoNV {
+    var vk = VkOpticalFlowExecuteInfoNV()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : OpticalFlowExecuteInfoNV) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
 struct PhysicalDeviceFaultFeaturesEXT {
     next : void?
     deviceFault : uint
@@ -13817,6 +15283,31 @@ def vk_view_create_unsafe(var b : DecompressMemoryRegionEXT) : VkDecompressMemor
 }
 def vk_view_destroy(var b : DecompressMemoryRegionEXT) {
     pass
+}
+
+struct DecompressMemoryInfoEXT {
+    next : void?
+    decompressionMethod : VkMemoryDecompressionMethodFlagsEXT
+    pRegions : array<DecompressMemoryRegionEXT>
+    _vk_view_pRegions : array<VkDecompressMemoryRegionEXT>
+}
+def vk_view_create_unsafe(var b : DecompressMemoryInfoEXT) : VkDecompressMemoryInfoEXT {
+    var vk = VkDecompressMemoryInfoEXT()
+    vk.pNext = b.next
+    vk.decompressionMethod = b.decompressionMethod
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : DecompressMemoryInfoEXT) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
 }
 
 struct PhysicalDeviceShaderCoreBuiltinsPropertiesARM {
@@ -14167,6 +15658,29 @@ def vk_view_destroy(var b : PhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCO
     pass
 }
 
+struct MultiviewPerViewRenderAreasRenderPassBeginInfoQCOM {
+    next : void?
+    pPerViewRenderAreas : array<Rect2D>
+    _vk_view_pPerViewRenderAreas : array<VkRect2D>
+}
+def vk_view_create_unsafe(var b : MultiviewPerViewRenderAreasRenderPassBeginInfoQCOM) : VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM {
+    var vk = VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM()
+    vk.pNext = b.next
+    b._vk_view_pPerViewRenderAreas |> resize(length(b.pPerViewRenderAreas))
+    for (vki in range(length(b.pPerViewRenderAreas))) {
+        b._vk_view_pPerViewRenderAreas[vki] = vk_view_create_unsafe(b.pPerViewRenderAreas[vki])
+    }
+    vk.perViewRenderAreaCount = uint(length(b.pPerViewRenderAreas))
+    vk.pPerViewRenderAreas = array_addr(b._vk_view_pPerViewRenderAreas)
+    return <- vk
+}
+def vk_view_destroy(var b : MultiviewPerViewRenderAreasRenderPassBeginInfoQCOM) {
+    for (vki in range(length(b.pPerViewRenderAreas))) {
+        vk_view_destroy(b.pPerViewRenderAreas[vki])
+    }
+    delete b._vk_view_pPerViewRenderAreas
+}
+
 struct MemoryMapInfo {
     next : void?
     flags : VkMemoryMapFlags
@@ -14446,6 +15960,64 @@ def vk_view_destroy(var b : BindDescriptorSetsInfo) {
     delete b._vk_view_pDynamicOffsets
 }
 
+struct PushDescriptorSetInfo {
+    next : void?
+    stageFlags : VkShaderStageFlags
+    layout : PipelineLayout
+    set : uint
+    pDescriptorWrites : array<WriteDescriptorSet>
+    _vk_view_pDescriptorWrites : array<VkWriteDescriptorSet>
+}
+def vk_view_create_unsafe(var b : PushDescriptorSetInfo) : VkPushDescriptorSetInfo {
+    var vk = VkPushDescriptorSetInfo()
+    vk.pNext = b.next
+    vk.stageFlags = b.stageFlags
+    vk.layout = boost_value_to_vk(b.layout)
+    vk.set = b.set
+    b._vk_view_pDescriptorWrites |> resize(length(b.pDescriptorWrites))
+    for (vki in range(length(b.pDescriptorWrites))) {
+        b._vk_view_pDescriptorWrites[vki] = vk_view_create_unsafe(b.pDescriptorWrites[vki])
+    }
+    vk.descriptorWriteCount = uint(length(b.pDescriptorWrites))
+    vk.pDescriptorWrites = array_addr(b._vk_view_pDescriptorWrites)
+    return <- vk
+}
+def vk_view_destroy(var b : PushDescriptorSetInfo) {
+    for (vki in range(length(b.pDescriptorWrites))) {
+        vk_view_destroy(b.pDescriptorWrites[vki])
+    }
+    delete b._vk_view_pDescriptorWrites
+}
+
+struct SetDescriptorBufferOffsetsInfoEXT {
+    next : void?
+    stageFlags : VkShaderStageFlags
+    layout : PipelineLayout
+    firstSet : uint
+    pBufferIndices : array<uint>
+    pOffsets : array<uint64>
+    _vk_view_pBufferIndices : array<uint>
+    _vk_view_pOffsets : array<uint64>
+}
+def vk_view_create_unsafe(var b : SetDescriptorBufferOffsetsInfoEXT) : VkSetDescriptorBufferOffsetsInfoEXT {
+    var vk = VkSetDescriptorBufferOffsetsInfoEXT()
+    vk.pNext = b.next
+    vk.stageFlags = b.stageFlags
+    vk.layout = boost_value_to_vk(b.layout)
+    vk.firstSet = b.firstSet
+    b._vk_view_pBufferIndices := b.pBufferIndices
+    vk.setCount = uint(length(b.pBufferIndices))
+    vk.pBufferIndices = array_addr(b._vk_view_pBufferIndices)
+    b._vk_view_pOffsets := b.pOffsets
+    vk.setCount = uint(length(b.pOffsets))
+    vk.pOffsets = array_addr(b._vk_view_pOffsets)
+    return <- vk
+}
+def vk_view_destroy(var b : SetDescriptorBufferOffsetsInfoEXT) {
+    delete b._vk_view_pBufferIndices
+    delete b._vk_view_pOffsets
+}
+
 struct BindDescriptorBufferEmbeddedSamplersInfoEXT {
     next : void?
     stageFlags : VkShaderStageFlags
@@ -14688,6 +16260,29 @@ def vk_view_destroy(var b : SetLatencyMarkerInfoNV) {
     pass
 }
 
+struct GetLatencyMarkerInfoNV {
+    next : void?
+    pTimings : array<LatencyTimingsFrameReportNV>
+    _vk_view_pTimings : array<VkLatencyTimingsFrameReportNV>
+}
+def vk_view_create_unsafe(var b : GetLatencyMarkerInfoNV) : VkGetLatencyMarkerInfoNV {
+    var vk = VkGetLatencyMarkerInfoNV()
+    vk.pNext = b.next
+    b._vk_view_pTimings |> resize(length(b.pTimings))
+    for (vki in range(length(b.pTimings))) {
+        b._vk_view_pTimings[vki] = vk_view_create_unsafe(b.pTimings[vki])
+    }
+    vk.timingCount = uint(length(b.pTimings))
+    vk.pTimings = array_addr(b._vk_view_pTimings)
+    return <- vk
+}
+def vk_view_destroy(var b : GetLatencyMarkerInfoNV) {
+    for (vki in range(length(b.pTimings))) {
+        vk_view_destroy(b.pTimings[vki])
+    }
+    delete b._vk_view_pTimings
+}
+
 struct LatencyTimingsFrameReportNV {
     next : void?
     presentID : uint64
@@ -14904,6 +16499,52 @@ def vk_view_create_unsafe(var b : RenderPassStripeInfoARM) : VkRenderPassStripeI
 }
 def vk_view_destroy(var b : RenderPassStripeInfoARM) {
     pass
+}
+
+struct RenderPassStripeBeginInfoARM {
+    next : void?
+    pStripeInfos : array<RenderPassStripeInfoARM>
+    _vk_view_pStripeInfos : array<VkRenderPassStripeInfoARM>
+}
+def vk_view_create_unsafe(var b : RenderPassStripeBeginInfoARM) : VkRenderPassStripeBeginInfoARM {
+    var vk = VkRenderPassStripeBeginInfoARM()
+    vk.pNext = b.next
+    b._vk_view_pStripeInfos |> resize(length(b.pStripeInfos))
+    for (vki in range(length(b.pStripeInfos))) {
+        b._vk_view_pStripeInfos[vki] = vk_view_create_unsafe(b.pStripeInfos[vki])
+    }
+    vk.stripeInfoCount = uint(length(b.pStripeInfos))
+    vk.pStripeInfos = array_addr(b._vk_view_pStripeInfos)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassStripeBeginInfoARM) {
+    for (vki in range(length(b.pStripeInfos))) {
+        vk_view_destroy(b.pStripeInfos[vki])
+    }
+    delete b._vk_view_pStripeInfos
+}
+
+struct RenderPassStripeSubmitInfoARM {
+    next : void?
+    pStripeSemaphoreInfos : array<SemaphoreSubmitInfo>
+    _vk_view_pStripeSemaphoreInfos : array<VkSemaphoreSubmitInfo>
+}
+def vk_view_create_unsafe(var b : RenderPassStripeSubmitInfoARM) : VkRenderPassStripeSubmitInfoARM {
+    var vk = VkRenderPassStripeSubmitInfoARM()
+    vk.pNext = b.next
+    b._vk_view_pStripeSemaphoreInfos |> resize(length(b.pStripeSemaphoreInfos))
+    for (vki in range(length(b.pStripeSemaphoreInfos))) {
+        b._vk_view_pStripeSemaphoreInfos[vki] = vk_view_create_unsafe(b.pStripeSemaphoreInfos[vki])
+    }
+    vk.stripeSemaphoreInfoCount = uint(length(b.pStripeSemaphoreInfos))
+    vk.pStripeSemaphoreInfos = array_addr(b._vk_view_pStripeSemaphoreInfos)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassStripeSubmitInfoARM) {
+    for (vki in range(length(b.pStripeSemaphoreInfos))) {
+        vk_view_destroy(b.pStripeSemaphoreInfos[vki])
+    }
+    delete b._vk_view_pStripeSemaphoreInfos
 }
 
 struct PhysicalDevicePipelineOpacityMicromapFeaturesARM {
@@ -15885,6 +17526,29 @@ def vk_view_destroy(var b : TensorMemoryBarrierARM) {
     pass
 }
 
+struct TensorDependencyInfoARM {
+    next : void?
+    pTensorMemoryBarriers : array<TensorMemoryBarrierARM>
+    _vk_view_pTensorMemoryBarriers : array<VkTensorMemoryBarrierARM>
+}
+def vk_view_create_unsafe(var b : TensorDependencyInfoARM) : VkTensorDependencyInfoARM {
+    var vk = VkTensorDependencyInfoARM()
+    vk.pNext = b.next
+    b._vk_view_pTensorMemoryBarriers |> resize(length(b.pTensorMemoryBarriers))
+    for (vki in range(length(b.pTensorMemoryBarriers))) {
+        b._vk_view_pTensorMemoryBarriers[vki] = vk_view_create_unsafe(b.pTensorMemoryBarriers[vki])
+    }
+    vk.tensorMemoryBarrierCount = uint(length(b.pTensorMemoryBarriers))
+    vk.pTensorMemoryBarriers = array_addr(b._vk_view_pTensorMemoryBarriers)
+    return <- vk
+}
+def vk_view_destroy(var b : TensorDependencyInfoARM) {
+    for (vki in range(length(b.pTensorMemoryBarriers))) {
+        vk_view_destroy(b.pTensorMemoryBarriers[vki])
+    }
+    delete b._vk_view_pTensorMemoryBarriers
+}
+
 struct PhysicalDeviceTensorFeaturesARM {
     next : void?
     tensorNonPacked : uint
@@ -15907,6 +17571,33 @@ def vk_view_create_unsafe(var b : PhysicalDeviceTensorFeaturesARM) : VkPhysicalD
 }
 def vk_view_destroy(var b : PhysicalDeviceTensorFeaturesARM) {
     pass
+}
+
+struct CopyTensorInfoARM {
+    next : void?
+    srcTensor : TensorARM
+    dstTensor : TensorARM
+    pRegions : array<TensorCopyARM>
+    _vk_view_pRegions : array<VkTensorCopyARM>
+}
+def vk_view_create_unsafe(var b : CopyTensorInfoARM) : VkCopyTensorInfoARM {
+    var vk = VkCopyTensorInfoARM()
+    vk.pNext = b.next
+    vk.srcTensor = boost_value_to_vk(b.srcTensor)
+    vk.dstTensor = boost_value_to_vk(b.dstTensor)
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyTensorInfoARM) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
 }
 
 struct TensorCopyARM {
@@ -16173,6 +17864,33 @@ def vk_view_destroy(var b : DataGraphPipelineCompilerControlCreateInfoARM) {
     pass
 }
 
+struct DataGraphPipelineCreateInfoARM {
+    next : void?
+    flags : VkPipelineCreateFlags2
+    layout : PipelineLayout
+    pResourceInfos : array<DataGraphPipelineResourceInfoARM>
+    _vk_view_pResourceInfos : array<VkDataGraphPipelineResourceInfoARM>
+}
+def vk_view_create_unsafe(var b : DataGraphPipelineCreateInfoARM) : VkDataGraphPipelineCreateInfoARM {
+    var vk = VkDataGraphPipelineCreateInfoARM()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.layout = boost_value_to_vk(b.layout)
+    b._vk_view_pResourceInfos |> resize(length(b.pResourceInfos))
+    for (vki in range(length(b.pResourceInfos))) {
+        b._vk_view_pResourceInfos[vki] = vk_view_create_unsafe(b.pResourceInfos[vki])
+    }
+    vk.resourceInfoCount = uint(length(b.pResourceInfos))
+    vk.pResourceInfos = array_addr(b._vk_view_pResourceInfos)
+    return <- vk
+}
+def vk_view_destroy(var b : DataGraphPipelineCreateInfoARM) {
+    for (vki in range(length(b.pResourceInfos))) {
+        vk_view_destroy(b.pResourceInfos[vki])
+    }
+    delete b._vk_view_pResourceInfos
+}
+
 struct DataGraphPipelineSessionCreateInfoARM {
     next : void?
     flags : VkDataGraphPipelineSessionCreateFlagsARM
@@ -16366,6 +18084,29 @@ def vk_view_create_unsafe(var b : QueueFamilyDataGraphProcessingEngineProperties
 }
 def vk_view_destroy(var b : QueueFamilyDataGraphProcessingEnginePropertiesARM) {
     pass
+}
+
+struct DataGraphProcessingEngineCreateInfoARM {
+    next : void?
+    pProcessingEngines : array<PhysicalDeviceDataGraphProcessingEngineARM>
+    _vk_view_pProcessingEngines : array<VkPhysicalDeviceDataGraphProcessingEngineARM>
+}
+def vk_view_create_unsafe(var b : DataGraphProcessingEngineCreateInfoARM) : VkDataGraphProcessingEngineCreateInfoARM {
+    var vk = VkDataGraphProcessingEngineCreateInfoARM()
+    vk.pNext = b.next
+    b._vk_view_pProcessingEngines |> resize(length(b.pProcessingEngines))
+    for (vki in range(length(b.pProcessingEngines))) {
+        b._vk_view_pProcessingEngines[vki] = vk_view_create_unsafe(b.pProcessingEngines[vki])
+    }
+    vk.processingEngineCount = uint(length(b.pProcessingEngines))
+    vk.pProcessingEngines = array_addr(b._vk_view_pProcessingEngines)
+    return <- vk
+}
+def vk_view_destroy(var b : DataGraphProcessingEngineCreateInfoARM) {
+    for (vki in range(length(b.pProcessingEngines))) {
+        vk_view_destroy(b.pProcessingEngines[vki])
+    }
+    delete b._vk_view_pProcessingEngines
 }
 
 struct PhysicalDevicePipelineCacheIncrementalModeFeaturesSEC {
@@ -16586,6 +18327,31 @@ def vk_view_destroy(var b : PerformanceCounterARM) {
     pass
 }
 
+struct RenderPassPerformanceCountersByRegionBeginInfoARM {
+    next : void?
+    pCounterAddresses : array<uint64>
+    serializeRegions : uint
+    pCounterIndices : array<uint>
+    _vk_view_pCounterAddresses : array<uint64>
+    _vk_view_pCounterIndices : array<uint>
+}
+def vk_view_create_unsafe(var b : RenderPassPerformanceCountersByRegionBeginInfoARM) : VkRenderPassPerformanceCountersByRegionBeginInfoARM {
+    var vk = VkRenderPassPerformanceCountersByRegionBeginInfoARM()
+    vk.pNext = b.next
+    b._vk_view_pCounterAddresses := b.pCounterAddresses
+    vk.counterAddressCount = uint(length(b.pCounterAddresses))
+    vk.pCounterAddresses = array_addr(b._vk_view_pCounterAddresses)
+    vk.serializeRegions = b.serializeRegions
+    b._vk_view_pCounterIndices := b.pCounterIndices
+    vk.counterIndexCount = uint(length(b.pCounterIndices))
+    vk.pCounterIndices = array_addr(b._vk_view_pCounterIndices)
+    return <- vk
+}
+def vk_view_destroy(var b : RenderPassPerformanceCountersByRegionBeginInfoARM) {
+    delete b._vk_view_pCounterAddresses
+    delete b._vk_view_pCounterIndices
+}
+
 struct ComputeOccupancyPriorityParametersNV {
     next : void?
     occupancyPriority : float
@@ -16738,6 +18504,29 @@ def vk_view_create_unsafe(var b : DescriptorSetAndBindingMappingEXT) : VkDescrip
 }
 def vk_view_destroy(var b : DescriptorSetAndBindingMappingEXT) {
     pass
+}
+
+struct ShaderDescriptorSetAndBindingMappingInfoEXT {
+    next : void?
+    pMappings : array<DescriptorSetAndBindingMappingEXT>
+    _vk_view_pMappings : array<VkDescriptorSetAndBindingMappingEXT>
+}
+def vk_view_create_unsafe(var b : ShaderDescriptorSetAndBindingMappingInfoEXT) : VkShaderDescriptorSetAndBindingMappingInfoEXT {
+    var vk = VkShaderDescriptorSetAndBindingMappingInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pMappings |> resize(length(b.pMappings))
+    for (vki in range(length(b.pMappings))) {
+        b._vk_view_pMappings[vki] = vk_view_create_unsafe(b.pMappings[vki])
+    }
+    vk.mappingCount = uint(length(b.pMappings))
+    vk.pMappings = array_addr(b._vk_view_pMappings)
+    return <- vk
+}
+def vk_view_destroy(var b : ShaderDescriptorSetAndBindingMappingInfoEXT) {
+    for (vki in range(length(b.pMappings))) {
+        vk_view_destroy(b.pMappings[vki])
+    }
+    delete b._vk_view_pMappings
 }
 
 struct SamplerCustomBorderColorIndexCreateInfoEXT {
@@ -16962,6 +18751,29 @@ def vk_view_destroy(var b : DeviceMemoryCopyKHR) {
     pass
 }
 
+struct CopyDeviceMemoryInfoKHR {
+    next : void?
+    pRegions : array<DeviceMemoryCopyKHR>
+    _vk_view_pRegions : array<VkDeviceMemoryCopyKHR>
+}
+def vk_view_create_unsafe(var b : CopyDeviceMemoryInfoKHR) : VkCopyDeviceMemoryInfoKHR {
+    var vk = VkCopyDeviceMemoryInfoKHR()
+    vk.pNext = b.next
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyDeviceMemoryInfoKHR) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
 struct DeviceMemoryImageCopyKHR {
     next : void?
     addressRange : VkDeviceAddressRangeKHR
@@ -16988,6 +18800,54 @@ def vk_view_create_unsafe(var b : DeviceMemoryImageCopyKHR) : VkDeviceMemoryImag
 }
 def vk_view_destroy(var b : DeviceMemoryImageCopyKHR) {
     pass
+}
+
+struct CopyDeviceMemoryImageInfoKHR {
+    next : void?
+    image : Image
+    pRegions : array<DeviceMemoryImageCopyKHR>
+    _vk_view_pRegions : array<VkDeviceMemoryImageCopyKHR>
+}
+def vk_view_create_unsafe(var b : CopyDeviceMemoryImageInfoKHR) : VkCopyDeviceMemoryImageInfoKHR {
+    var vk = VkCopyDeviceMemoryImageInfoKHR()
+    vk.pNext = b.next
+    vk.image = boost_value_to_vk(b.image)
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vki in range(length(b.pRegions))) {
+        b._vk_view_pRegions[vki] = vk_view_create_unsafe(b.pRegions[vki])
+    }
+    vk.regionCount = uint(length(b.pRegions))
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    return <- vk
+}
+def vk_view_destroy(var b : CopyDeviceMemoryImageInfoKHR) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct MemoryRangeBarriersInfoKHR {
+    next : void?
+    pMemoryRangeBarriers : array<MemoryRangeBarrierKHR>
+    _vk_view_pMemoryRangeBarriers : array<VkMemoryRangeBarrierKHR>
+}
+def vk_view_create_unsafe(var b : MemoryRangeBarriersInfoKHR) : VkMemoryRangeBarriersInfoKHR {
+    var vk = VkMemoryRangeBarriersInfoKHR()
+    vk.pNext = b.next
+    b._vk_view_pMemoryRangeBarriers |> resize(length(b.pMemoryRangeBarriers))
+    for (vki in range(length(b.pMemoryRangeBarriers))) {
+        b._vk_view_pMemoryRangeBarriers[vki] = vk_view_create_unsafe(b.pMemoryRangeBarriers[vki])
+    }
+    vk.memoryRangeBarrierCount = uint(length(b.pMemoryRangeBarriers))
+    vk.pMemoryRangeBarriers = array_addr(b._vk_view_pMemoryRangeBarriers)
+    return <- vk
+}
+def vk_view_destroy(var b : MemoryRangeBarriersInfoKHR) {
+    for (vki in range(length(b.pMemoryRangeBarriers))) {
+        vk_view_destroy(b.pMemoryRangeBarriers[vki])
+    }
+    delete b._vk_view_pMemoryRangeBarriers
 }
 
 struct MemoryRangeBarrierKHR {
@@ -17326,6 +19186,31 @@ def vk_view_create_unsafe(var b : DataGraphOpticalFlowImageFormatPropertiesARM) 
 }
 def vk_view_destroy(var b : DataGraphOpticalFlowImageFormatPropertiesARM) {
     pass
+}
+
+struct DataGraphPipelineSingleNodeCreateInfoARM {
+    next : void?
+    nodeType : VkDataGraphPipelineNodeTypeARM
+    pConnections : array<DataGraphPipelineSingleNodeConnectionARM>
+    _vk_view_pConnections : array<VkDataGraphPipelineSingleNodeConnectionARM>
+}
+def vk_view_create_unsafe(var b : DataGraphPipelineSingleNodeCreateInfoARM) : VkDataGraphPipelineSingleNodeCreateInfoARM {
+    var vk = VkDataGraphPipelineSingleNodeCreateInfoARM()
+    vk.pNext = b.next
+    vk.nodeType = b.nodeType
+    b._vk_view_pConnections |> resize(length(b.pConnections))
+    for (vki in range(length(b.pConnections))) {
+        b._vk_view_pConnections[vki] = vk_view_create_unsafe(b.pConnections[vki])
+    }
+    vk.connectionCount = uint(length(b.pConnections))
+    vk.pConnections = array_addr(b._vk_view_pConnections)
+    return <- vk
+}
+def vk_view_destroy(var b : DataGraphPipelineSingleNodeCreateInfoARM) {
+    for (vki in range(length(b.pConnections))) {
+        vk_view_destroy(b.pConnections[vki])
+    }
+    delete b._vk_view_pConnections
 }
 
 struct DataGraphPipelineOpticalFlowCreateInfoARM {

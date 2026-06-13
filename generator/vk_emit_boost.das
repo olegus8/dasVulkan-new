@@ -187,6 +187,7 @@ enum FieldKind {
     str             //! const char* -> string
     arr_scalar      //! count+ptr of scalar/enum -> array<T>
     arr_handle      //! count+ptr of handle -> array<BoostHandle>
+    arr_struct      //! count+ptr of mappable struct -> array<BoostStruct> (recursive vk_view)
     hard            //! unmappable -> skip the whole struct
 }
 
@@ -220,8 +221,19 @@ def private elem_is_handle(em : EmitModel; tn : string) : bool {
     return key_exists(em.handle_names, tn)
 }
 
-//! map a struct member to a boost field; FieldKind.hard signals "skip the whole struct"
-def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember; counts : table<string>) : BoostField {
+//! resolve a C type name to a das scalar, chasing one base_types alias (VkDeviceSize -> uint64)
+def private arr_scalar_elem(reg : VkRegistry; tn : string) : string {
+    let direct = DAS_SCALAR_MAP?[tn] ?? ""
+    if (!empty(direct)) {
+        return direct
+    }
+    let bt = reg.base_types?[tn] ?? ""
+    return DAS_SCALAR_MAP?[bt] ?? ""
+}
+
+//! map a struct member to a boost field; FieldKind.hard signals "skip the whole struct".
+//! `mappable` is the set of struct names known to have a boost vk_view (for array-of-struct).
+def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember; counts : table<string>; mappable : table<string>) : BoostField {
     var bf = BoostField(name = das_safe_name(m.name), raw_name = m.name)
     let tn = m.type_name
     if (m.name == "sType" && !empty(m.stype_value)) {
@@ -263,13 +275,18 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
             bf.elem_vktype = tn               // raw handle das type (e.g. VkSemaphore)
             bf.is_handle_elem = true
         } else {
-            let ds = DAS_SCALAR_MAP?[tn] ?? ""
+            let ds = arr_scalar_elem(reg, tn)
             if (!empty(ds)) {
                 bf.kind = FieldKind.arr_scalar
                 bf.boost_type = "array<{ds}>"
                 bf.elem_vktype = ds           // scratch holds the same das scalar
+            } elif (key_exists(mappable, tn)) {
+                bf.kind = FieldKind.arr_struct
+                bf.elem_vktype = tn           // scratch holds the raw Vk struct
+                bf.elem_boost = boost_name(tn)
+                bf.boost_type = "array<{bf.elem_boost}>"
             } else {
-                bf.kind = FieldKind.hard      // array of struct / enum / flags -> defer
+                bf.kind = FieldKind.hard      // array of enum / flags / non-mappable struct -> defer
             }
         }
         return <- bf
@@ -322,27 +339,71 @@ struct ViewStruct {
     fields : array<BoostField>
 }
 
+//! is every member of `s` mappable, given the current candidate set? (array-of-struct
+//! members are mappable iff their element struct is itself in `mappable`)
+def private all_fields_mappable(reg : VkRegistry; em : EmitModel; s : VkStructDef; mappable : table<string>) : bool {
+    let counts = count_members_of(s)
+    for (m in s.members) {
+        var bf <- classify_field(reg, em, s, m, counts, mappable)
+        return false if (bf.kind == FieldKind.hard)
+    }
+    return true
+}
+
+def private first_hard_reason(reg : VkRegistry; em : EmitModel; s : VkStructDef; mappable : table<string>) : string {
+    let counts = count_members_of(s)
+    for (m in s.members) {
+        var bf <- classify_field(reg, em, s, m, counts, mappable)
+        if (bf.kind == FieldKind.hard) {
+            return "{s.name}: member {m.name} ({m.type_name} x{m.num_ptrs}) not mappable"
+        }
+    }
+    return "{s.name}: not mappable"
+}
+
 def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<string>) : array<ViewStruct> {
-    var views : array<ViewStruct>
-    for (s, idx in reg.structs, range(length(reg.structs))) {
+    // Phase 1: fixed-point on the mappable set. Seed with every candidate struct, then
+    // drop any whose fields aren't all mappable (array-of-struct elements must themselves
+    // be mappable) until stable -- handles nested views (e.g. RenderPassCreateInfo).
+    var mappable : table<string>
+    for (s in reg.structs) {
         continue if (!empty(s.alias))
         continue if (!key_exists(em.struct_emit, s.name))
         continue if (!empty(s.protect))
-        continue if (s.is_union)            // unions: defer
+        continue if (s.is_union)
+        mappable |> insert(s.name)
+    }
+    var changed = true
+    while (changed) {
+        changed = false
+        for (s in reg.structs) {
+            continue if (!key_exists(mappable, s.name))
+            if (!all_fields_mappable(reg, em, s, mappable)) {
+                mappable |> erase(s.name)
+                changed = true
+            }
+        }
+    }
+    // Phase 2: build the views; classification is now stable so no field is hard.
+    var views : array<ViewStruct>
+    for (s, idx in reg.structs, range(length(reg.structs))) {
+        continue if (!key_exists(mappable, s.name))
         let counts = count_members_of(s)
         var vs = ViewStruct(s_index = idx, boost = boost_name(s.name))
-        var hard = false
         for (m in s.members) {
-            var bf <- classify_field(reg, em, s, m, counts)
-            if (bf.kind == FieldKind.hard) {
-                hard = true
-                skip_log |> push("{s.name}: member {m.name} ({m.type_name} x{m.num_ptrs}) not mappable")
-                break
-            }
+            var bf <- classify_field(reg, em, s, m, counts, mappable)
             vs.fields |> emplace(bf)
         }
-        continue if (hard)
         views |> emplace(vs)
+    }
+    // log the structs that didn't make it (with the first offending field)
+    for (s in reg.structs) {
+        continue if (!empty(s.alias))
+        continue if (!key_exists(em.struct_emit, s.name))
+        continue if (!empty(s.protect))
+        continue if (s.is_union)
+        continue if (key_exists(mappable, s.name))
+        skip_log |> push(first_hard_reason(reg, em, s, mappable))
     }
     return <- views
 }
@@ -369,7 +430,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             }
             // scratch arrays for the array fields
             for (bf in vs.fields) {
-                if (bf.kind == FieldKind.arr_scalar || bf.kind == FieldKind.arr_handle) {
+                if (bf.kind == FieldKind.arr_scalar || bf.kind == FieldKind.arr_handle || bf.kind == FieldKind.arr_struct) {
                     fprint(f, "    _vk_view_{bf.name} : array<{bf.elem_vktype}>\n")
                 }
             }
@@ -397,6 +458,14 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    b._vk_view_{bf.name} <- [for (h in b.{bf.name}); boost_value_to_vk(h)]\n")
                     fprint(f, "    vk.{cm} = uint(length(b.{bf.name}))\n")
                     fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
+                } elif (bf.kind == FieldKind.arr_struct) {
+                    // recursively view each element in place (its sub-scratch lives in b.{bf.name}[i])
+                    fprint(f, "    b._vk_view_{bf.name} |> resize(length(b.{bf.name}))\n")
+                    fprint(f, "    for (vki in range(length(b.{bf.name}))) {OB}\n")
+                    fprint(f, "        b._vk_view_{bf.name}[vki] = vk_view_create_unsafe(b.{bf.name}[vki])\n")
+                    fprint(f, "    {CB}\n")
+                    fprint(f, "    vk.{cm} = uint(length(b.{bf.name}))\n")
+                    fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
                 }
             }
             fprint(f, "    return <- vk\n")
@@ -409,6 +478,13 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    unsafe \{ delete b._vk_view_{bf.name} \}\n")    // array of handle pointers
                     any_scratch = true
                 } elif (bf.kind == FieldKind.arr_scalar) {
+                    fprint(f, "    delete b._vk_view_{bf.name}\n")
+                    any_scratch = true
+                } elif (bf.kind == FieldKind.arr_struct) {
+                    // tear down each element's sub-view first, then free the raw scratch
+                    fprint(f, "    for (vki in range(length(b.{bf.name}))) {OB}\n")
+                    fprint(f, "        vk_view_destroy(b.{bf.name}[vki])\n")
+                    fprint(f, "    {CB}\n")
                     fprint(f, "    delete b._vk_view_{bf.name}\n")
                     any_scratch = true
                 }
@@ -567,6 +643,7 @@ enum CmdArgKind {
     in_view         //! single const struct ptr -> boost vk_view struct
     in_array_scalar //! count+const scalar/enum ptr -> array<scalar>
     in_array_handle //! count+const handle ptr -> array<BoostHandle>
+    in_array_struct //! count+const mappable-struct ptr -> array<BoostStruct> (recursive vk_view)
     in_scalar       //! by-value scalar / enum / flags
     in_string       //! const char*
     erasevkcount     //! input count member named by an input array's len -> uint(length(arr))
@@ -747,7 +824,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
                 plan.args |> emplace(a)
                 continue
             }
-            let ds = DAS_SCALAR_MAP?[p.type_name] ?? ""
+            let ds = arr_scalar_elem(reg, p.type_name)
             if (!empty(ds)) {
                 a.kind = CmdArgKind.in_array_scalar
                 a.elem_vktype = ds
@@ -756,7 +833,16 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
                 plan.args |> emplace(a)
                 continue
             }
-            plan.emittable = false      // array of struct/enum/flags -> defer
+            if (key_exists(view_set, p.type_name)) {
+                a.kind = CmdArgKind.in_array_struct
+                a.elem_boost = boost_name(p.type_name)
+                a.elem_vktype = p.type_name
+                a.boost_type = "array<{a.elem_boost}>"
+                a.count_for = arrayvkcount
+                plan.args |> emplace(a)
+                continue
+            }
+            plan.emittable = false      // array of enum/flags / non-mappable struct -> defer
             plan.skip = "{c.name}: array param {p.name} ({p.type_name}) of non-scalar/handle"
             return <- plan
         }
@@ -805,7 +891,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
     // link each erasevkcount to the array param it counts (-> uint(length(arr)))
     for (i in range(length(plan.args))) {
         let ak = plan.args[i].kind
-        if (ak == CmdArgKind.in_array_scalar || ak == CmdArgKind.in_array_handle) {
+        if (ak == CmdArgKind.in_array_scalar || ak == CmdArgKind.in_array_handle || ak == CmdArgKind.in_array_struct) {
             let target = plan.args[i].count_for
             let arr_pname = plan.args[i].pname
             for (j in range(length(plan.args))) {
@@ -857,7 +943,7 @@ def private call_arg(a : CmdArg) : string {
         return a.pname
     } elif (a.kind == CmdArgKind.in_array_scalar) {
         return "array_addr({a.pname})"
-    } elif (a.kind == CmdArgKind.in_array_handle) {
+    } elif (a.kind == CmdArgKind.in_array_handle || a.kind == CmdArgKind.in_array_struct) {
         return "array_addr(vkraw_{a.pname})"
     } elif (a.kind == CmdArgKind.erasevkcount) {
         return "uint(length({a.count_for}))"
@@ -882,6 +968,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
             for (a in plan.args) {
                 let in_sig = (a.kind == CmdArgKind.in_handle || a.kind == CmdArgKind.in_view ||
                     a.kind == CmdArgKind.in_array_scalar || a.kind == CmdArgKind.in_array_handle ||
+                    a.kind == CmdArgKind.in_array_struct ||
                     a.kind == CmdArgKind.in_scalar || a.kind == CmdArgKind.in_string)
                 continue if (!in_sig)
                 if (!first) {
@@ -889,7 +976,8 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 }
                 first = false
                 // views and arrays need var (vk_view mutates scratch / array_addr needs var)
-                let needs_var = a.kind == CmdArgKind.in_view || a.kind == CmdArgKind.in_array_scalar
+                let needs_var = (a.kind == CmdArgKind.in_view || a.kind == CmdArgKind.in_array_scalar ||
+                    a.kind == CmdArgKind.in_array_struct)
                 fprint(f, "{needs_var ? "var " : ""}{a.pname} : {a.boost_type}")
             }
             if (plan.is_result) {
@@ -913,6 +1001,12 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "    defer() {OB} vk_view_destroy({a.pname}) {CB}\n")
                 } elif (a.kind == CmdArgKind.in_array_handle) {
                     fprint(f, "    var vkraw_{a.pname} <- [for (h in {a.pname}); boost_value_to_vk(h)]\n")
+                } elif (a.kind == CmdArgKind.in_array_struct) {
+                    fprint(f, "    var vkraw_{a.pname} : array<{a.elem_vktype}>\n")
+                    fprint(f, "    vkraw_{a.pname} |> resize(length({a.pname}))\n")
+                    fprint(f, "    for (vki in range(length({a.pname}))) {OB}\n")
+                    fprint(f, "        vkraw_{a.pname}[vki] = vk_view_create_unsafe({a.pname}[vki])\n")
+                    fprint(f, "    {CB}\n")
                 }
             }
             // --- the call(s) ---
@@ -988,6 +1082,9 @@ def private emit_scratch_cleanup(f : file; plan : CmdPlan) {
     for (a in plan.args) {
         if (a.kind == CmdArgKind.in_array_handle) {
             fprint(f, "    unsafe {OB} delete vkraw_{a.pname} {CB}\n")
+        } elif (a.kind == CmdArgKind.in_array_struct) {
+            fprint(f, "    for (vki in range(length({a.pname}))) {OB} vk_view_destroy({a.pname}[vki]) {CB}\n")
+            fprint(f, "    delete vkraw_{a.pname}\n")
         }
     }
 }
