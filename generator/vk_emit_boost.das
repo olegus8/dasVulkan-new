@@ -422,6 +422,140 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
     to_log(LOG_INFO, "boost: {length(views)} vk_view structs -> vulkan_structs.das\n")
 }
 
+// ===== commands: generated creators (RAII create_X returning an owning wrapper) =====
+
+struct CreatorInfo {
+    command : string            //! vkCreateImage
+    fn_name : string            //! create_image
+    handle : string             //! VkImage
+    boost : string              //! Image
+    create_info_boost : string  //! ImageCreateInfo
+    creator_params : array<ParentField>  //! the creator's leading handle params (call + signature)
+    store_parents : array<ParentField>   //! the destroyer's parents, stored in the wrapper for finalize
+}
+
+//! snake_case a vkCreateImage / vkAllocateMemory name -> create_image / allocate_memory
+def private command_fn_name(vkname : string) : string {
+    var body = vkname
+    if (body |> starts_with("vk")) {
+        body = body |> slice(2)
+    }
+    return camel_to_snake(body)
+}
+
+def private camel_to_snake(s : string) : string {
+    return build_string() $(var w) {
+        peek_data(s) $(arr) {
+            for (i in range(length(arr))) {
+                let c = int(arr[i])
+                let up = c >= 'A' && c <= 'Z'
+                if (up && i > 0) {
+                    w |> write_char('_')
+                }
+                w |> write_char(up ? c - 'A' + 'a' : c)
+            }
+        }
+    }
+}
+
+def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<OwnerInfo>; views : array<ViewStruct>) : array<CreatorInfo> {
+    // index owners by handle name, and the set of emitted view struct (vk) names
+    var owner_of : table<string; int>
+    for (oi, i in owners, range(length(owners))) {
+        owner_of[oi.handle] = i
+    }
+    var view_set : table<string>
+    for (vs in views) {
+        view_set |> insert(reg.structs[vs.s_index].name)
+    }
+    var creators : array<CreatorInfo>
+    for (c in reg.commands) {
+        continue if (!empty(c.alias))
+        continue if (!key_exists(reg.enabled_commands, c.name))
+        continue if (!empty(c.protect))
+        continue if (!(c.name |> starts_with("vkCreate")) && !(c.name |> starts_with("vkAllocate")))
+        // single out-handle (no len -> not a batch), a create-info struct, leading handle parents
+        var out_handle = ""
+        var batch = false
+        var ci_vk = ""
+        var creator_params : array<ParentField>
+        for (p in c.params) {
+            if (key_exists(em.handle_names, p.type_name) && p.num_ptrs >= 1) {
+                out_handle = p.type_name
+                if (!empty(p.len)) {
+                    batch = true
+                }
+            } elif (key_exists(em.handle_names, p.type_name) && p.num_ptrs == 0) {
+                creator_params |> emplace(ParentField(field = "_{das_safe_name(p.name)}", vktype = p.type_name))
+            } elif (key_exists(view_set, p.type_name) && p.num_ptrs == 1) {
+                ci_vk = p.type_name
+            }
+        }
+        continue if (empty(out_handle) || batch || empty(ci_vk))
+        let oidx = owner_of?[out_handle] ?? -1
+        continue if (oidx < 0)
+        let oi & = unsafe(owners[oidx])
+        var info = CreatorInfo(
+            command = c.name,
+            fn_name = command_fn_name(c.name),
+            handle = out_handle,
+            boost = oi.boost,
+            create_info_boost = boost_name(ci_vk)
+        )
+        info.creator_params <- creator_params
+        info.store_parents := oi.parents
+        creators |> emplace(info)
+    }
+    return <- creators
+}
+
+def private param_name_of(field : string) : string {
+    // wrapper field "_device" -> param "device"
+    if (field |> starts_with("_")) {
+        return field |> slice(1)
+    }
+    return field
+}
+
+def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; creators : array<CreatorInfo>) {
+    fopen("{out_dir}/vulkan_commands.das", "wb") $(f) {
+        panic("can't write vulkan_commands.das") if (f == null)
+        fprint(f, GEN_HEADER)
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_commands\n\n")
+        fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
+        for (ci in creators) {
+            // signature: creator's leading handle params (boost) + create_info + optional result
+            fprint(f, "def {ci.fn_name}(")
+            for (pf in ci.creator_params) {
+                fprint(f, "{param_name_of(pf.field)} : {boost_name(pf.vktype)}; ")
+            }
+            fprint(f, "var create_info : {ci.create_info_boost}; var result : VkResult? = null) : {ci.boost} \{\n")
+            fprint(f, "    var vci = vk_view_create_unsafe(create_info)\n")
+            fprint(f, "    defer() \{ vk_view_destroy(create_info) \}\n")
+            fprint(f, "    var h : {ci.handle}\n")
+            fprint(f, "    vk_check({ci.command}(")
+            for (pf in ci.creator_params) {
+                fprint(f, "boost_value_to_vk({param_name_of(pf.field)}), ")
+            }
+            fprint(f, "vci, null, h), result)\n")
+            fprint(f, "    var b = vk_value_to_boost(h)\n")
+            fprint(f, "    b._needs_delete = true\n")
+            // store the destroyer's parents (matched to a creator param of the same type)
+            for (sp in ci.store_parents) {
+                for (cp in ci.creator_params) {
+                    if (cp.vktype == sp.vktype) {
+                        fprint(f, "    b.{sp.field} = unsafe(reinterpret<uint64>(boost_value_to_vk({param_name_of(cp.field)})))\n")
+                        break
+                    }
+                }
+            }
+            fprint(f, "    return <- b\n")
+            fprint(f, "\}\n\n")
+        }
+    }
+    to_log(LOG_INFO, "boost: {length(creators)} creators -> vulkan_commands.das\n")
+}
+
 // ===== orchestrator =====
 
 def public emit_boost(reg : VkRegistry; var em : EmitModel; out_dir : string) {
@@ -431,5 +565,7 @@ def public emit_boost(reg : VkRegistry; var em : EmitModel; out_dir : string) {
     emit_handles_boost(reg, em, out_dir, owners)
     let views <- derive_views(reg, em, skip_log)
     emit_structs_boost(reg, em, out_dir, views)
+    let creators <- derive_creators(reg, em, owners, views)
+    emit_commands_boost(reg, em, out_dir, creators)
     to_log(LOG_INFO, "boost: {length(skip_log)} structs skipped (composite/unmappable members)\n")
 }
