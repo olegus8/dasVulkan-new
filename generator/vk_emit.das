@@ -436,7 +436,7 @@ def private build_enum_header(name, guard, protect : string) : string {
             }
         }
         w |> write("DAS_BASE_BIND_ENUM_FACTORY({name}, \"{name}\")\n")
-        w |> write("DAS_BASE_BIND_ENUM_CAST({name})\n")
+        w |> write("DAS_BIND_ENUM_CAST({name})\n")
         if (!empty(guard)) {
             w |> write("#endif\n")
         }

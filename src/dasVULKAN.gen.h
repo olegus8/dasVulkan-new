@@ -4,627 +4,627 @@
 
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureBuildTypeKHR, "VkAccelerationStructureBuildTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkAccelerationStructureBuildTypeKHR)
+DAS_BIND_ENUM_CAST(VkAccelerationStructureBuildTypeKHR)
 #endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureCompatibilityKHR, "VkAccelerationStructureCompatibilityKHR")
-DAS_BASE_BIND_ENUM_CAST(VkAccelerationStructureCompatibilityKHR)
+DAS_BIND_ENUM_CAST(VkAccelerationStructureCompatibilityKHR)
 #endif
 #if defined(VK_NV_ray_tracing)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureMemoryRequirementsTypeNV, "VkAccelerationStructureMemoryRequirementsTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkAccelerationStructureMemoryRequirementsTypeNV)
+DAS_BIND_ENUM_CAST(VkAccelerationStructureMemoryRequirementsTypeNV)
 #endif
 #if defined(VK_NV_ray_tracing_motion_blur)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureMotionInstanceTypeNV, "VkAccelerationStructureMotionInstanceTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkAccelerationStructureMotionInstanceTypeNV)
+DAS_BIND_ENUM_CAST(VkAccelerationStructureMotionInstanceTypeNV)
 #endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureTypeKHR, "VkAccelerationStructureTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkAccelerationStructureTypeKHR)
+DAS_BIND_ENUM_CAST(VkAccelerationStructureTypeKHR)
 #endif
 #if defined(VK_AMD_anti_lag)
 DAS_BASE_BIND_ENUM_FACTORY(VkAntiLagModeAMD, "VkAntiLagModeAMD")
-DAS_BASE_BIND_ENUM_CAST(VkAntiLagModeAMD)
+DAS_BIND_ENUM_CAST(VkAntiLagModeAMD)
 #endif
 #if defined(VK_AMD_anti_lag)
 DAS_BASE_BIND_ENUM_FACTORY(VkAntiLagStageAMD, "VkAntiLagStageAMD")
-DAS_BASE_BIND_ENUM_CAST(VkAntiLagStageAMD)
+DAS_BIND_ENUM_CAST(VkAntiLagStageAMD)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkAttachmentLoadOp, "VkAttachmentLoadOp")
-DAS_BASE_BIND_ENUM_CAST(VkAttachmentLoadOp)
+DAS_BIND_ENUM_CAST(VkAttachmentLoadOp)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkAttachmentStoreOp, "VkAttachmentStoreOp")
-DAS_BASE_BIND_ENUM_CAST(VkAttachmentStoreOp)
+DAS_BIND_ENUM_CAST(VkAttachmentStoreOp)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkBlendFactor, "VkBlendFactor")
-DAS_BASE_BIND_ENUM_CAST(VkBlendFactor)
+DAS_BIND_ENUM_CAST(VkBlendFactor)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkBlendOp, "VkBlendOp")
-DAS_BASE_BIND_ENUM_CAST(VkBlendOp)
+DAS_BIND_ENUM_CAST(VkBlendOp)
 #endif
 #if defined(VK_EXT_blend_operation_advanced)
 DAS_BASE_BIND_ENUM_FACTORY(VkBlendOverlapEXT, "VkBlendOverlapEXT")
-DAS_BASE_BIND_ENUM_CAST(VkBlendOverlapEXT)
+DAS_BIND_ENUM_CAST(VkBlendOverlapEXT)
 #endif
 #if defined(VK_QCOM_image_processing2)
 DAS_BASE_BIND_ENUM_FACTORY(VkBlockMatchWindowCompareModeQCOM, "VkBlockMatchWindowCompareModeQCOM")
-DAS_BASE_BIND_ENUM_CAST(VkBlockMatchWindowCompareModeQCOM)
+DAS_BIND_ENUM_CAST(VkBlockMatchWindowCompareModeQCOM)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkBorderColor, "VkBorderColor")
-DAS_BASE_BIND_ENUM_CAST(VkBorderColor)
+DAS_BIND_ENUM_CAST(VkBorderColor)
 #endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkBuildAccelerationStructureModeKHR, "VkBuildAccelerationStructureModeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkBuildAccelerationStructureModeKHR)
+DAS_BIND_ENUM_CAST(VkBuildAccelerationStructureModeKHR)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 DAS_BASE_BIND_ENUM_FACTORY(VkBuildMicromapModeEXT, "VkBuildMicromapModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkBuildMicromapModeEXT)
+DAS_BIND_ENUM_CAST(VkBuildMicromapModeEXT)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkChromaLocation, "VkChromaLocation")
-DAS_BASE_BIND_ENUM_CAST(VkChromaLocation)
+DAS_BIND_ENUM_CAST(VkChromaLocation)
 #endif
 #if defined(VK_NV_cluster_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkClusterAccelerationStructureOpModeNV, "VkClusterAccelerationStructureOpModeNV")
-DAS_BASE_BIND_ENUM_CAST(VkClusterAccelerationStructureOpModeNV)
+DAS_BIND_ENUM_CAST(VkClusterAccelerationStructureOpModeNV)
 #endif
 #if defined(VK_NV_cluster_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkClusterAccelerationStructureOpTypeNV, "VkClusterAccelerationStructureOpTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkClusterAccelerationStructureOpTypeNV)
+DAS_BIND_ENUM_CAST(VkClusterAccelerationStructureOpTypeNV)
 #endif
 #if defined(VK_NV_cluster_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkClusterAccelerationStructureTypeNV, "VkClusterAccelerationStructureTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkClusterAccelerationStructureTypeNV)
+DAS_BIND_ENUM_CAST(VkClusterAccelerationStructureTypeNV)
 #endif
 #if defined(VK_NV_shading_rate_image)
 DAS_BASE_BIND_ENUM_FACTORY(VkCoarseSampleOrderTypeNV, "VkCoarseSampleOrderTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkCoarseSampleOrderTypeNV)
+DAS_BIND_ENUM_CAST(VkCoarseSampleOrderTypeNV)
 #endif
 #if defined(VK_KHR_surface)
 DAS_BASE_BIND_ENUM_FACTORY(VkColorSpaceKHR, "VkColorSpaceKHR")
-DAS_BASE_BIND_ENUM_CAST(VkColorSpaceKHR)
+DAS_BIND_ENUM_CAST(VkColorSpaceKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkCommandBufferLevel, "VkCommandBufferLevel")
-DAS_BASE_BIND_ENUM_CAST(VkCommandBufferLevel)
+DAS_BIND_ENUM_CAST(VkCommandBufferLevel)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkCompareOp, "VkCompareOp")
-DAS_BASE_BIND_ENUM_CAST(VkCompareOp)
+DAS_BIND_ENUM_CAST(VkCompareOp)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkComponentSwizzle, "VkComponentSwizzle")
-DAS_BASE_BIND_ENUM_CAST(VkComponentSwizzle)
+DAS_BIND_ENUM_CAST(VkComponentSwizzle)
 #endif
 #if defined(VK_NV_cooperative_vector)
 DAS_BASE_BIND_ENUM_FACTORY(VkComponentTypeKHR, "VkComponentTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkComponentTypeKHR)
+DAS_BIND_ENUM_CAST(VkComponentTypeKHR)
 #endif
 #if defined(VK_EXT_conservative_rasterization)
 DAS_BASE_BIND_ENUM_FACTORY(VkConservativeRasterizationModeEXT, "VkConservativeRasterizationModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkConservativeRasterizationModeEXT)
+DAS_BIND_ENUM_CAST(VkConservativeRasterizationModeEXT)
 #endif
 #if defined(VK_NV_cooperative_vector)
 DAS_BASE_BIND_ENUM_FACTORY(VkCooperativeVectorMatrixLayoutNV, "VkCooperativeVectorMatrixLayoutNV")
-DAS_BASE_BIND_ENUM_CAST(VkCooperativeVectorMatrixLayoutNV)
+DAS_BIND_ENUM_CAST(VkCooperativeVectorMatrixLayoutNV)
 #endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkCopyAccelerationStructureModeKHR, "VkCopyAccelerationStructureModeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkCopyAccelerationStructureModeKHR)
+DAS_BIND_ENUM_CAST(VkCopyAccelerationStructureModeKHR)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 DAS_BASE_BIND_ENUM_FACTORY(VkCopyMicromapModeEXT, "VkCopyMicromapModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkCopyMicromapModeEXT)
+DAS_BIND_ENUM_CAST(VkCopyMicromapModeEXT)
 #endif
 #if defined(VK_NV_framebuffer_mixed_samples)
 DAS_BASE_BIND_ENUM_FACTORY(VkCoverageModulationModeNV, "VkCoverageModulationModeNV")
-DAS_BASE_BIND_ENUM_CAST(VkCoverageModulationModeNV)
+DAS_BIND_ENUM_CAST(VkCoverageModulationModeNV)
 #endif
 #if defined(VK_NV_coverage_reduction_mode)
 DAS_BASE_BIND_ENUM_FACTORY(VkCoverageReductionModeNV, "VkCoverageReductionModeNV")
-DAS_BASE_BIND_ENUM_CAST(VkCoverageReductionModeNV)
+DAS_BIND_ENUM_CAST(VkCoverageReductionModeNV)
 #endif
 #if defined(VK_QCOM_filter_cubic_weights)
 DAS_BASE_BIND_ENUM_FACTORY(VkCubicFilterWeightsQCOM, "VkCubicFilterWeightsQCOM")
-DAS_BASE_BIND_ENUM_CAST(VkCubicFilterWeightsQCOM)
+DAS_BIND_ENUM_CAST(VkCubicFilterWeightsQCOM)
 #endif
 #if defined(VK_QCOM_data_graph_model)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphModelCacheTypeQCOM, "VkDataGraphModelCacheTypeQCOM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphModelCacheTypeQCOM)
+DAS_BIND_ENUM_CAST(VkDataGraphModelCacheTypeQCOM)
 #endif
 #if defined(VK_ARM_data_graph_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphOpticalFlowPerformanceLevelARM, "VkDataGraphOpticalFlowPerformanceLevelARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphOpticalFlowPerformanceLevelARM)
+DAS_BIND_ENUM_CAST(VkDataGraphOpticalFlowPerformanceLevelARM)
 #endif
 #if defined(VK_ARM_data_graph_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphPipelineNodeConnectionTypeARM, "VkDataGraphPipelineNodeConnectionTypeARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphPipelineNodeConnectionTypeARM)
+DAS_BIND_ENUM_CAST(VkDataGraphPipelineNodeConnectionTypeARM)
 #endif
 #if defined(VK_ARM_data_graph_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphPipelineNodeTypeARM, "VkDataGraphPipelineNodeTypeARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphPipelineNodeTypeARM)
+DAS_BIND_ENUM_CAST(VkDataGraphPipelineNodeTypeARM)
 #endif
 #if defined(VK_ARM_data_graph)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphPipelinePropertyARM, "VkDataGraphPipelinePropertyARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphPipelinePropertyARM)
+DAS_BIND_ENUM_CAST(VkDataGraphPipelinePropertyARM)
 #endif
 #if defined(VK_ARM_data_graph)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphPipelineSessionBindPointARM, "VkDataGraphPipelineSessionBindPointARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphPipelineSessionBindPointARM)
+DAS_BIND_ENUM_CAST(VkDataGraphPipelineSessionBindPointARM)
 #endif
 #if defined(VK_ARM_data_graph)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphPipelineSessionBindPointTypeARM, "VkDataGraphPipelineSessionBindPointTypeARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphPipelineSessionBindPointTypeARM)
+DAS_BIND_ENUM_CAST(VkDataGraphPipelineSessionBindPointTypeARM)
 #endif
 #if defined(VK_ARM_data_graph_instruction_set_tosa)
 DAS_BASE_BIND_ENUM_FACTORY(VkDataGraphTOSALevelARM, "VkDataGraphTOSALevelARM")
-DAS_BASE_BIND_ENUM_CAST(VkDataGraphTOSALevelARM)
+DAS_BIND_ENUM_CAST(VkDataGraphTOSALevelARM)
 #endif
 #if defined(VK_EXT_debug_report)
 DAS_BASE_BIND_ENUM_FACTORY(VkDebugReportObjectTypeEXT, "VkDebugReportObjectTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDebugReportObjectTypeEXT)
+DAS_BIND_ENUM_CAST(VkDebugReportObjectTypeEXT)
 #endif
 #if defined(VK_KHR_maintenance9)
 DAS_BASE_BIND_ENUM_FACTORY(VkDefaultVertexAttributeValueKHR, "VkDefaultVertexAttributeValueKHR")
-DAS_BASE_BIND_ENUM_CAST(VkDefaultVertexAttributeValueKHR)
+DAS_BIND_ENUM_CAST(VkDefaultVertexAttributeValueKHR)
 #endif
 #if defined(VK_EXT_depth_bias_control)
 DAS_BASE_BIND_ENUM_FACTORY(VkDepthBiasRepresentationEXT, "VkDepthBiasRepresentationEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDepthBiasRepresentationEXT)
+DAS_BIND_ENUM_CAST(VkDepthBiasRepresentationEXT)
 #endif
 #if defined(VK_EXT_depth_clamp_control)
 DAS_BASE_BIND_ENUM_FACTORY(VkDepthClampModeEXT, "VkDepthClampModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDepthClampModeEXT)
+DAS_BIND_ENUM_CAST(VkDepthClampModeEXT)
 #endif
 #if defined(VK_EXT_descriptor_heap)
 DAS_BASE_BIND_ENUM_FACTORY(VkDescriptorMappingSourceEXT, "VkDescriptorMappingSourceEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDescriptorMappingSourceEXT)
+DAS_BIND_ENUM_CAST(VkDescriptorMappingSourceEXT)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkDescriptorType, "VkDescriptorType")
-DAS_BASE_BIND_ENUM_CAST(VkDescriptorType)
+DAS_BIND_ENUM_CAST(VkDescriptorType)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkDescriptorUpdateTemplateType, "VkDescriptorUpdateTemplateType")
-DAS_BASE_BIND_ENUM_CAST(VkDescriptorUpdateTemplateType)
+DAS_BIND_ENUM_CAST(VkDescriptorUpdateTemplateType)
 #endif
 #if defined(VK_EXT_device_address_binding_report)
 DAS_BASE_BIND_ENUM_FACTORY(VkDeviceAddressBindingTypeEXT, "VkDeviceAddressBindingTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDeviceAddressBindingTypeEXT)
+DAS_BIND_ENUM_CAST(VkDeviceAddressBindingTypeEXT)
 #endif
 #if defined(VK_EXT_display_control)
 DAS_BASE_BIND_ENUM_FACTORY(VkDeviceEventTypeEXT, "VkDeviceEventTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDeviceEventTypeEXT)
+DAS_BIND_ENUM_CAST(VkDeviceEventTypeEXT)
 #endif
 #if defined(VK_KHR_device_fault)
 DAS_BASE_BIND_ENUM_FACTORY(VkDeviceFaultAddressTypeKHR, "VkDeviceFaultAddressTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkDeviceFaultAddressTypeKHR)
+DAS_BIND_ENUM_CAST(VkDeviceFaultAddressTypeKHR)
 #endif
 #if defined(VK_KHR_device_fault)
 DAS_BASE_BIND_ENUM_FACTORY(VkDeviceFaultVendorBinaryHeaderVersionKHR, "VkDeviceFaultVendorBinaryHeaderVersionKHR")
-DAS_BASE_BIND_ENUM_CAST(VkDeviceFaultVendorBinaryHeaderVersionKHR)
+DAS_BIND_ENUM_CAST(VkDeviceFaultVendorBinaryHeaderVersionKHR)
 #endif
 #if defined(VK_EXT_device_memory_report)
 DAS_BASE_BIND_ENUM_FACTORY(VkDeviceMemoryReportEventTypeEXT, "VkDeviceMemoryReportEventTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDeviceMemoryReportEventTypeEXT)
+DAS_BIND_ENUM_CAST(VkDeviceMemoryReportEventTypeEXT)
 #endif
 #if defined(VK_LUNARG_direct_driver_loading)
 DAS_BASE_BIND_ENUM_FACTORY(VkDirectDriverLoadingModeLUNARG, "VkDirectDriverLoadingModeLUNARG")
-DAS_BASE_BIND_ENUM_CAST(VkDirectDriverLoadingModeLUNARG)
+DAS_BIND_ENUM_CAST(VkDirectDriverLoadingModeLUNARG)
 #endif
 #if defined(VK_EXT_discard_rectangles)
 DAS_BASE_BIND_ENUM_FACTORY(VkDiscardRectangleModeEXT, "VkDiscardRectangleModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDiscardRectangleModeEXT)
+DAS_BIND_ENUM_CAST(VkDiscardRectangleModeEXT)
 #endif
 #if defined(VK_EXT_display_control)
 DAS_BASE_BIND_ENUM_FACTORY(VkDisplayEventTypeEXT, "VkDisplayEventTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDisplayEventTypeEXT)
+DAS_BIND_ENUM_CAST(VkDisplayEventTypeEXT)
 #endif
 #if defined(VK_EXT_display_control)
 DAS_BASE_BIND_ENUM_FACTORY(VkDisplayPowerStateEXT, "VkDisplayPowerStateEXT")
-DAS_BASE_BIND_ENUM_CAST(VkDisplayPowerStateEXT)
+DAS_BIND_ENUM_CAST(VkDisplayPowerStateEXT)
 #endif
 #if defined(VK_NV_display_stereo)
 DAS_BASE_BIND_ENUM_FACTORY(VkDisplaySurfaceStereoTypeNV, "VkDisplaySurfaceStereoTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkDisplaySurfaceStereoTypeNV)
+DAS_BIND_ENUM_CAST(VkDisplaySurfaceStereoTypeNV)
 #endif
 #if defined(VK_VERSION_1_2)
 DAS_BASE_BIND_ENUM_FACTORY(VkDriverId, "VkDriverId")
-DAS_BASE_BIND_ENUM_CAST(VkDriverId)
+DAS_BIND_ENUM_CAST(VkDriverId)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkDynamicState, "VkDynamicState")
-DAS_BASE_BIND_ENUM_CAST(VkDynamicState)
+DAS_BIND_ENUM_CAST(VkDynamicState)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkFilter, "VkFilter")
-DAS_BASE_BIND_ENUM_CAST(VkFilter)
+DAS_BIND_ENUM_CAST(VkFilter)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkFormat, "VkFormat")
-DAS_BASE_BIND_ENUM_CAST(VkFormat)
+DAS_BIND_ENUM_CAST(VkFormat)
 #endif
 #if defined(VK_KHR_fragment_shading_rate)
 DAS_BASE_BIND_ENUM_FACTORY(VkFragmentShadingRateCombinerOpKHR, "VkFragmentShadingRateCombinerOpKHR")
-DAS_BASE_BIND_ENUM_CAST(VkFragmentShadingRateCombinerOpKHR)
+DAS_BIND_ENUM_CAST(VkFragmentShadingRateCombinerOpKHR)
 #endif
 #if defined(VK_NV_fragment_shading_rate_enums)
 DAS_BASE_BIND_ENUM_FACTORY(VkFragmentShadingRateNV, "VkFragmentShadingRateNV")
-DAS_BASE_BIND_ENUM_CAST(VkFragmentShadingRateNV)
+DAS_BIND_ENUM_CAST(VkFragmentShadingRateNV)
 #endif
 #if defined(VK_NV_fragment_shading_rate_enums)
 DAS_BASE_BIND_ENUM_FACTORY(VkFragmentShadingRateTypeNV, "VkFragmentShadingRateTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkFragmentShadingRateTypeNV)
+DAS_BIND_ENUM_CAST(VkFragmentShadingRateTypeNV)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkFrontFace, "VkFrontFace")
-DAS_BASE_BIND_ENUM_CAST(VkFrontFace)
+DAS_BIND_ENUM_CAST(VkFrontFace)
 #endif
 #if defined(VK_EXT_full_screen_exclusive) && defined(VK_USE_PLATFORM_WIN32_KHR)
 DAS_BASE_BIND_ENUM_FACTORY(VkFullScreenExclusiveEXT, "VkFullScreenExclusiveEXT")
-DAS_BASE_BIND_ENUM_CAST(VkFullScreenExclusiveEXT)
+DAS_BIND_ENUM_CAST(VkFullScreenExclusiveEXT)
 #endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkGeometryTypeKHR, "VkGeometryTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkGeometryTypeKHR)
+DAS_BIND_ENUM_CAST(VkGeometryTypeKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkImageLayout, "VkImageLayout")
-DAS_BASE_BIND_ENUM_CAST(VkImageLayout)
+DAS_BIND_ENUM_CAST(VkImageLayout)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkImageTiling, "VkImageTiling")
-DAS_BASE_BIND_ENUM_CAST(VkImageTiling)
+DAS_BIND_ENUM_CAST(VkImageTiling)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkImageType, "VkImageType")
-DAS_BASE_BIND_ENUM_CAST(VkImageType)
+DAS_BIND_ENUM_CAST(VkImageType)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkImageViewType, "VkImageViewType")
-DAS_BASE_BIND_ENUM_CAST(VkImageViewType)
+DAS_BIND_ENUM_CAST(VkImageViewType)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkIndexType, "VkIndexType")
-DAS_BASE_BIND_ENUM_CAST(VkIndexType)
+DAS_BIND_ENUM_CAST(VkIndexType)
 #endif
 #if defined(VK_EXT_device_generated_commands)
 DAS_BASE_BIND_ENUM_FACTORY(VkIndirectCommandsTokenTypeEXT, "VkIndirectCommandsTokenTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkIndirectCommandsTokenTypeEXT)
+DAS_BIND_ENUM_CAST(VkIndirectCommandsTokenTypeEXT)
 #endif
 #if defined(VK_NV_device_generated_commands)
 DAS_BASE_BIND_ENUM_FACTORY(VkIndirectCommandsTokenTypeNV, "VkIndirectCommandsTokenTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkIndirectCommandsTokenTypeNV)
+DAS_BIND_ENUM_CAST(VkIndirectCommandsTokenTypeNV)
 #endif
 #if defined(VK_EXT_device_generated_commands)
 DAS_BASE_BIND_ENUM_FACTORY(VkIndirectExecutionSetInfoTypeEXT, "VkIndirectExecutionSetInfoTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkIndirectExecutionSetInfoTypeEXT)
+DAS_BIND_ENUM_CAST(VkIndirectExecutionSetInfoTypeEXT)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkInternalAllocationType, "VkInternalAllocationType")
-DAS_BASE_BIND_ENUM_CAST(VkInternalAllocationType)
+DAS_BIND_ENUM_CAST(VkInternalAllocationType)
 #endif
 #if defined(VK_NV_low_latency2)
 DAS_BASE_BIND_ENUM_FACTORY(VkLatencyMarkerNV, "VkLatencyMarkerNV")
-DAS_BASE_BIND_ENUM_CAST(VkLatencyMarkerNV)
+DAS_BIND_ENUM_CAST(VkLatencyMarkerNV)
 #endif
 #if defined(VK_EXT_layer_settings)
 DAS_BASE_BIND_ENUM_FACTORY(VkLayerSettingTypeEXT, "VkLayerSettingTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkLayerSettingTypeEXT)
+DAS_BIND_ENUM_CAST(VkLayerSettingTypeEXT)
 #endif
 #if defined(VK_MSFT_layered_driver)
 DAS_BASE_BIND_ENUM_FACTORY(VkLayeredDriverUnderlyingApiMSFT, "VkLayeredDriverUnderlyingApiMSFT")
-DAS_BASE_BIND_ENUM_CAST(VkLayeredDriverUnderlyingApiMSFT)
+DAS_BIND_ENUM_CAST(VkLayeredDriverUnderlyingApiMSFT)
 #endif
 #if defined(VK_VERSION_1_4)
 DAS_BASE_BIND_ENUM_FACTORY(VkLineRasterizationMode, "VkLineRasterizationMode")
-DAS_BASE_BIND_ENUM_CAST(VkLineRasterizationMode)
+DAS_BIND_ENUM_CAST(VkLineRasterizationMode)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkLogicOp, "VkLogicOp")
-DAS_BASE_BIND_ENUM_CAST(VkLogicOp)
+DAS_BIND_ENUM_CAST(VkLogicOp)
 #endif
 #if defined(VK_AMD_memory_overallocation_behavior)
 DAS_BASE_BIND_ENUM_FACTORY(VkMemoryOverallocationBehaviorAMD, "VkMemoryOverallocationBehaviorAMD")
-DAS_BASE_BIND_ENUM_CAST(VkMemoryOverallocationBehaviorAMD)
+DAS_BIND_ENUM_CAST(VkMemoryOverallocationBehaviorAMD)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 DAS_BASE_BIND_ENUM_FACTORY(VkMicromapTypeEXT, "VkMicromapTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkMicromapTypeEXT)
+DAS_BIND_ENUM_CAST(VkMicromapTypeEXT)
 #endif
 #if defined(VK_ARM_data_graph_neural_accelerator_statistics)
 DAS_BASE_BIND_ENUM_FACTORY(VkNeuralAcceleratorStatisticsModeARM, "VkNeuralAcceleratorStatisticsModeARM")
-DAS_BASE_BIND_ENUM_CAST(VkNeuralAcceleratorStatisticsModeARM)
+DAS_BIND_ENUM_CAST(VkNeuralAcceleratorStatisticsModeARM)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkObjectType, "VkObjectType")
-DAS_BASE_BIND_ENUM_CAST(VkObjectType)
+DAS_BIND_ENUM_CAST(VkObjectType)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapFormatEXT, "VkOpacityMicromapFormatEXT")
-DAS_BASE_BIND_ENUM_CAST(VkOpacityMicromapFormatEXT)
+DAS_BIND_ENUM_CAST(VkOpacityMicromapFormatEXT)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapSpecialIndexEXT, "VkOpacityMicromapSpecialIndexEXT")
-DAS_BASE_BIND_ENUM_CAST(VkOpacityMicromapSpecialIndexEXT)
+DAS_BIND_ENUM_CAST(VkOpacityMicromapSpecialIndexEXT)
 #endif
 #if defined(VK_NV_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkOpticalFlowPerformanceLevelNV, "VkOpticalFlowPerformanceLevelNV")
-DAS_BASE_BIND_ENUM_CAST(VkOpticalFlowPerformanceLevelNV)
+DAS_BIND_ENUM_CAST(VkOpticalFlowPerformanceLevelNV)
 #endif
 #if defined(VK_NV_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkOpticalFlowSessionBindingPointNV, "VkOpticalFlowSessionBindingPointNV")
-DAS_BASE_BIND_ENUM_CAST(VkOpticalFlowSessionBindingPointNV)
+DAS_BIND_ENUM_CAST(VkOpticalFlowSessionBindingPointNV)
 #endif
 #if defined(VK_NV_low_latency2)
 DAS_BASE_BIND_ENUM_FACTORY(VkOutOfBandQueueTypeNV, "VkOutOfBandQueueTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkOutOfBandQueueTypeNV)
+DAS_BIND_ENUM_CAST(VkOutOfBandQueueTypeNV)
 #endif
 #if defined(VK_NV_partitioned_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkPartitionedAccelerationStructureOpTypeNV, "VkPartitionedAccelerationStructureOpTypeNV")
-DAS_BASE_BIND_ENUM_CAST(VkPartitionedAccelerationStructureOpTypeNV)
+DAS_BIND_ENUM_CAST(VkPartitionedAccelerationStructureOpTypeNV)
 #endif
 #if defined(VK_QCOM_queue_perf_hint)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerfHintTypeQCOM, "VkPerfHintTypeQCOM")
-DAS_BASE_BIND_ENUM_CAST(VkPerfHintTypeQCOM)
+DAS_BIND_ENUM_CAST(VkPerfHintTypeQCOM)
 #endif
 #if defined(VK_INTEL_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceConfigurationTypeINTEL, "VkPerformanceConfigurationTypeINTEL")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceConfigurationTypeINTEL)
+DAS_BIND_ENUM_CAST(VkPerformanceConfigurationTypeINTEL)
 #endif
 #if defined(VK_KHR_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceCounterScopeKHR, "VkPerformanceCounterScopeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceCounterScopeKHR)
+DAS_BIND_ENUM_CAST(VkPerformanceCounterScopeKHR)
 #endif
 #if defined(VK_KHR_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceCounterStorageKHR, "VkPerformanceCounterStorageKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceCounterStorageKHR)
+DAS_BIND_ENUM_CAST(VkPerformanceCounterStorageKHR)
 #endif
 #if defined(VK_KHR_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceCounterUnitKHR, "VkPerformanceCounterUnitKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceCounterUnitKHR)
+DAS_BIND_ENUM_CAST(VkPerformanceCounterUnitKHR)
 #endif
 #if defined(VK_INTEL_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceOverrideTypeINTEL, "VkPerformanceOverrideTypeINTEL")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceOverrideTypeINTEL)
+DAS_BIND_ENUM_CAST(VkPerformanceOverrideTypeINTEL)
 #endif
 #if defined(VK_INTEL_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceParameterTypeINTEL, "VkPerformanceParameterTypeINTEL")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceParameterTypeINTEL)
+DAS_BIND_ENUM_CAST(VkPerformanceParameterTypeINTEL)
 #endif
 #if defined(VK_INTEL_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkPerformanceValueTypeINTEL, "VkPerformanceValueTypeINTEL")
-DAS_BASE_BIND_ENUM_CAST(VkPerformanceValueTypeINTEL)
+DAS_BIND_ENUM_CAST(VkPerformanceValueTypeINTEL)
 #endif
 #if defined(VK_ARM_data_graph)
 DAS_BASE_BIND_ENUM_FACTORY(VkPhysicalDeviceDataGraphOperationTypeARM, "VkPhysicalDeviceDataGraphOperationTypeARM")
-DAS_BASE_BIND_ENUM_CAST(VkPhysicalDeviceDataGraphOperationTypeARM)
+DAS_BIND_ENUM_CAST(VkPhysicalDeviceDataGraphOperationTypeARM)
 #endif
 #if defined(VK_ARM_data_graph)
 DAS_BASE_BIND_ENUM_FACTORY(VkPhysicalDeviceDataGraphProcessingEngineTypeARM, "VkPhysicalDeviceDataGraphProcessingEngineTypeARM")
-DAS_BASE_BIND_ENUM_CAST(VkPhysicalDeviceDataGraphProcessingEngineTypeARM)
+DAS_BIND_ENUM_CAST(VkPhysicalDeviceDataGraphProcessingEngineTypeARM)
 #endif
 #if defined(VK_KHR_maintenance7)
 DAS_BASE_BIND_ENUM_FACTORY(VkPhysicalDeviceLayeredApiKHR, "VkPhysicalDeviceLayeredApiKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPhysicalDeviceLayeredApiKHR)
+DAS_BIND_ENUM_CAST(VkPhysicalDeviceLayeredApiKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkPhysicalDeviceType, "VkPhysicalDeviceType")
-DAS_BASE_BIND_ENUM_CAST(VkPhysicalDeviceType)
+DAS_BIND_ENUM_CAST(VkPhysicalDeviceType)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkPipelineBindPoint, "VkPipelineBindPoint")
-DAS_BASE_BIND_ENUM_CAST(VkPipelineBindPoint)
+DAS_BIND_ENUM_CAST(VkPipelineBindPoint)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkPipelineCacheHeaderVersion, "VkPipelineCacheHeaderVersion")
-DAS_BASE_BIND_ENUM_CAST(VkPipelineCacheHeaderVersion)
+DAS_BIND_ENUM_CAST(VkPipelineCacheHeaderVersion)
 #endif
 #if defined(VK_KHR_pipeline_executable_properties)
 DAS_BASE_BIND_ENUM_FACTORY(VkPipelineExecutableStatisticFormatKHR, "VkPipelineExecutableStatisticFormatKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPipelineExecutableStatisticFormatKHR)
+DAS_BIND_ENUM_CAST(VkPipelineExecutableStatisticFormatKHR)
 #endif
 #if defined(VK_VERSION_1_4)
 DAS_BASE_BIND_ENUM_FACTORY(VkPipelineRobustnessBufferBehavior, "VkPipelineRobustnessBufferBehavior")
-DAS_BASE_BIND_ENUM_CAST(VkPipelineRobustnessBufferBehavior)
+DAS_BIND_ENUM_CAST(VkPipelineRobustnessBufferBehavior)
 #endif
 #if defined(VK_VERSION_1_4)
 DAS_BASE_BIND_ENUM_FACTORY(VkPipelineRobustnessImageBehavior, "VkPipelineRobustnessImageBehavior")
-DAS_BASE_BIND_ENUM_CAST(VkPipelineRobustnessImageBehavior)
+DAS_BIND_ENUM_CAST(VkPipelineRobustnessImageBehavior)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkPointClippingBehavior, "VkPointClippingBehavior")
-DAS_BASE_BIND_ENUM_CAST(VkPointClippingBehavior)
+DAS_BIND_ENUM_CAST(VkPointClippingBehavior)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkPolygonMode, "VkPolygonMode")
-DAS_BASE_BIND_ENUM_CAST(VkPolygonMode)
+DAS_BIND_ENUM_CAST(VkPolygonMode)
 #endif
 #if defined(VK_KHR_surface)
 DAS_BASE_BIND_ENUM_FACTORY(VkPresentModeKHR, "VkPresentModeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkPresentModeKHR)
+DAS_BIND_ENUM_CAST(VkPresentModeKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkPrimitiveTopology, "VkPrimitiveTopology")
-DAS_BASE_BIND_ENUM_CAST(VkPrimitiveTopology)
+DAS_BIND_ENUM_CAST(VkPrimitiveTopology)
 #endif
 #if defined(VK_EXT_provoking_vertex)
 DAS_BASE_BIND_ENUM_FACTORY(VkProvokingVertexModeEXT, "VkProvokingVertexModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkProvokingVertexModeEXT)
+DAS_BIND_ENUM_CAST(VkProvokingVertexModeEXT)
 #endif
 #if defined(VK_INTEL_performance_query)
 DAS_BASE_BIND_ENUM_FACTORY(VkQueryPoolSamplingModeINTEL, "VkQueryPoolSamplingModeINTEL")
-DAS_BASE_BIND_ENUM_CAST(VkQueryPoolSamplingModeINTEL)
+DAS_BIND_ENUM_CAST(VkQueryPoolSamplingModeINTEL)
 #endif
 #if defined(VK_KHR_video_queue)
 DAS_BASE_BIND_ENUM_FACTORY(VkQueryResultStatusKHR, "VkQueryResultStatusKHR")
-DAS_BASE_BIND_ENUM_CAST(VkQueryResultStatusKHR)
+DAS_BIND_ENUM_CAST(VkQueryResultStatusKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkQueryType, "VkQueryType")
-DAS_BASE_BIND_ENUM_CAST(VkQueryType)
+DAS_BIND_ENUM_CAST(VkQueryType)
 #endif
 #if defined(VK_VERSION_1_4)
 DAS_BASE_BIND_ENUM_FACTORY(VkQueueGlobalPriority, "VkQueueGlobalPriority")
-DAS_BASE_BIND_ENUM_CAST(VkQueueGlobalPriority)
+DAS_BIND_ENUM_CAST(VkQueueGlobalPriority)
 #endif
 #if defined(VK_AMD_rasterization_order)
 DAS_BASE_BIND_ENUM_FACTORY(VkRasterizationOrderAMD, "VkRasterizationOrderAMD")
-DAS_BASE_BIND_ENUM_CAST(VkRasterizationOrderAMD)
+DAS_BIND_ENUM_CAST(VkRasterizationOrderAMD)
 #endif
 #if defined(VK_EXT_ray_tracing_invocation_reorder)
 DAS_BASE_BIND_ENUM_FACTORY(VkRayTracingInvocationReorderModeEXT, "VkRayTracingInvocationReorderModeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkRayTracingInvocationReorderModeEXT)
+DAS_BIND_ENUM_CAST(VkRayTracingInvocationReorderModeEXT)
 #endif
 #if defined(VK_NV_ray_tracing_linear_swept_spheres)
 DAS_BASE_BIND_ENUM_FACTORY(VkRayTracingLssIndexingModeNV, "VkRayTracingLssIndexingModeNV")
-DAS_BASE_BIND_ENUM_CAST(VkRayTracingLssIndexingModeNV)
+DAS_BIND_ENUM_CAST(VkRayTracingLssIndexingModeNV)
 #endif
 #if defined(VK_NV_ray_tracing_linear_swept_spheres)
 DAS_BASE_BIND_ENUM_FACTORY(VkRayTracingLssPrimitiveEndCapsModeNV, "VkRayTracingLssPrimitiveEndCapsModeNV")
-DAS_BASE_BIND_ENUM_CAST(VkRayTracingLssPrimitiveEndCapsModeNV)
+DAS_BIND_ENUM_CAST(VkRayTracingLssPrimitiveEndCapsModeNV)
 #endif
 #if defined(VK_KHR_ray_tracing_pipeline)
 DAS_BASE_BIND_ENUM_FACTORY(VkRayTracingShaderGroupTypeKHR, "VkRayTracingShaderGroupTypeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkRayTracingShaderGroupTypeKHR)
+DAS_BIND_ENUM_CAST(VkRayTracingShaderGroupTypeKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkResult, "VkResult")
-DAS_BASE_BIND_ENUM_CAST(VkResult)
+DAS_BIND_ENUM_CAST(VkResult)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkSamplerAddressMode, "VkSamplerAddressMode")
-DAS_BASE_BIND_ENUM_CAST(VkSamplerAddressMode)
+DAS_BIND_ENUM_CAST(VkSamplerAddressMode)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkSamplerMipmapMode, "VkSamplerMipmapMode")
-DAS_BASE_BIND_ENUM_CAST(VkSamplerMipmapMode)
+DAS_BIND_ENUM_CAST(VkSamplerMipmapMode)
 #endif
 #if defined(VK_VERSION_1_2)
 DAS_BASE_BIND_ENUM_FACTORY(VkSamplerReductionMode, "VkSamplerReductionMode")
-DAS_BASE_BIND_ENUM_CAST(VkSamplerReductionMode)
+DAS_BIND_ENUM_CAST(VkSamplerReductionMode)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkSamplerYcbcrModelConversion, "VkSamplerYcbcrModelConversion")
-DAS_BASE_BIND_ENUM_CAST(VkSamplerYcbcrModelConversion)
+DAS_BIND_ENUM_CAST(VkSamplerYcbcrModelConversion)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkSamplerYcbcrRange, "VkSamplerYcbcrRange")
-DAS_BASE_BIND_ENUM_CAST(VkSamplerYcbcrRange)
+DAS_BIND_ENUM_CAST(VkSamplerYcbcrRange)
 #endif
 #if defined(VK_KHR_cooperative_matrix)
 DAS_BASE_BIND_ENUM_FACTORY(VkScopeKHR, "VkScopeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkScopeKHR)
+DAS_BIND_ENUM_CAST(VkScopeKHR)
 #endif
 #if defined(VK_VERSION_1_2)
 DAS_BASE_BIND_ENUM_FACTORY(VkSemaphoreType, "VkSemaphoreType")
-DAS_BASE_BIND_ENUM_CAST(VkSemaphoreType)
+DAS_BIND_ENUM_CAST(VkSemaphoreType)
 #endif
 #if defined(VK_EXT_shader_object)
 DAS_BASE_BIND_ENUM_FACTORY(VkShaderCodeTypeEXT, "VkShaderCodeTypeEXT")
-DAS_BASE_BIND_ENUM_CAST(VkShaderCodeTypeEXT)
+DAS_BIND_ENUM_CAST(VkShaderCodeTypeEXT)
 #endif
 #if defined(VK_VERSION_1_2)
 DAS_BASE_BIND_ENUM_FACTORY(VkShaderFloatControlsIndependence, "VkShaderFloatControlsIndependence")
-DAS_BASE_BIND_ENUM_CAST(VkShaderFloatControlsIndependence)
+DAS_BIND_ENUM_CAST(VkShaderFloatControlsIndependence)
 #endif
 #if defined(VK_KHR_ray_tracing_pipeline)
 DAS_BASE_BIND_ENUM_FACTORY(VkShaderGroupShaderKHR, "VkShaderGroupShaderKHR")
-DAS_BASE_BIND_ENUM_CAST(VkShaderGroupShaderKHR)
+DAS_BIND_ENUM_CAST(VkShaderGroupShaderKHR)
 #endif
 #if defined(VK_AMD_shader_info)
 DAS_BASE_BIND_ENUM_FACTORY(VkShaderInfoTypeAMD, "VkShaderInfoTypeAMD")
-DAS_BASE_BIND_ENUM_CAST(VkShaderInfoTypeAMD)
+DAS_BIND_ENUM_CAST(VkShaderInfoTypeAMD)
 #endif
 #if defined(VK_NV_shading_rate_image)
 DAS_BASE_BIND_ENUM_FACTORY(VkShadingRatePaletteEntryNV, "VkShadingRatePaletteEntryNV")
-DAS_BASE_BIND_ENUM_CAST(VkShadingRatePaletteEntryNV)
+DAS_BIND_ENUM_CAST(VkShadingRatePaletteEntryNV)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkSharingMode, "VkSharingMode")
-DAS_BASE_BIND_ENUM_CAST(VkSharingMode)
+DAS_BIND_ENUM_CAST(VkSharingMode)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkStencilOp, "VkStencilOp")
-DAS_BASE_BIND_ENUM_CAST(VkStencilOp)
+DAS_BIND_ENUM_CAST(VkStencilOp)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkStructureType, "VkStructureType")
-DAS_BASE_BIND_ENUM_CAST(VkStructureType)
+DAS_BIND_ENUM_CAST(VkStructureType)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkSubpassContents, "VkSubpassContents")
-DAS_BASE_BIND_ENUM_CAST(VkSubpassContents)
+DAS_BIND_ENUM_CAST(VkSubpassContents)
 #endif
 #if defined(VK_EXT_subpass_merge_feedback)
 DAS_BASE_BIND_ENUM_FACTORY(VkSubpassMergeStatusEXT, "VkSubpassMergeStatusEXT")
-DAS_BASE_BIND_ENUM_CAST(VkSubpassMergeStatusEXT)
+DAS_BIND_ENUM_CAST(VkSubpassMergeStatusEXT)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkSystemAllocationScope, "VkSystemAllocationScope")
-DAS_BASE_BIND_ENUM_CAST(VkSystemAllocationScope)
+DAS_BIND_ENUM_CAST(VkSystemAllocationScope)
 #endif
 #if defined(VK_ARM_tensors)
 DAS_BASE_BIND_ENUM_FACTORY(VkTensorTilingARM, "VkTensorTilingARM")
-DAS_BASE_BIND_ENUM_CAST(VkTensorTilingARM)
+DAS_BIND_ENUM_CAST(VkTensorTilingARM)
 #endif
 #if defined(VK_VERSION_1_1)
 DAS_BASE_BIND_ENUM_FACTORY(VkTessellationDomainOrigin, "VkTessellationDomainOrigin")
-DAS_BASE_BIND_ENUM_CAST(VkTessellationDomainOrigin)
+DAS_BIND_ENUM_CAST(VkTessellationDomainOrigin)
 #endif
 #if defined(VK_SEC_throttle_hint)
 DAS_BASE_BIND_ENUM_FACTORY(VkThrottleHintTypeSEC, "VkThrottleHintTypeSEC")
-DAS_BASE_BIND_ENUM_CAST(VkThrottleHintTypeSEC)
+DAS_BIND_ENUM_CAST(VkThrottleHintTypeSEC)
 #endif
 #if defined(VK_KHR_calibrated_timestamps)
 DAS_BASE_BIND_ENUM_FACTORY(VkTimeDomainKHR, "VkTimeDomainKHR")
-DAS_BASE_BIND_ENUM_CAST(VkTimeDomainKHR)
+DAS_BIND_ENUM_CAST(VkTimeDomainKHR)
 #endif
 #if defined(VK_EXT_validation_cache)
 DAS_BASE_BIND_ENUM_FACTORY(VkValidationCacheHeaderVersionEXT, "VkValidationCacheHeaderVersionEXT")
-DAS_BASE_BIND_ENUM_CAST(VkValidationCacheHeaderVersionEXT)
+DAS_BIND_ENUM_CAST(VkValidationCacheHeaderVersionEXT)
 #endif
 #if defined(VK_EXT_validation_flags)
 DAS_BASE_BIND_ENUM_FACTORY(VkValidationCheckEXT, "VkValidationCheckEXT")
-DAS_BASE_BIND_ENUM_CAST(VkValidationCheckEXT)
+DAS_BIND_ENUM_CAST(VkValidationCheckEXT)
 #endif
 #if defined(VK_EXT_validation_features)
 DAS_BASE_BIND_ENUM_FACTORY(VkValidationFeatureDisableEXT, "VkValidationFeatureDisableEXT")
-DAS_BASE_BIND_ENUM_CAST(VkValidationFeatureDisableEXT)
+DAS_BIND_ENUM_CAST(VkValidationFeatureDisableEXT)
 #endif
 #if defined(VK_EXT_validation_features)
 DAS_BASE_BIND_ENUM_FACTORY(VkValidationFeatureEnableEXT, "VkValidationFeatureEnableEXT")
-DAS_BASE_BIND_ENUM_CAST(VkValidationFeatureEnableEXT)
+DAS_BIND_ENUM_CAST(VkValidationFeatureEnableEXT)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkVendorId, "VkVendorId")
-DAS_BASE_BIND_ENUM_CAST(VkVendorId)
+DAS_BIND_ENUM_CAST(VkVendorId)
 #endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkVertexInputRate, "VkVertexInputRate")
-DAS_BASE_BIND_ENUM_CAST(VkVertexInputRate)
+DAS_BIND_ENUM_CAST(VkVertexInputRate)
 #endif
 #if defined(VK_KHR_video_encode_av1)
 DAS_BASE_BIND_ENUM_FACTORY(VkVideoEncodeAV1PredictionModeKHR, "VkVideoEncodeAV1PredictionModeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkVideoEncodeAV1PredictionModeKHR)
+DAS_BIND_ENUM_CAST(VkVideoEncodeAV1PredictionModeKHR)
 #endif
 #if defined(VK_KHR_video_encode_av1)
 DAS_BASE_BIND_ENUM_FACTORY(VkVideoEncodeAV1RateControlGroupKHR, "VkVideoEncodeAV1RateControlGroupKHR")
-DAS_BASE_BIND_ENUM_CAST(VkVideoEncodeAV1RateControlGroupKHR)
+DAS_BIND_ENUM_CAST(VkVideoEncodeAV1RateControlGroupKHR)
 #endif
 #if defined(VK_KHR_video_encode_queue)
 DAS_BASE_BIND_ENUM_FACTORY(VkVideoEncodeTuningModeKHR, "VkVideoEncodeTuningModeKHR")
-DAS_BASE_BIND_ENUM_CAST(VkVideoEncodeTuningModeKHR)
+DAS_BIND_ENUM_CAST(VkVideoEncodeTuningModeKHR)
 #endif
 #if defined(VK_NV_viewport_swizzle)
 DAS_BASE_BIND_ENUM_FACTORY(VkViewportCoordinateSwizzleNV, "VkViewportCoordinateSwizzleNV")
-DAS_BASE_BIND_ENUM_CAST(VkViewportCoordinateSwizzleNV)
+DAS_BIND_ENUM_CAST(VkViewportCoordinateSwizzleNV)
 #endif
 #if defined(VK_VERSION_1_0)
 namespace das { TypeDeclPtr makeVkFlags_VkFramebufferCreateFlags(); }
