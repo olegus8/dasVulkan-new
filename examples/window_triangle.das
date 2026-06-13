@@ -1,0 +1,104 @@
+options gen2
+
+// The canonical windowed "hello triangle": a GLFW window + Vulkan swapchain,
+// rendering the RGB triangle every frame (FIFO present). Run from the repo root:
+//   daslang -load_module <path-to-dasVulkan> examples/window_triangle.das
+// Reuses the offscreen triangle's shaders; close the window to exit.
+
+require glfw/glfw_boost
+require vulkan
+require vulkan/vulkan_boost
+require vulkan/vulkan_window
+require daslib/fio
+require daslib/defer
+
+let W = 800
+let H = 600
+
+def load_spirv(path : string) : array<uint8> {
+    var out : array<uint8>
+    let fs = stat(path)
+    if (!fs.is_valid) {
+        panic("missing shader {path} (run from the dasVulkan repo root)")
+    }
+    fopen(path, "rb") $(f) {
+        fload(f, int(fs.size)) $(data : array<uint8>) {
+            out := data
+        }
+    }
+    return <- out
+}
+
+[export]
+def main {
+    if (glfwInit() == 0) {
+        panic("can't init glfw")
+    }
+    defer() { glfwTerminate() }
+    if (volkInitialize() != 0) {
+        panic("no vulkan loader")
+    }
+    if (glfwVulkanSupported() == 0) {
+        panic("glfw reports no vulkan support")
+    }
+    glfwWindowHint(int(GLFW_CLIENT_API), GLFW_NO_API)
+    glfwWindowHint(int(GLFW_RESIZABLE), GLFW_FALSE)
+    var window = glfwCreateWindow(W, H, "dasVulkan - window triangle", null, null)
+    if (window == null) {
+        panic("can't create window")
+    }
+    defer() { glfwDestroyWindow(window) }
+
+    // instance with the surface extensions GLFW requires for this platform
+    var ext_count = 0u
+    let glfw_exts = glfwGetRequiredInstanceExtensions(unsafe(addr(ext_count)))
+    var inst_exts : array<string>
+    inst_exts |> reserve(int(ext_count))
+    for (i in range(int(ext_count))) {
+        unsafe {
+            inst_exts |> push(glfw_exts[i])
+        }
+    }
+    var inscope instance <- create_instance("window triangle", make_api_version(1u, 3u, 0u), inst_exts)
+    volkLoadInstance(boost_value_to_vk(instance))
+
+    var inscope surface <- create_surface(instance, glfwGetNativeWindow(window), glfwGetNativeDisplay())
+
+    let phys = select_physical_device(instance)
+    let gfx = select_graphics_queue_family(phys)
+    if (!queue_family_supports_present(phys, gfx, surface)) {
+        panic("graphics queue family does not support presentation")
+    }
+    var inscope device <- create_device(phys, gfx, ["VK_KHR_swapchain"])
+    volkLoadDevice(boost_value_to_vk(device))
+    let queue = get_device_queue(device, gfx, 0u)
+
+    var inscope swap <- create_swapchain(device, phys, surface, W, H)
+    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
+    build_swapchain_framebuffers(device, swap, render_pass)
+
+    var vert_code <- load_spirv("examples/shaders/triangle.vert.spv")
+    var frag_code <- load_spirv("examples/shaders/triangle.frag.spv")
+    var inscope vert <- create_shader_module(device, vert_code)
+    var inscope frag <- create_shader_module(device, frag_code)
+    var inscope layout <- create_pipeline_layout(device)
+    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height)
+
+    var poolci : CommandPoolCreateInfo
+    poolci.queueFamilyIndex = gfx
+    var inscope pool <- create_command_pool(device, poolci)
+    var inscope sync <- create_frame_sync(device)
+
+    let clear = clear_color(0.1f, 0.1f, 0.15f, 1.0f)
+    var frames = 0
+    while (glfwWindowShouldClose(window) == 0) {
+        glfwPollEvents()
+        draw_frame(device, queue, swap, render_pass, pool, sync, clear) $(cmd) {
+            cmd_bind_pipeline(cmd, pipeline)
+            cmd_draw(cmd, 3u)
+        }
+        frames ++
+    }
+    vkDeviceWaitIdle(boost_value_to_vk(device))
+    print("window closed after {frames} frames\n")
+}

@@ -1,0 +1,249 @@
+options gen2
+options indenting = 4
+
+// Windowing tier: bridge a native window handle to a VkSurfaceKHR, build a
+// swapchain (format/present-mode/extent picked from surface caps, image views +
+// framebuffers owned together), per-frame sync, and an acquire/record/submit/
+// present helper. Pairs with daslib/vulkan_boost; the surface bridge takes raw
+// void* handles (e.g. from glfwGetNativeWindow/Display) so there is no GLFW dep.
+
+module vulkan_window
+
+require vulkan public
+require vulkan/vulkan_boost public
+require daslib/defer
+require math
+
+let UINT64_MAX = 0xFFFFFFFFFFFFFFFFul
+
+// ===== surface =====
+
+//! wrap a native window/display (HWND / X11 Window+Display) as an owned VkSurfaceKHR.
+//! the instance must enable the platform surface extension (glfwGetRequiredInstanceExtensions).
+def public create_surface(instance : Instance; native_window : void?; native_display : void? = null) : SurfaceKHR {
+    let raw = vk_surface_from_native(boost_value_to_vk(instance), native_window, native_display)
+    if (raw == 0ul) {
+        panic("failed to create vulkan surface from native window")
+    }
+    var s = vk_value_to_boost(unsafe(reinterpret<VkSurfaceKHR>(raw)))
+    s._needs_delete = true
+    s._instance = unsafe(reinterpret<uint64>(boost_value_to_vk(instance)))
+    return <- s
+}
+
+//! does `queue_family` support presentation to `surface`?
+def public queue_family_supports_present(phys : VkPhysicalDevice; queue_family : uint; surface : SurfaceKHR) : bool {
+    var supported = 0u
+    vk_check(vkGetPhysicalDeviceSurfaceSupportKHR(phys, queue_family, boost_value_to_vk(surface), supported), null)
+    return supported != 0u
+}
+
+// ===== swapchain =====
+
+//! swapchain + its per-image views and framebuffers, owned together
+struct public Swapchain {
+    handle : SwapchainKHR
+    format : VkFormat
+    color_space : VkColorSpaceKHR
+    width : int
+    height : int
+    images : array<VkImage>            //!< owned by the swapchain object itself; not destroyed here
+    views : array<ImageView>          //!< created + owned here
+    framebuffers : array<Framebuffer> //!< created + owned here (after build_swapchain_framebuffers)
+}
+
+def public finalize(var sc : Swapchain) {
+    for (i in range(length(sc.framebuffers))) {
+        delete sc.framebuffers[i]
+    }
+    delete sc.framebuffers
+    for (i in range(length(sc.views))) {
+        delete sc.views[i]
+    }
+    delete sc.views
+    unsafe {
+        delete sc.images   // array of raw VkImage handles (owned by the swapchain); frees the array buffer only
+    }
+    delete sc.handle
+}
+
+def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR; var out_color_space : VkColorSpaceKHR&) : VkFormat {
+    var count = 0u
+    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, null), null)
+    var formats : array<VkSurfaceFormatKHR>
+    formats |> resize(int(count))
+    unsafe {
+        vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, addr(formats[0])), null)
+    }
+    for (f in formats) {
+        if (f.format == VkFormat.B8G8R8A8_SRGB && f.colorSpace == VkColorSpaceKHR.SRGB_NONLINEAR_KHR) {
+            out_color_space = f.colorSpace
+            return f.format
+        }
+    }
+    out_color_space = formats[0].colorSpace
+    return formats[0].format
+}
+
+//! create a swapchain sized to the surface (FIFO present). Image views are made;
+//! call build_swapchain_framebuffers afterwards to populate framebuffers.
+def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : SurfaceKHR; width, height : int) : Swapchain {
+    let dev = boost_value_to_vk(device)
+    var caps : VkSurfaceCapabilitiesKHR
+    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys, boost_value_to_vk(surface), caps), null)
+
+    var sc : Swapchain
+    sc.color_space = VkColorSpaceKHR.SRGB_NONLINEAR_KHR
+    sc.format = choose_surface_format(phys, surface, sc.color_space)
+
+    var extent : VkExtent2D
+    if (caps.currentExtent.width != 0xFFFFFFFFu) {
+        extent = caps.currentExtent
+    } else {
+        extent.width = clamp(uint(width), caps.minImageExtent.width, caps.maxImageExtent.width)
+        extent.height = clamp(uint(height), caps.minImageExtent.height, caps.maxImageExtent.height)
+    }
+    sc.width = int(extent.width)
+    sc.height = int(extent.height)
+
+    var image_count = caps.minImageCount + 1u
+    if (caps.maxImageCount > 0u && image_count > caps.maxImageCount) {
+        image_count = caps.maxImageCount
+    }
+
+    var ci : SwapchainCreateInfoKHR
+    ci.surface = weak_copy(surface)
+    ci.minImageCount = image_count
+    ci.imageFormat = sc.format
+    ci.imageColorSpace = sc.color_space
+    ci.imageExtent = extent
+    ci.imageArrayLayers = 1u
+    ci.imageUsage.color_attachment = true
+    ci.imageSharingMode = VkSharingMode.EXCLUSIVE
+    ci.preTransform = caps.currentTransform
+    ci.compositeAlpha.opaque_khr = true
+    ci.presentMode = VkPresentModeKHR.FIFO_KHR
+    ci.clipped = 1u
+    sc.handle <- create_swapchain_k_h_r(device, ci)
+
+    // fetch the swapchain images
+    var got = 0u
+    vk_check(vkGetSwapchainImagesKHR(dev, boost_value_to_vk(sc.handle), got, null), null)
+    sc.images |> resize(int(got))
+    unsafe {
+        vk_check(vkGetSwapchainImagesKHR(dev, boost_value_to_vk(sc.handle), got, addr(sc.images[0])), null)
+    }
+
+    // one image view per image
+    sc.views |> reserve(length(sc.images))
+    for (img in sc.images) {
+        var vci : ImageViewCreateInfo
+        vci.image = vk_value_to_boost(img)
+        vci.viewType = VkImageViewType._2D
+        vci.format = sc.format
+        vci.subresourceRange.aspectMask.color = true
+        vci.subresourceRange.levelCount = 1u
+        vci.subresourceRange.layerCount = 1u
+        sc.views |> emplace(create_image_view(device, vci))
+    }
+    return <- sc
+}
+
+//! build one framebuffer per swapchain image view against `render_pass`
+def public build_swapchain_framebuffers(device : Device; var sc : Swapchain; render_pass : RenderPass) {
+    sc.framebuffers |> reserve(length(sc.views))
+    for (i in range(length(sc.views))) {
+        var fbci : FramebufferCreateInfo
+        fbci.renderPass = weak_copy(render_pass)
+        fbci.pAttachments <- [weak_copy(sc.views[i])]
+        fbci.width = uint(sc.width)
+        fbci.height = uint(sc.height)
+        fbci.layers = 1u
+        sc.framebuffers |> emplace(create_framebuffer(device, fbci))
+    }
+}
+
+// ===== per-frame sync =====
+
+struct public FrameSync {
+    image_available : Semaphore
+    render_finished : Semaphore
+}
+
+def public finalize(var f : FrameSync) {
+    delete f.image_available
+    delete f.render_finished
+}
+
+def public create_frame_sync(device : Device) : FrameSync {
+    var f : FrameSync
+    f.image_available <- create_semaphore(device, SemaphoreCreateInfo())
+    f.render_finished <- create_semaphore(device, SemaphoreCreateInfo())
+    return <- f
+}
+
+// ===== draw =====
+
+//! acquire -> record (render pass + user block) -> submit -> present, then wait idle.
+//! returns false if the swapchain is out of date (caller should recreate).
+def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_pass : RenderPass;
+        pool : CommandPool; sync : FrameSync; clear : VkClearValue;
+        blk : block<(cmd : VkCommandBuffer) : void>) : bool {
+    let dev = boost_value_to_vk(device)
+
+    var image_index = 0u
+    let acquired = vkAcquireNextImageKHR(dev, boost_value_to_vk(sc.handle), UINT64_MAX,
+        boost_value_to_vk(sync.image_available), null, image_index)
+    if (acquired == VkResult.ERROR_OUT_OF_DATE_KHR) {
+        return false
+    }
+
+    var ai = VkCommandBufferAllocateInfo()
+    ai.commandPool = boost_value_to_vk(pool)
+    ai.level = VkCommandBufferLevel.PRIMARY
+    ai.commandBufferCount = 1u
+    var cmd : VkCommandBuffer
+    unsafe {
+        vk_check(vkAllocateCommandBuffers(dev, ai, addr(cmd)), null)
+    }
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(cmd, begin), null)
+    record_render_pass(cmd, render_pass, sc.framebuffers[int(image_index)],
+            full_area(sc.width, sc.height), clear) {
+        invoke(blk, cmd)
+    }
+    vk_check(vkEndCommandBuffer(cmd), null)
+
+    var wait_sem = boost_value_to_vk(sync.image_available)
+    var signal_sem = boost_value_to_vk(sync.render_finished)
+    var wait_stage : VkPipelineStageFlags
+    wait_stage.color_attachment_output = true
+    var submit = VkSubmitInfo()
+    submit.waitSemaphoreCount = 1u
+    submit.commandBufferCount = 1u
+    submit.signalSemaphoreCount = 1u
+    unsafe {
+        submit.pWaitSemaphores = addr(wait_sem)
+        submit.pWaitDstStageMask = reinterpret<uint?>(addr(wait_stage))
+        submit.pCommandBuffers = addr(cmd)
+        submit.pSignalSemaphores = addr(signal_sem)
+        vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
+    }
+
+    var sc_handle = boost_value_to_vk(sc.handle)
+    var present = VkPresentInfoKHR()
+    present.waitSemaphoreCount = 1u
+    present.swapchainCount = 1u
+    var presented : VkResult
+    unsafe {
+        present.pWaitSemaphores = addr(signal_sem)
+        present.pSwapchains = addr(sc_handle)
+        present.pImageIndices = addr(image_index)
+        presented = vkQueuePresentKHR(queue, present)
+    }
+    vk_check(vkQueueWaitIdle(queue), null)
+    unsafe {
+        vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, addr(cmd))
+    }
+    return presented != VkResult.ERROR_OUT_OF_DATE_KHR
+}

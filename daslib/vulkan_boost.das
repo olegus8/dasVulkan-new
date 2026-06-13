@@ -75,7 +75,7 @@ def public find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : Vk
 
 // ===== composite creators (CreateInfo skipped by the generator) =====
 
-def public create_instance(application_name : string = ""; api_version : uint = 0u) : Instance {
+def public create_instance(application_name : string; api_version : uint; extensions : array<string>) : Instance {
     var ai = VkApplicationInfo()
     ai.apiVersion = api_version
     if (application_name != "") {
@@ -85,6 +85,14 @@ def public create_instance(application_name : string = ""; api_version : uint = 
     unsafe {
         ci.pApplicationInfo = addr(ai)
     }
+    // array<string> is contiguous `const char*` pointers == const char* const* (what
+    // Vulkan wants); ppEnabledExtensionNames is bound as void? so reinterpret to it.
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+        }
+    }
     var h : VkInstance
     vk_check(vkCreateInstance(ci, null, h), null)
     var b = vk_value_to_boost(h)
@@ -92,7 +100,12 @@ def public create_instance(application_name : string = ""; api_version : uint = 
     return <- b
 }
 
-def public create_device(phys : VkPhysicalDevice; queue_family : uint) : Device {
+def public create_instance(application_name : string = ""; api_version : uint = 0u) : Instance {
+    let no_ext : array<string>
+    return <- create_instance(application_name, api_version, no_ext)
+}
+
+def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
     var prio = 1.0f
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
@@ -105,11 +118,22 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint) : Device 
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
     }
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+        }
+    }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     return <- b
+}
+
+def public create_device(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device(phys, queue_family, no_ext)
 }
 
 def public get_device_queue(device : Device; queue_family, index : uint) : VkQueue {
