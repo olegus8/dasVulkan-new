@@ -199,8 +199,11 @@ def public create_render_pass_single_color(device : Device; format : VkFormat;
     return <- b
 }
 
+//! `dynamic_viewport` leaves the viewport/scissor out of the pipeline (VIEWPORT+SCISSOR
+//! dynamic state) so the pipeline survives swapchain resize -- set them per frame with
+//! cmd_set_viewport / cmd_set_scissor (draw_frame does this when its dynamic_viewport is true).
 def public create_graphics_pipeline_simple(device : Device; render_pass : RenderPass; layout : PipelineLayout;
-        vert : ShaderModule; frag : ShaderModule; width, height : int) : Pipeline {
+        vert : ShaderModule; frag : ShaderModule; width, height : int; dynamic_viewport : bool = false) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -241,14 +244,27 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
 
+    var dyn_states : array<VkDynamicState>
+    var dynstate = VkPipelineDynamicStateCreateInfo()
+    if (dynamic_viewport) {
+        dyn_states |> push(VkDynamicState.VIEWPORT)
+        dyn_states |> push(VkDynamicState.SCISSOR)
+        dynstate.dynamicStateCount = uint(length(dyn_states))
+    }
+
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
     gp.renderPass = boost_value_to_vk(render_pass)
     var h : VkPipeline
     unsafe {
-        vpstate.pViewports = addr(viewport)
-        vpstate.pScissors = addr(scissor)
+        if (dynamic_viewport) {
+            dynstate.pDynamicStates = addr(dyn_states[0])
+            gp.pDynamicState = addr(dynstate)
+        } else {
+            vpstate.pViewports = addr(viewport)
+            vpstate.pScissors = addr(scissor)
+        }
         blend.pAttachments = addr(blend_att)
         gp.pStages = addr(stages[0])
         gp.pVertexInputState = addr(vinput)
@@ -259,6 +275,7 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
         gp.pColorBlendState = addr(blend)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
+    delete dyn_states
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))

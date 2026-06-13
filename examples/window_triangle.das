@@ -42,8 +42,8 @@ def main {
         panic("glfw reports no vulkan support")
     }
     glfwWindowHint(int(GLFW_CLIENT_API), GLFW_NO_API)
-    glfwWindowHint(int(GLFW_RESIZABLE), GLFW_FALSE)
-    var window = glfwCreateWindow(W, H, "dasVulkan - window triangle", null, null)
+    glfwWindowHint(int(GLFW_RESIZABLE), GLFW_TRUE)
+    var window = glfwCreateWindow(W, H, "dasVulkan - window triangle (resizable)", null, null)
     if (window == null) {
         panic("can't create window")
     }
@@ -82,7 +82,8 @@ def main {
     var inscope vert <- create_shader_module(device, vert_code)
     var inscope frag <- create_shader_module(device, frag_code)
     var inscope layout <- create_pipeline_layout(device)
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height)
+    // dynamic viewport/scissor so the one pipeline survives every resize
+    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height, true)
 
     var poolci : CommandPoolCreateInfo
     poolci.queueFamilyIndex = gfx
@@ -93,9 +94,25 @@ def main {
     var frames = 0
     while (glfwWindowShouldClose(window) == 0) {
         glfwPollEvents()
-        draw_frame(device, queue, swap, render_pass, pool, sync, clear) $(cmd) {
+        // skip rendering while minimized (zero-area framebuffer can't make a swapchain)
+        var fbw = 0
+        var fbh = 0
+        glfwGetFramebufferSize(window, fbw, fbh)
+        if (fbw == 0 || fbh == 0) {
+            glfwWaitEvents()
+            continue
+        }
+        // proactively match the window: recreate when the framebuffer size drifts
+        if (fbw != swap.width || fbh != swap.height) {
+            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+        }
+        // draw_frame returns false when the swapchain went out of date mid-frame
+        let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
             cmd_draw(cmd, 3u)
+        }
+        if (!ok) {
+            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
         }
         frames ++
     }

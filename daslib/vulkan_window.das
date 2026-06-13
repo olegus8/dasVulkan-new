@@ -149,6 +149,17 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
     return <- sc
 }
 
+//! rebuild the swapchain + framebuffers at a new size (window resize / out-of-date
+//! present). Waits for the device to idle, then replaces `sc` in place (the move-assign
+//! finalizes the old swapchain's framebuffers, views and handle).
+def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhysicalDevice;
+        surface : SurfaceKHR; render_pass : RenderPass; width, height : int) {
+    vkDeviceWaitIdle(boost_value_to_vk(device))
+    delete sc       // release the old swapchain (and the surface) before making a new one
+    sc <- create_swapchain(device, phys, surface, width, height)
+    build_swapchain_framebuffers(device, sc, render_pass)
+}
+
 //! build one framebuffer per swapchain image view against `render_pass`
 def public build_swapchain_framebuffers(device : Device; var sc : Swapchain; render_pass : RenderPass) {
     sc.framebuffers |> reserve(length(sc.views))
@@ -184,10 +195,32 @@ def public create_frame_sync(device : Device) : FrameSync {
 
 // ===== draw =====
 
+//! set a full-extent viewport + scissor on a pipeline built with dynamic viewport state
+def private set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
+    var vp : Viewport
+    vp.width = float(width)
+    vp.height = float(height)
+    vp.maxDepth = 1.0f
+    var vps : array<Viewport>
+    vps |> push(vp)
+    cmd_set_viewport(cmd, 0u, vps)
+    delete vps
+
+    var sci : Rect2D
+    sci.extent.width = uint(width)
+    sci.extent.height = uint(height)
+    var scis : array<Rect2D>
+    scis |> push(sci)
+    cmd_set_scissor(cmd, 0u, scis)
+    delete scis
+}
+
 //! acquire -> record (render pass + user block) -> submit -> present, then wait idle.
-//! returns false if the swapchain is out of date (caller should recreate).
+//! returns false if the swapchain is out of date (caller should recreate). When
+//! `dynamic_viewport` is true, a full-extent viewport+scissor is set each frame (pairs
+//! with create_graphics_pipeline_simple(..., dynamic_viewport = true) for resize).
 def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_pass : RenderPass;
-        pool : CommandPool; sync : FrameSync; clear : VkClearValue;
+        pool : CommandPool; sync : FrameSync; clear : VkClearValue; dynamic_viewport : bool = false;
         blk : block<(cmd : CommandBuffer) : void>) : bool {
     let dev = boost_value_to_vk(device)
 
@@ -211,6 +244,9 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
     record_render_pass(cmd, render_pass, sc.framebuffers[int(image_index)],
             full_area(sc.width, sc.height), clear) {
+        if (dynamic_viewport) {
+            set_dynamic_viewport(cmd, sc.width, sc.height)
+        }
         invoke(blk, cmd)
     }
     vk_check(vkEndCommandBuffer(raw_cmd), null)
