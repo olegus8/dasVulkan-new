@@ -1,0 +1,17 @@
+# build dirs
+_build/
+build/
+out/
+
+# native module artifacts
+*.shared_module
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+
+# runtime / scratch
+*.log
+_smoke_*.das
+imgui.ini
