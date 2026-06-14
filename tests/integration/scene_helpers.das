@@ -12,6 +12,7 @@ require vulkan/vulkan_boost public
 require compute_shaders
 require triangle_shaders
 require phase4_shaders
+require vulkan/vulkan_reflect
 
 let TRI_W = 256
 let TRI_H = 256
@@ -356,7 +357,7 @@ def private upload(device : Device; memory : DeviceMemory; var data : array<auto
 }
 
 def private transition_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
-        src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
+                             src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
     var barrier : ImageMemoryBarrier
     barrier.srcAccessMask = src_access
     barrier.dstAccessMask = dst_access
@@ -477,21 +478,12 @@ def public render_textured_quad() : array<uint8> {
     sci.maxLod = 1.0f
     var inscope sampler <- create_sampler(device, sci)
 
-    // descriptor set layout: binding 0 = UBO (vertex), binding 1 = combined image sampler (fragment)
-    var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    b0.descriptorCount = 1u
-    b0.stageFlags.vertex = true
-    dslci.pBindings |> emplace(b0)
-    var b1 : DescriptorSetLayoutBinding
-    b1.binding = 1u
-    b1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    b1.descriptorCount = 1u
-    b1.stageFlags.fragment = true
-    dslci.pBindings |> emplace(b1)
-    var inscope set_layout <- create_descriptor_set_layout(device, dslci)
+    // Descriptor + pipeline layouts come straight from the shaders' own dasSpirv reflection (the
+    // single source of truth) instead of being hand-declared: the quad_vert UBO @set0/@binding0
+    // (vertex) and the quad_frag sampler @set0/@binding1 (fragment) and the fragment push-constant
+    // range are all derived from quad_vert_spv_reflect / quad_frag_spv_reflect.
+    var reflections <- [decode_reflection(quad_vert_spv_reflect), decode_reflection(quad_frag_spv_reflect)]
+    var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
@@ -508,7 +500,7 @@ def public render_textured_quad() : array<uint8> {
     var dsai = VkDescriptorSetAllocateInfo()
     dsai.descriptorPool = boost_value_to_vk(desc_pool)
     dsai.descriptorSetCount = 1u
-    var raw_set_layout = boost_value_to_vk(set_layout)
+    var raw_set_layout = boost_value_to_vk(set_layouts[0])
     var raw_set : VkDescriptorSet
     unsafe {
         dsai.pSetLayouts = addr(raw_set_layout)
@@ -540,15 +532,23 @@ def public render_textured_quad() : array<uint8> {
     var no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
-    // pipeline layout: the descriptor set + a fragment push-constant range (16 bytes: float3 + pad)
-    var plci : PipelineLayoutCreateInfo
-    plci.pSetLayouts <- [weak_copy(set_layout)]
-    var pcr : PushConstantRange
-    pcr.stageFlags.fragment = true
-    pcr.offset = 0u
-    pcr.size = 16u
-    plci.pPushConstantRanges |> push(pcr)
-    var inscope pipe_layout <- create_pipeline_layout(device, plci)
+    // pipeline layout (descriptor set + fragment push-constant range) is built from the same reflection.
+    var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)
+    // The push-constant size is reflected too — Tint{float3} is 12 bytes (std140 vec3), so the command
+    // below pushes exactly what the layout declares rather than the over-sized 16 the hand-build used.
+    var push_size = 0u
+    var have_push = false
+    for (refl in reflections) {
+        for (p in refl.push_constants) {
+            // this gate has exactly one push range (fragment Tint at offset 0); assert that shape rather
+            // than silently pushing 0 if reflection ever stops reporting it.
+            assert(p.offset == 0, "reflected push-constant range must start at offset 0 for this gate")
+            push_size = uint(p.size)
+            have_push = true
+        }
+    }
+    assert(have_push, "expected a reflected push-constant range (fragment Tint)")
+    delete reflections
 
     var inscope vert <- create_shader_module(device, quad_vert_spv)
     var inscope frag <- create_shader_module(device, quad_frag_spv)
@@ -595,7 +595,7 @@ def public render_textured_quad() : array<uint8> {
             var pcf : VkShaderStageFlags
             pcf.fragment = true
             unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 16u, reinterpret<void?>(addr(tint[0])))
+                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, push_size, reinterpret<void?>(addr(tint[0])))
             }
             cmd_draw(cmd, 6u)
         }
