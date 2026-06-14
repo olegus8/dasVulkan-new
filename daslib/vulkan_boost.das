@@ -157,6 +157,22 @@ def public create_shader_module(device : Device; var code : array<uint8>) : Shad
     return <- b
 }
 
+//! SPIR-V words overload — the form emitted by dasSpirv (`array<uint>`). codeSize is the byte
+//! count (4 per word); pCode points straight at the word data, no uint8->uint reinterpret.
+def public create_shader_module(device : Device; var code : array<uint>) : ShaderModule {
+    var ci = VkShaderModuleCreateInfo()
+    ci.codeSize = uint64(length(code) * 4)
+    unsafe {
+        ci.pCode = addr(code[0])
+    }
+    var h : VkShaderModule
+    vk_check(vkCreateShaderModule(boost_value_to_vk(device), ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def public create_pipeline_layout(device : Device) : PipelineLayout {
     var ci = VkPipelineLayoutCreateInfo()
     var h : VkPipelineLayout

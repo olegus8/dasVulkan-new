@@ -2,24 +2,21 @@ options gen2
 
 require vulkan
 require vulkan/vulkan_boost
-require daslib/fio
-require strings
+require spirv/spirv_shader
+require spirv/spirv_builtins public
 
 let N = 256                 // elements; the shader squares each index
-let GROUP = 64              // local_size_x in square.comp
+let GROUP = 64              // local_size_x in the [compute_shader] below
 
-def load_spirv(path : string) : array<uint8> {
-    var out : array<uint8>
-    let fs = stat(path)
-    if (!fs.is_valid) {
-        panic("missing shader {path}")
-    }
-    fopen(path, "rb") $(f) {
-        fload(f, int(fs.size)) $(data : array<uint8>) {
-            out := data
-        }
-    }
-    return <- out
+// The compute shader, authored in daslang and lowered to SPIR-V at compile time by dasSpirv's
+// [compute_shader] macro. The emitted blob is the `square_spv : array<uint>` global below,
+// fed straight to create_shader_module -- no GLSL, no glslang, no committed .spv.
+var @ssbo @binding = 0 data : array<uint>
+
+[compute_shader(local_size_x=64, name="square_spv")]
+def square {
+    let i = gl_GlobalInvocationID.x
+    data[i] = i * i
 }
 
 def find_mem(phys : VkPhysicalDevice; bits : uint; want : VkMemoryPropertyFlags) : uint {
@@ -126,8 +123,7 @@ def main() : int {
     }
 
     // ---- compute pipeline ----
-    var code <- load_spirv("examples/shaders/square.comp.spv")
-    var inscope shader <- create_shader_module(device, code)
+    var inscope shader <- create_shader_module(device, square_spv)
     var plci = VkPipelineLayoutCreateInfo()
     plci.setLayoutCount = 1u
     var pipe_layout : VkPipelineLayout

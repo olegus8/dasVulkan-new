@@ -9,10 +9,9 @@ module scene_helpers
 
 require vulkan public
 require vulkan/vulkan_boost public
+require compute_shaders
 require daslib/fio
 require daslib/module_path
-require strings
-require math
 
 let TRI_W = 256
 let TRI_H = 256
@@ -168,8 +167,7 @@ def public run_compute(n : int) : array<uint> {
         write.pBufferInfo = addr(dbinfo)
         vkUpdateDescriptorSets(dev, 1u, addr(write), 0u, null)
     }
-    var code <- load_spirv("square.comp.spv")
-    var inscope shader <- create_shader_module(device, code)
+    var inscope shader <- create_shader_module(device, square_spv)
     var plci = VkPipelineLayoutCreateInfo()
     plci.setLayoutCount = 1u
     var pipe_layout : VkPipelineLayout
@@ -219,11 +217,13 @@ def public px(pixels : array<uint8>; x, y : int) : int3 {
     return int3(int(pixels[p]), int(pixels[p + 1]), int(pixels[p + 2]))
 }
 
-//! same compute square, but the descriptor layout / pool / update all go through the
-//! BOOST path. The storage-buffer binding has descriptorCount = 1 with no immutable
-//! samplers -- the independent-count case the erasure model got wrong (would yield 0,
-//! so the shader would not see the buffer and out[i] would not equal i*i).
-def public run_compute_boost(n : int) : array<uint> {
+//! the dasSpirv GPU gate: run an arbitrary emitted SPIR-V compute blob (`words`) over `n`
+//! elements and return the result, with descriptor layout / pool / update all through the
+//! BOOST path. The storage-buffer binding has descriptorCount = 1 with no immutable samplers
+//! -- the independent-count case the erasure model got wrong (would yield 0, so the shader
+//! would not see the buffer and out[i] would not equal i*i). run_compute_boost feeds the
+//! daslang-emitted `square_spv` through here; any future [compute_shader] blob reuses it.
+def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
@@ -298,8 +298,7 @@ def public run_compute_boost(n : int) : array<uint> {
     update_descriptor_sets(device, writes, no_copies)
 
     // compute pipeline (raw: compute pipelines are batch-created)
-    var code <- load_spirv("square.comp.spv")
-    var inscope shader <- create_shader_module(device, code)
+    var inscope shader <- create_shader_module(device, words)
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(set_layout)]
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
@@ -333,6 +332,11 @@ def public run_compute_boost(n : int) : array<uint> {
     vkUnmapMemory(dev, boost_value_to_vk(memory))
     vkDestroyPipeline(dev, pipeline, null)
     return <- values
+}
+
+//! the boost-descriptor compute square, now fed by the daslang-emitted `square_spv` blob.
+def public run_compute_boost(n : int) : array<uint> {
+    return <- run_compute_spirv(square_spv, n)
 }
 
 def private pool_info(queue_family : uint) : CommandPoolCreateInfo {
