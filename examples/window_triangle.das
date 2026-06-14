@@ -9,7 +9,7 @@ require glfw/glfw_boost
 require vulkan
 require vulkan/vulkan_boost
 require vulkan/vulkan_window
-require triangle_shaders
+require triangle_example_shaders
 require daslib/defer
 
 let W = 800

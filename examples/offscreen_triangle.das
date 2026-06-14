@@ -1,7 +1,7 @@
 options gen2
 
 require vulkan
-require triangle_shaders
+require triangle_example_shaders
 require daslib/fio
 require strings
 require math

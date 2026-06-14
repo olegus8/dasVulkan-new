@@ -6,8 +6,11 @@ options indenting = 4
 // offscreen_triangle_boost, window_triangle) via a same-directory require. The emitted blobs are the
 // public `tri_vert_spv` / `tri_frag_spv : array<uint>` globals, fed to create_shader_module. This
 // replaces the committed examples/shaders/triangle.vert/.frag(.spv) — no GLSL, no glslang.
+//
+// Distinct module name from tests/integration/triangle_shaders.das (the same shaders kept as the
+// test's own same-dir fixture) so `require` resolution is never ambiguous between the two.
 
-module triangle_shaders shared public
+module triangle_example_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public
