@@ -121,8 +121,9 @@ jobs:
         run: vulkaninfo --summary | grep -iE "deviceName|llvmpipe|apiVersion"
 
       - name: "Run integration tests (offscreen, lavapipe)"
-        # Run from the dasVulkan repo root so scene_helpers' cwd-relative shader
-        # path (examples/shaders/*.spv) resolves; the daslang binary and dastest
+        # Shaders are now authored in daslang and lowered to SPIR-V at compile time
+        # by dasSpirv (tests/integration/triangle_shaders.das + compute_shaders.das),
+        # so there is no committed .spv to resolve. The daslang binary and dastest
         # entry point are referenced by absolute path. VK_DRIVER_FILES (lavapipe
         # ICD) is inherited from the discovery step. MUST NOT run under sudo --
         # the loader ignores VK_DRIVER_FILES for elevated procs.

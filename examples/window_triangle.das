@@ -9,25 +9,11 @@ require glfw/glfw_boost
 require vulkan
 require vulkan/vulkan_boost
 require vulkan/vulkan_window
-require daslib/fio
+require triangle_shaders
 require daslib/defer
 
 let W = 800
 let H = 600
-
-def load_spirv(path : string) : array<uint8> {
-    var out : array<uint8>
-    let fs = stat(path)
-    if (!fs.is_valid) {
-        panic("missing shader {path} (run from the dasVulkan repo root)")
-    }
-    fopen(path, "rb") $(f) {
-        fload(f, int(fs.size)) $(data : array<uint8>) {
-            out := data
-        }
-    }
-    return <- out
-}
 
 [export]
 def main {
@@ -77,10 +63,9 @@ def main {
     var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
     build_swapchain_framebuffers(device, swap, render_pass)
 
-    var vert_code <- load_spirv("examples/shaders/triangle.vert.spv")
-    var frag_code <- load_spirv("examples/shaders/triangle.frag.spv")
-    var inscope vert <- create_shader_module(device, vert_code)
-    var inscope frag <- create_shader_module(device, frag_code)
+    // tri_vert_spv / tri_frag_spv: SPIR-V words emitted by dasSpirv from triangle_shaders.das
+    var inscope vert <- create_shader_module(device, tri_vert_spv)
+    var inscope frag <- create_shader_module(device, tri_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
     // dynamic viewport/scissor so the one pipeline survives every resize
     var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height, true)

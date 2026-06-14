@@ -2,26 +2,13 @@ options gen2
 
 require vulkan
 require vulkan/vulkan_boost
+require triangle_shaders
 require daslib/fio
 require math
 
 let WIDTH = 256
 let HEIGHT = 256
 let FORMAT = VkFormat.R8G8B8A8_UNORM
-
-def load_spirv(path : string) : array<uint8> {
-    var out : array<uint8>
-    let fs = stat(path)
-    if (!fs.is_valid) {
-        panic("missing shader {path}")
-    }
-    fopen(path, "rb") $(f) {
-        fload(f, int(fs.size)) $(data : array<uint8>) {
-            out := data
-        }
-    }
-    return <- out
-}
 
 def sample(pixels : array<uint8>; x, y : int) : int3 {
     let p = (y * WIDTH + x) * 4
@@ -74,10 +61,9 @@ def main() : int {
                                      width = uint(WIDTH), height = uint(HEIGHT), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
-    var vert_code <- load_spirv("examples/shaders/triangle.vert.spv")
-    var frag_code <- load_spirv("examples/shaders/triangle.frag.spv")
-    var inscope vert <- create_shader_module(device, vert_code)
-    var inscope frag <- create_shader_module(device, frag_code)
+    // tri_vert_spv / tri_frag_spv: SPIR-V words emitted by dasSpirv from triangle_shaders.das
+    var inscope vert <- create_shader_module(device, tri_vert_spv)
+    var inscope frag <- create_shader_module(device, tri_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
     var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, WIDTH, HEIGHT)
 

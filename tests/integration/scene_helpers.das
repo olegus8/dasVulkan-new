@@ -10,36 +10,10 @@ module scene_helpers
 require vulkan public
 require vulkan/vulkan_boost public
 require compute_shaders
-require daslib/fio
-require daslib/module_path
+require triangle_shaders
 
 let TRI_W = 256
 let TRI_H = 256
-
-//! resolve a shader under the package's examples/shaders. The package may sit at
-//! a daspkg modules/ path (CI) or be loaded directly (-load_module dev), so try
-//! the source-relative path first, then a couple of cwd-relative candidates.
-def private load_spirv(name : string) : array<uint8> {
-    let here = dir_name(get_module_file_name("scene_helpers"))
-    let candidates = [
-        path_join(here, "../../examples/shaders/{name}"),
-        "modules/dasVulkan/examples/shaders/{name}",
-        "examples/shaders/{name}"
-    ]
-    var out : array<uint8>
-    for (path in candidates) {
-        let fs = stat(path)
-        continue if (!fs.is_valid)
-        fopen(path, "rb") $(f) {
-            fload(f, int(fs.size)) $(data : array<uint8>) {
-                out := data
-            }
-        }
-        return <- out
-    }
-    panic("missing shader {name} (tried source-relative + modules/dasVulkan + cwd)")
-    return <- out
-}
 
 //! render the RGB triangle offscreen and return the RGBA pixels (TRI_W*TRI_H*4)
 def public render_triangle() : array<uint8> {
@@ -66,10 +40,9 @@ def public render_triangle() : array<uint8> {
     fbci.layers = 1u
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
-    var vert_code <- load_spirv("triangle.vert.spv")
-    var frag_code <- load_spirv("triangle.frag.spv")
-    var inscope vert <- create_shader_module(device, vert_code)
-    var inscope frag <- create_shader_module(device, frag_code)
+    // tri_vert_spv / tri_frag_spv are emitted by dasSpirv from triangle_shaders.das (array<uint> words)
+    var inscope vert <- create_shader_module(device, tri_vert_spv)
+    var inscope frag <- create_shader_module(device, tri_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
     var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, TRI_W, TRI_H)
 

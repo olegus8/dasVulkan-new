@@ -1,6 +1,7 @@
 options gen2
 
 require vulkan
+require triangle_shaders
 require daslib/fio
 require strings
 require math
@@ -36,20 +37,6 @@ def check(r : VkResult; msg : string) {
     }
 }
 
-def load_spirv(path : string) : array<uint8> {
-    var out : array<uint8>
-    let fs = stat(path)
-    if (!fs.is_valid) {
-        fail("missing shader {path}")
-    }
-    fopen(path, "rb") $(f) {
-        fload(f, int(fs.size)) $(data : array<uint8>) {
-            out := data
-        }
-    }
-    return <- out
-}
-
 def find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryPropertyFlags) : uint {
     var mp : VkPhysicalDeviceMemoryProperties
     vkGetPhysicalDeviceMemoryProperties(phys, mp)
@@ -64,12 +51,14 @@ def find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryP
     return 0u
 }
 
-def create_shader_module(device : VkDevice; var code : array<uint8>) : VkShaderModule {
+// SPIR-V words (array<uint>) straight from dasSpirv: codeSize is in BYTES (4 per word), pCode is the
+// uint32 word data.
+def create_shader_module(device : VkDevice; var code : array<uint>) : VkShaderModule {
     var sci : VkShaderModuleCreateInfo
     sci.sType = VkStructureType.SHADER_MODULE_CREATE_INFO
-    sci.codeSize = uint64(length(code))
+    sci.codeSize = uint64(length(code) * 4)
     unsafe {
-        sci.pCode = reinterpret<uint?>(addr(code[0]))
+        sci.pCode = addr(code[0])
     }
     var sm : VkShaderModule
     check(vkCreateShaderModule(device, sci, null, sm), "create shader module")
@@ -240,10 +229,9 @@ def main() : int {
     check(vkCreateFramebuffer(device, fb_ci, null, framebuffer), "create framebuffer")
 
     // ----- shaders + pipeline -----
-    var vert_code <- load_spirv("examples/shaders/triangle.vert.spv")
-    var frag_code <- load_spirv("examples/shaders/triangle.frag.spv")
-    var vert_mod = create_shader_module(device, vert_code)
-    var frag_mod = create_shader_module(device, frag_code)
+    // tri_vert_spv / tri_frag_spv: SPIR-V words emitted by dasSpirv from triangle_shaders.das
+    var vert_mod = create_shader_module(device, tri_vert_spv)
+    var frag_mod = create_shader_module(device, tri_frag_spv)
 
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
