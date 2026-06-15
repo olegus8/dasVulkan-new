@@ -477,6 +477,226 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
     return <- pixels
 }
 
+//! the dasSpirv texelFetch GPU gate: upload `src` (w*h RGBA8) as a sampled texture at set=0/binding=0,
+//! run a compute blob (`words`) that texelFetch-copies it into a storage image at binding=1, and read
+//! the storage image back. Exact-analytic: the caller asserts the readback equals `src`, proving
+//! texelFetch reads the right texel by integer coordinate. (textureLod's GPU exactness needs a mip/
+//! filter setup and is deferred; its validity is covered by spirv-val + the main-tree opcode test.)
+def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>; w, h : int) : array<uint8> {
+    if (volkInitialize() != 0) {
+        panic("no Vulkan loader")
+    }
+    var pixels : array<uint8>
+    var inscope instance <- create_instance("dasVulkan test", make_api_version(1u, 3u, 0u))
+    volkLoadInstance(boost_value_to_vk(instance))
+    let phys = select_physical_device(instance)
+    let gfx = select_graphics_queue_family(phys)
+    var inscope device <- create_device(phys, gfx)
+    volkLoadDevice(boost_value_to_vk(device))
+    let dev = boost_value_to_vk(device)
+    let queue = get_device_queue(device, gfx, 0u)
+    let fmt = VkFormat.R8G8B8A8_UNORM
+    let byte_count = uint64(w * h * 4)
+
+    // source sampled texture (SAMPLED + TRANSFER_DST), device-local + view + NEAREST sampler
+    var sici : ImageCreateInfo
+    sici.imageType = VkImageType._2D
+    sici.format = fmt
+    sici.extent.width = uint(w)
+    sici.extent.height = uint(h)
+    sici.extent.depth = 1u
+    sici.mipLevels = 1u
+    sici.arrayLayers = 1u
+    sici.samples._1 = true
+    sici.tiling = VkImageTiling.OPTIMAL
+    sici.usage.sampled = true
+    sici.usage.transfer_dst = true
+    sici.initialLayout = VkImageLayout.UNDEFINED
+    var inscope src_image <- create_image(device, sici)
+    var sreq : VkMemoryRequirements
+    vkGetImageMemoryRequirements(dev, boost_value_to_vk(src_image), sreq)
+    var swant : VkMemoryPropertyFlags
+    swant.device_local = true
+    var smai : MemoryAllocateInfo
+    smai.allocationSize = sreq.size
+    smai.memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant)
+    var inscope src_mem <- allocate_memory(device, smai)
+    vk_check(vkBindImageMemory(dev, boost_value_to_vk(src_image), boost_value_to_vk(src_mem), 0ul), null)
+    var svci : ImageViewCreateInfo
+    svci.image = weak_copy(src_image)
+    svci.viewType = VkImageViewType._2D
+    svci.format = fmt
+    svci.subresourceRange.aspectMask.color = true
+    svci.subresourceRange.levelCount = 1u
+    svci.subresourceRange.layerCount = 1u
+    var inscope src_view <- create_image_view(device, svci)
+    var sci : SamplerCreateInfo
+    sci.magFilter = VkFilter.NEAREST
+    sci.minFilter = VkFilter.NEAREST
+    sci.mipmapMode = VkSamplerMipmapMode.NEAREST
+    var inscope sampler <- create_sampler(device, sci)
+
+    // staging buffer with the source bytes
+    var staging_usage : VkBufferUsageFlags
+    staging_usage.transfer_src = true
+    var inscope staging <- make_host_buffer(device, phys, byte_count, staging_usage)
+    upload(device, staging.memory, src)
+
+    // destination storage image (STORAGE + TRANSFER_SRC), device-local + view
+    var dici : ImageCreateInfo
+    dici.imageType = VkImageType._2D
+    dici.format = fmt
+    dici.extent.width = uint(w)
+    dici.extent.height = uint(h)
+    dici.extent.depth = 1u
+    dici.mipLevels = 1u
+    dici.arrayLayers = 1u
+    dici.samples._1 = true
+    dici.tiling = VkImageTiling.OPTIMAL
+    dici.usage.storage = true
+    dici.usage.transfer_src = true
+    dici.initialLayout = VkImageLayout.UNDEFINED
+    var inscope dst_image <- create_image(device, dici)
+    var dreq : VkMemoryRequirements
+    vkGetImageMemoryRequirements(dev, boost_value_to_vk(dst_image), dreq)
+    var dwant : VkMemoryPropertyFlags
+    dwant.device_local = true
+    var dmai : MemoryAllocateInfo
+    dmai.allocationSize = dreq.size
+    dmai.memoryTypeIndex = find_memory_type(phys, dreq.memoryTypeBits, dwant)
+    var inscope dst_mem <- allocate_memory(device, dmai)
+    vk_check(vkBindImageMemory(dev, boost_value_to_vk(dst_image), boost_value_to_vk(dst_mem), 0ul), null)
+    var dvci : ImageViewCreateInfo
+    dvci.image = weak_copy(dst_image)
+    dvci.viewType = VkImageViewType._2D
+    dvci.format = fmt
+    dvci.subresourceRange.aspectMask.color = true
+    dvci.subresourceRange.levelCount = 1u
+    dvci.subresourceRange.layerCount = 1u
+    var inscope dst_view <- create_image_view(device, dvci)
+
+    // descriptor set layout: binding 0 = combined image sampler, binding 1 = storage image
+    var dslci : DescriptorSetLayoutCreateInfo
+    var b0 : DescriptorSetLayoutBinding
+    b0.binding = 0u
+    b0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    b0.descriptorCount = 1u
+    b0.stageFlags.compute = true
+    dslci.pBindings |> emplace(b0)
+    var b1 : DescriptorSetLayoutBinding
+    b1.binding = 1u
+    b1.descriptorType = VkDescriptorType.STORAGE_IMAGE
+    b1.descriptorCount = 1u
+    b1.stageFlags.compute = true
+    dslci.pBindings |> emplace(b1)
+    var inscope set_layout <- create_descriptor_set_layout(device, dslci)
+
+    var dpci : DescriptorPoolCreateInfo
+    dpci.maxSets = 1u
+    var ps0 : DescriptorPoolSize
+    ps0.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    ps0.descriptorCount = 1u
+    dpci.pPoolSizes |> push(ps0)
+    var ps1 : DescriptorPoolSize
+    ps1.type_ = VkDescriptorType.STORAGE_IMAGE
+    ps1.descriptorCount = 1u
+    dpci.pPoolSizes |> push(ps1)
+    var inscope desc_pool <- create_descriptor_pool(device, dpci)
+
+    var dsai = VkDescriptorSetAllocateInfo()
+    dsai.descriptorPool = boost_value_to_vk(desc_pool)
+    dsai.descriptorSetCount = 1u
+    var raw_set_layout = boost_value_to_vk(set_layout)
+    var raw_set : VkDescriptorSet
+    unsafe {
+        dsai.pSetLayouts = addr(raw_set_layout)
+        vk_check(vkAllocateDescriptorSets(dev, dsai, addr(raw_set)), null)
+    }
+
+    var writes : array<WriteDescriptorSet>
+    var w0 : WriteDescriptorSet
+    w0.dstSet = vk_value_to_boost(raw_set)
+    w0.dstBinding = 0u
+    w0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    w0.descriptorCount = 1u
+    var srcinfo : DescriptorImageInfo
+    srcinfo.sampler = weak_copy(sampler)
+    srcinfo.imageView = weak_copy(src_view)
+    srcinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    w0.pImageInfo |> push(srcinfo)
+    writes |> emplace(w0)
+    var w1 : WriteDescriptorSet
+    w1.dstSet = vk_value_to_boost(raw_set)
+    w1.dstBinding = 1u
+    w1.descriptorType = VkDescriptorType.STORAGE_IMAGE
+    w1.descriptorCount = 1u
+    var dstinfo : DescriptorImageInfo
+    dstinfo.imageView = weak_copy(dst_view)
+    dstinfo.imageLayout = VkImageLayout.GENERAL
+    w1.pImageInfo |> push(dstinfo)
+    writes |> emplace(w1)
+    var no_copies : array<CopyDescriptorSet>
+    update_descriptor_sets(device, writes, no_copies)
+
+    var inscope shader <- create_shader_module(device, words)
+    var plci : PipelineLayoutCreateInfo
+    plci.pSetLayouts <- [weak_copy(set_layout)]
+    var inscope pipe_layout <- create_pipeline_layout(device, plci)
+    var inscope pipeline <- create_compute_pipeline(device, pipe_layout, shader)
+
+    var inscope readback <- create_host_buffer(device, phys, byte_count)
+    var inscope pool <- create_command_pool(device, pool_info(gfx))
+
+    run_cmd_sync(device, pool, queue) $(cmd) {
+        var none : VkAccessFlags
+        var to_dst : VkAccessFlags
+        to_dst.transfer_write = true
+        var shader_read : VkAccessFlags
+        shader_read.shader_read = true
+        var shader_write : VkAccessFlags
+        shader_write.shader_write = true
+        var to_read : VkAccessFlags
+        to_read.transfer_read = true
+        var top : VkPipelineStageFlags
+        top.top_of_pipe = true
+        var xfer : VkPipelineStageFlags
+        xfer.transfer = true
+        var comp : VkPipelineStageFlags
+        comp.compute_shader = true
+        // upload the source: UNDEFINED -> TRANSFER_DST, copy, -> SHADER_READ_ONLY
+        transition_image(cmd, src_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            none, to_dst, top, xfer)
+        var region : BufferImageCopy
+        region.imageSubresource.aspectMask.color = true
+        region.imageSubresource.layerCount = 1u
+        region.imageExtent.width = uint(w)
+        region.imageExtent.height = uint(h)
+        region.imageExtent.depth = 1u
+        var regions : array<BufferImageCopy>
+        regions |> emplace(region)
+        cmd_copy_buffer_to_image(cmd, staging.buffer, src_image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
+        transition_image(cmd, src_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            to_dst, shader_read, xfer, comp)
+        // destination storage image: UNDEFINED -> GENERAL
+        transition_image(cmd, dst_image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+            none, shader_write, top, comp)
+        cmd_bind_pipeline(cmd, pipeline, VkPipelineBindPoint.COMPUTE)
+        var sets : array<DescriptorSet>
+        sets |> push(vk_value_to_boost(raw_set))
+        var no_dyn : array<uint>
+        cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.COMPUTE, pipe_layout, 0u, sets, no_dyn)
+        cmd_dispatch(cmd, uint(w / 8), uint(h / 8), 1u)
+        // destination GENERAL -> TRANSFER_SRC for the readback copy
+        transition_image(cmd, dst_image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            shader_write, to_read, comp, xfer)
+        copy_image_to_buffer(cmd, dst_image, readback, w, h)
+    }
+    map_memory_to_array(device, readback.memory, byte_count) $(m) {
+        pixels := m
+    }
+    return <- pixels
+}
+
 def private pool_info(queue_family : uint) : CommandPoolCreateInfo {
     var ci : CommandPoolCreateInfo
     ci.queueFamilyIndex = queue_family
