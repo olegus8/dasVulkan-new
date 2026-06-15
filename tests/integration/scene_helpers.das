@@ -202,9 +202,10 @@ def public px(pixels : array<uint8>; x, y : int) : int3 {
 //! expected pixel is CPU-computable. One assert per frame keeps the output readable.
 def public assert_pixels_exact(t : T?; pixels : array<uint8>; w, h : int; lbl : string;
                                expected : block<(x, y : int) : int4>) {
-    if (length(pixels) < w * h * 4) {       // guard before indexing pixels[p+3]: a wrong-sized buffer
-        t |> success(false, "{lbl}: pixel buffer too small ({length(pixels)} < {w * h * 4})")
-        return                              // is a clean test failure, not an out-of-bounds crash
+    let need = uint64(w) * uint64(h) * 4ul   // uint64 so the w*h*4 byte count can't overflow int
+    if (uint64(length(pixels)) < need) {     // guard before indexing pixels[p+3]: a wrong-sized buffer
+        t |> success(false, "{lbl}: pixel buffer too small ({length(pixels)} < {need})")
+        return                               // is a clean test failure, not an out-of-bounds crash
     }
     var ok = true
     var msg = "{lbl}: all {w}x{h} pixels match expected"
@@ -452,7 +453,7 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
     var inscope pipeline <- create_compute_pipeline(device, pipe_layout, shader)
 
-    var inscope readback <- create_host_buffer(device, phys, uint64(w * h * 4))
+    var inscope readback <- create_host_buffer(device, phys, uint64(w) * uint64(h) * 4ul)
     var inscope pool <- create_command_pool(device, pool_info(gfx))
 
     run_cmd_sync(device, pool, queue) $(cmd) {
@@ -481,7 +482,7 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
             shader_write, to_read, comp, xfer)
         copy_image_to_buffer(cmd, image, readback, w, h)
     }
-    map_memory_to_array(device, readback.memory, uint64(w * h * 4)) $(m) {
+    map_memory_to_array(device, readback.memory, uint64(w) * uint64(h) * 4ul) $(m) {
         pixels := m
     }
     return <- pixels
@@ -510,7 +511,8 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
     let fmt = VkFormat.R8G8B8A8_UNORM
-    let byte_count = uint64(w * h * 4)
+    let byte_count = uint64(w) * uint64(h) * 4ul
+    assert(uint64(length(src)) == byte_count, "texelfetch_copy_rgba8: src must be exactly w*h*4 bytes")
 
     // source sampled texture (SAMPLED + TRANSFER_DST), device-local + view + NEAREST sampler
     var sici : ImageCreateInfo
