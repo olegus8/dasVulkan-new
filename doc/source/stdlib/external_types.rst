@@ -50,6 +50,17 @@ Selects which bind point a pipeline / descriptor set binds to —
 ``GRAPHICS`` or ``COMPUTE``. The trailing ``bind_point`` argument to
 ``cmd_bind_pipeline`` (defaults to ``GRAPHICS``).
 
+.. _enum-vulkan-vkcompareop:
+
+``vulkan::VkCompareOp``
+-----------------------
+
+Per-fragment comparison operator (``LESS``, ``LESS_OR_EQUAL``, ``EQUAL``,
+``GREATER_OR_EQUAL``, …). Used by the depth-stencil state on a graphics
+pipeline — the ``depth_compare_op`` argument to
+``create_graphics_pipeline_v3d`` (defaults to ``LESS_OR_EQUAL`` for the
+standard z-buffer convention).
+
 Core handles and aliases
 ========================
 
@@ -120,6 +131,26 @@ Union of a clear color or depth/stencil value. ``clear_color`` builds one;
 
 An ``offset`` + ``extent`` rectangle. ``full_area`` builds one covering the
 whole target; used as the render-pass render area.
+
+.. _handle-vulkan-vkvertexinputbindingdescription:
+
+``vulkan::VkVertexInputBindingDescription``
+-------------------------------------------
+
+One per vertex buffer bound by ``vkCmdBindVertexBuffers``: the binding slot,
+the stride between vertices, and whether the rate is per-vertex or
+per-instance. Consumed by ``create_graphics_pipeline_v3d`` as
+``vertex_bindings``.
+
+.. _handle-vulkan-vkvertexinputattributedescription:
+
+``vulkan::VkVertexInputAttributeDescription``
+---------------------------------------------
+
+One per per-vertex attribute the vertex shader reads (``@in @location = N``):
+the location, the source binding slot, the format, and the byte offset
+within the vertex. Consumed by ``create_graphics_pipeline_v3d`` as
+``vertex_attributes``.
 
 ``vulkan_structs`` view structs
 ===============================
