@@ -144,7 +144,7 @@ def public convert_to_mp4_voiced(apng_path, music_feature, daslang_exe, out_mp4 
     fargs |> push_from([
         "-filter_complex", fg,
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-preset", "slower", "-tune", "animation", "-crf", "25",
+        "-c:v", "libx264", "-preset", "slower", "-tune", "animation", "-crf", "28",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", "-shortest", out_mp4])
     fwrite("{out_mp4}.ffmpeg.txt", join(fargs, " "))
