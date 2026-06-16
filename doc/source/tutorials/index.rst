@@ -18,3 +18,4 @@ stbimage + audio + ffmpeg, so it does not run in CI).
    :maxdepth: 1
 
    01_triangle
+   02_mandelbrot

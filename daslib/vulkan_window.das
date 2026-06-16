@@ -284,3 +284,68 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
     }
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }
+
+//! acquire -> record a RAW command block (no render pass) -> submit -> present, then wait idle.
+//! The block receives the command buffer, the acquired swapchain `VkImage`, and its index, so the
+//! caller can transition + blit/copy/clear straight into it (e.g. present a compute result without a
+//! graphics pipeline). The image is in an UNDEFINED layout on entry and MUST be left in
+//! `PRESENT_SRC_KHR` by the block. Waits at the transfer stage (the typical blit/copy consumer).
+//! Returns false if the swapchain is out of date (caller should recreate). Sibling of draw_frame.
+def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool;
+        sync : FrameSync; blk : block<(cmd : CommandBuffer; target : VkImage; image_index : uint) : void>) : bool {
+    let dev = boost_value_to_vk(device)
+
+    var image_index = 0u
+    let acquired = vkAcquireNextImageKHR(dev, boost_value_to_vk(sc.handle), UINT64_MAX,
+        boost_value_to_vk(sync.image_available), null, image_index)
+    if (acquired == VkResult.ERROR_OUT_OF_DATE_KHR) {
+        return false
+    }
+
+    var ai = VkCommandBufferAllocateInfo()
+    ai.commandPool = boost_value_to_vk(pool)
+    ai.level = VkCommandBufferLevel.PRIMARY
+    ai.commandBufferCount = 1u
+    var raw_cmd : VkCommandBuffer
+    unsafe {
+        vk_check(vkAllocateCommandBuffers(dev, ai, addr(raw_cmd)), null)
+    }
+    let cmd = vk_value_to_boost(raw_cmd)
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
+    invoke(blk, cmd, sc.images[int(image_index)], image_index)
+    vk_check(vkEndCommandBuffer(raw_cmd), null)
+
+    var wait_sem = boost_value_to_vk(sync.image_available)
+    var signal_sem = boost_value_to_vk(sync.render_finished)
+    var wait_stage : VkPipelineStageFlags
+    wait_stage.transfer = true
+    var submit = VkSubmitInfo()
+    submit.waitSemaphoreCount = 1u
+    submit.commandBufferCount = 1u
+    submit.signalSemaphoreCount = 1u
+    unsafe {
+        submit.pWaitSemaphores = addr(wait_sem)
+        submit.pWaitDstStageMask = reinterpret<uint?>(addr(wait_stage))
+        submit.pCommandBuffers = addr(raw_cmd)
+        submit.pSignalSemaphores = addr(signal_sem)
+        vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
+    }
+
+    var sc_handle = boost_value_to_vk(sc.handle)
+    var present = VkPresentInfoKHR()
+    present.waitSemaphoreCount = 1u
+    present.swapchainCount = 1u
+    var presented : VkResult
+    unsafe {
+        present.pWaitSemaphores = addr(signal_sem)
+        present.pSwapchains = addr(sc_handle)
+        present.pImageIndices = addr(image_index)
+        presented = vkQueuePresentKHR(queue, present)
+    }
+    vk_check(vkQueueWaitIdle(queue), null)
+    unsafe {
+        vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, addr(raw_cmd))
+    }
+    return presented != VkResult.ERROR_OUT_OF_DATE_KHR
+}
