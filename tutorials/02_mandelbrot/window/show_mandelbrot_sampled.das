@@ -1,12 +1,14 @@
 options gen2
 options indenting = 4
 
-// Tutorial 02, present method TWO of two: SAMPLE-AS-TEXTURE. The compute shader writes the fractal into a
-// storage image once; here a graphics pass draws a single full-screen triangle whose fragment shader
-// SAMPLES that image as a texture (mandelbrot_view_shaders.das). The result lands on the swapchain through
-// the ordinary render pass, so this reuses draw_frame, the render pass, the framebuffers and the graphics
-// pipeline wholesale -- it adds only a sampler, one combined-image-sampler descriptor, and two tiny
-// shaders. Compare show_mandelbrot_blit.das, which instead blits the image straight onto the swapchain.
+// Tutorial 02, present method TWO of two: SAMPLE-AS-TEXTURE. Same animated Mandelbrot zoom as the blit
+// viewer -- the compute shader recomputes the fractal every frame from a `time` push constant -- but here
+// a graphics pass draws a single full-screen triangle whose fragment shader SAMPLES that image as a
+// texture (mandelbrot_view_shaders.das). The result reaches the swapchain through the ordinary render
+// pass, so this reuses draw_frame, the framebuffers and the graphics pipeline wholesale -- it adds only a
+// sampler, one combined-image-sampler descriptor, and the two view shaders. Because a compute dispatch
+// cannot run inside a render pass, each frame runs the compute as its own submit first, then draw_frame
+// samples the result. Compare show_mandelbrot_blit.das, which blits the image straight onto the swapchain.
 //
 // Needs a display + the glfw module, so it lives in this window/ subfolder the tutorials .das_test skips
 // in CI (the lavapipe CI daslang build is -DDAS_GLFW_DISABLED=ON). Run from the daslang root:
@@ -17,7 +19,7 @@ require glfw/glfw_boost
 require vulkan
 require vulkan/vulkan_boost
 require vulkan/vulkan_window
-require ../mandelbrot_tut_shaders.das
+require mandelbrot_zoom_shaders
 require mandelbrot_view_shaders
 require mandelbrot_compute
 require daslib/defer
@@ -36,7 +38,7 @@ def main {
     }
     glfwWindowHint(int(GLFW_CLIENT_API), GLFW_NO_API)
     glfwWindowHint(int(GLFW_RESIZABLE), GLFW_TRUE)
-    var window = glfwCreateWindow(MAND_DIM, MAND_DIM, "dasVulkan tutorial 02 - Mandelbrot (sampled)", null, null)
+    var window = glfwCreateWindow(ZOOM_DIM, ZOOM_DIM, "dasVulkan tutorial 02 - Mandelbrot zoom (sampled)", null, null)
     if (window == null) {
         panic("can't create window")
     }
@@ -65,49 +67,27 @@ def main {
     volkLoadDevice(boost_value_to_vk(device))
     let queue = get_device_queue(device, gfx, 0u)
 
-    // run the compute shader once -> a GPU-resident storage image (left in GENERAL)
-    var inscope fractal <- run_mandelbrot_compute(device, phys, queue, gfx, mandelbrot_spv, MAND_DIM, MAND_DIM)
+    // resident compute resources -- recomputed every frame with a new time push constant
+    var inscope mc <- build_mandel_compute(device, phys, mandelbrot_zoom_spv, ZOOM_DIM, ZOOM_DIM)
 
     var poolci : CommandPoolCreateInfo
     poolci.queueFamilyIndex = gfx
     var inscope pool <- create_command_pool(device, poolci)
 
-    // GENERAL -> SHADER_READ_ONLY so the fragment shader can sample it
-    run_cmd_sync(device, pool, queue) $(cmd) {
-        var shader_write : VkAccessFlags
-        shader_write.shader_write = true
-        var shader_read : VkAccessFlags
-        shader_read.shader_read = true
-        var comp : VkPipelineStageFlags
-        comp.compute_shader = true
-        var frag : VkPipelineStageFlags
-        frag.fragment_shader = true
-        transition_image(cmd, fractal.image, VkImageLayout.GENERAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            shader_write, shader_read, comp, frag)
-    }
-
     // a sampler to read the fractal with (linear so window scaling is smooth)
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
+    var sci = SamplerCreateInfo(magFilter = VkFilter.LINEAR, minFilter = VkFilter.LINEAR, mipmapMode = VkSamplerMipmapMode.LINEAR)
     var inscope sampler <- create_sampler(device, sci)
 
-    // descriptor set layout: binding 0 = combined image sampler, fragment stage
+    // graphics descriptor set: binding 0 = combined image sampler (the compute image view), fragment stage
     var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    b0.descriptorCount = 1u
+    var b0 = DescriptorSetLayoutBinding(binding = 0u, descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     b0.stageFlags.fragment = true
     dslci.pBindings |> emplace(b0)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps0.descriptorCount = 1u
+    var ps0 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps0)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -121,16 +101,10 @@ def main {
         vk_check(vkAllocateDescriptorSets(boost_value_to_vk(device), dsai, addr(raw_set)), null)
     }
 
-    // bind the fractal view + sampler at binding 0 (layout SHADER_READ_ONLY)
-    var write : WriteDescriptorSet
-    write.dstSet = vk_value_to_boost(raw_set)
-    write.dstBinding = 0u
-    write.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    write.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sampler)
-    iinfo.imageView = weak_copy(fractal.view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var write = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    var iinfo = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(mc.view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
@@ -138,7 +112,7 @@ def main {
     update_descriptor_sets(device, writes, no_copies)
 
     // graphics pipeline: full-screen triangle vert + texture-sampling frag, the descriptor set in the layout
-    var inscope swap <- create_swapchain(device, phys, surface, MAND_DIM, MAND_DIM)
+    var inscope swap <- create_swapchain(device, phys, surface, ZOOM_DIM, ZOOM_DIM)
     var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
     build_swapchain_framebuffers(device, swap, render_pass)
     var inscope vert <- create_shader_module(device, fsq_vert_spv)
@@ -162,6 +136,27 @@ def main {
         }
         if (fbw != swap.width || fbh != swap.height) {
             recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+        }
+        let t = float(glfwGetTime())
+        // recompute the fractal for this frame, then leave it ready to sample (its own submit -- a
+        // compute dispatch cannot run inside the draw_frame render pass)
+        run_cmd_sync(device, pool, queue) $(cmd) {
+            let none : VkAccessFlags
+            var shader_write : VkAccessFlags
+            shader_write.shader_write = true
+            var shader_read : VkAccessFlags
+            shader_read.shader_read = true
+            var top : VkPipelineStageFlags
+            top.top_of_pipe = true
+            var comp : VkPipelineStageFlags
+            comp.compute_shader = true
+            var frag_stage : VkPipelineStageFlags
+            frag_stage.fragment_shader = true
+            transition_image(cmd, mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+                none, shader_write, top, comp)
+            record_compute(cmd, mc, t)
+            transition_image(cmd, mc.image, VkImageLayout.GENERAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+                shader_write, shader_read, comp, frag_stage)
         }
         let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)

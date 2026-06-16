@@ -48,33 +48,42 @@ on deep in/out pairs and reflected coordinates.
    :language: das
    :start-at: [test]
 
-See it live -- two ways to present a compute result
----------------------------------------------------
+See it live -- an animated zoom, two ways to present it
+-------------------------------------------------------
 
-The compute shader wrote its result into a *storage image*, off-screen. A triangle draws
-itself straight into the swapchain through a render pass; a compute result does not -- it
-has to get from that storage image onto the screen. There are two standard ways, and this
-tutorial ships a runnable viewer for each. Both open a GLFW window and run the compute
-shader exactly once (the fractal is static); they differ only in how the image reaches the
-swapchain. They live in a ``window/`` subfolder the CI gate skips (CI is headless and built
-without GLFW).
+The static render above is the verified core. The live viewers are livelier: an animated,
+antialiased **zoom** -- a port of Inigo Quilez's smooth-coloured Mandelbrot
+(`ldf3DN <https://www.shadertoy.com/view/ldf3DN>`_). The whole animation is a single
+``@push_constant`` ``float`` -- a ``time`` the viewer feeds from wall-clock each frame -- from
+which the shader derives an oscillating zoom and a slow rotation about the seahorse-valley point
+``(-0.745, 0.186)``. Crucially the fractal is **recomputed every frame**, so the zoom reveals real
+new detail rather than scaling a static texture; 2x2 supersampling antialiases it. It is its own
+viewer-only dasSpirv shader, so the verified static core stays untouched, and it exercises
+``imageSize``, module-scope ``let`` constants, a compute ``@push_constant`` and the GLSL.std.450
+math rail (``cos`` / ``sin`` / ``pow`` / ``log2``):
 
-Both share the compute-once-into-a-resident-image step -- ``run_mandelbrot_compute`` creates
-the storage image (``STORAGE`` + ``TRANSFER_SRC`` + ``SAMPLED`` usage, so either path can
-consume it), dispatches once, and hands back the GPU-resident result in the ``GENERAL`` layout:
+.. literalinclude:: ../../../tutorials/02_mandelbrot/window/mandelbrot_zoom_shaders.das
+   :language: das
+   :start-at: [compute_shader
+
+The compute result still lives in a *storage image*, off-screen, and still has to reach the
+swapchain -- a triangle draws straight into it through a render pass, a compute result does not.
+There are two standard ways, and a runnable viewer for each. Both build the resident compute
+resources once (``build_mandel_compute``) and re-dispatch them each frame with the new ``time``
+(``record_compute``); they live in a ``window/`` subfolder the CI gate skips (CI is headless and
+built without GLFW).
 
 .. literalinclude:: ../../../tutorials/02_mandelbrot/window/mandelbrot_compute.das
    :language: das
-   :start-at: def public run_mandelbrot_compute
+   :start-at: def public record_compute
 
 Method 1 -- blit
 ~~~~~~~~~~~~~~~~~
 
-The most direct route: ``vkCmdBlitImage`` copies the storage image straight onto the
-acquired swapchain image (scaled to the window, linear filter), with no graphics pipeline,
-no render pass and no fragment shader -- just a transfer. The acquire→record→submit→present
-boilerplate is vulkan_window's ``present_frame`` (the non-render-pass sibling of
-``draw_frame``); the two layout transitions and the blit are the whole body.
+The most direct route: ``vkCmdBlitImage`` copies the storage image straight onto the acquired
+swapchain image (scaled to the window, linear filter) -- no graphics pipeline, no render pass, no
+fragment shader. Both the per-frame compute dispatch and the blit are recorded into vulkan_window's
+``present_frame`` (the non-render-pass sibling of ``draw_frame``):
 
 .. literalinclude:: ../../../tutorials/02_mandelbrot/window/show_mandelbrot_blit.das
    :language: das
@@ -84,19 +93,18 @@ boilerplate is vulkan_window's ``present_frame`` (the non-render-pass sibling of
 Method 2 -- sample as a texture
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The other route reuses the entire graphics path: draw one full-screen triangle whose
-fragment shader **samples** the storage image as a texture. This is the canonical "compute
-writes, graphics reads" pattern -- it goes through the ordinary render pass, so it reuses
-``draw_frame``, the framebuffers and the graphics pipeline wholesale, adding only a sampler,
-one combined-image-sampler descriptor, and two tiny shaders:
+The other route reuses the entire graphics path: draw one full-screen triangle whose fragment
+shader **samples** the storage image as a texture -- the canonical "compute writes, graphics reads"
+pattern, through the ordinary render pass, reusing ``draw_frame``, the framebuffers and the graphics
+pipeline wholesale. Because a compute dispatch cannot run inside a render pass, each frame runs the
+compute as its own submit first, then ``draw_frame`` samples. The two view shaders:
 
 .. literalinclude:: ../../../tutorials/02_mandelbrot/window/mandelbrot_view_shaders.das
    :language: das
    :start-at: var @out @location = 0 v_uv
 
-The draw is then just bind-pipeline, bind-descriptor-set, draw three vertices through
-``draw_frame``. Blit is fewer moving parts; sample-as-texture is the one to grow from (a
-real post-process or UI pass samples the same way).
+Blit is fewer moving parts; sample-as-texture is the one to grow from (a real post-process or UI
+pass samples the same way).
 
 Running it
 ----------
