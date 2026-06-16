@@ -11,6 +11,14 @@ arithmetic. Two newer dasSpirv rails show up here: ``imageSize`` (the shader siz
 pixel→complex mapping off the bound image) and module-scope ``let`` constants (the
 view rectangle and iteration cap live at module scope and are shared with the host).
 
+.. video:: mandelbrot.mp4
+
+The clip above is the **animated zoom** viewer (``window/show_mandelbrot_blit.das``)
+rendered headlessly into an APNG and muxed with a strudel music bed -- one
+``[compute_shader]`` dispatch per frame, a single ``time`` push constant driving
+both zoom and rotation about the seahorse-valley point. The voiceover is Kokoro
+``bf_emma``; see ``skills/recording.md``.
+
 The shader
 ----------
 

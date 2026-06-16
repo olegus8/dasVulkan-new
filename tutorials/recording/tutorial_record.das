@@ -1,11 +1,15 @@
 options gen2
 options indenting = 4
 
-// Shared tutorial recording harness (manual, local-only). Two steps reused by every tutorial's
-// record driver:
+// Shared tutorial recording harness (manual, local-only). Two steps reused by every silent driver:
 //   capture_apng  -- stream a parametric frame(i) render into an APNG intermediate.
 //   convert_to_mp4 -- render a strudel music bed to the clip length, then ffmpeg-mux APNG + faded
 //                     bed into the committed .mp4 (only the .mp4 is tracked; APNG/wav are scratch).
+//
+// Voiced drivers (Kokoro voiceovers + ffmpeg drawtext captions) live in the sibling
+// `tutorial_record_voiced.das` -- a separate file so this one's compile-check in CI stays clean
+// even when dasHV / dasOPENAI aren't loaded.
+//
 // This is NOT a regression gate -- each tutorial's pixel oracle (its [test]) is. This folder is
 // named `recording` so the tutorials .das_test skips it in CI (stbimage + audio aren't loaded there).
 

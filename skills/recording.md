@@ -21,7 +21,8 @@ setup; nothing is engineered for portability.
 ```
 tutorials/
   recording/
-    tutorial_record.das         shared utility (capture_apng + convert_to_mp4)
+    tutorial_record.das         silent-path utility (capture_apng + convert_to_mp4)
+    tutorial_record_voiced.das  voiced extension (say + prepare_voiceover + convert_to_mp4_voiced)
   <NN>_<scene>/
     <scene>_tut.das             the tutorial itself — never edited for recording
     <NN>_<scene>.rst            uses `.. video:: <scene>.mp4`
@@ -128,28 +129,86 @@ skips it in CI (stbimage + audio modules aren't loaded there).
 
 That's the entire pipeline today — one command per tutorial.
 
-## What's planned: voice + captions
+## Voice + captions
 
 Layered on top of the existing utility, **without changing how the driver
-looks**:
+looks** — `record_triangle.das` keeps working unchanged. The voiced extension
+lives in a **separate file** (`tutorial_record_voiced.das`) so the silent
+file's compile-check in CI stays clean even when dasHV (the dasOPENAI HTTP
+backend) is not loaded; voiced drivers just `require` the voiced file, which
+re-exports the silent path. The voiced module adds three calls:
 
-| Piece | Status | Role |
-|---|---|---|
-| `prepare_voiceover(driver_path)` (new in `tutorial_record.das`) | TBD | AST-scan the driver for `say(text, [voice=...])` literals (the same shape dasImgui's `prepare_recording` looks for), synthesize each via Kokoro TTS at `http://127.0.0.1:8880/v1` with voice `bf_emma`, write `recording/voiceover/<scene>.manifest.json` (per-line wav + duration) + `recording/voiceover/<scene>.captions.json` (text + start_frame + duration) |
-| `say(frame_idx, text [voice=...])` helper | TBD | called from the driver to record the caption anchor at frame index `frame_idx` (matches `capture_apng`'s deterministic frame model — pick the frame where the caption should appear). A no-op when the voiceover manifest is absent, so existing drivers keep working unchanged |
-| `convert_to_mp4_voiced(...)` (sibling to `convert_to_mp4`) | TBD | same mux pass, but also folds in each voiceover wav delayed to its frame, and renders the caption manifest via ffmpeg `drawtext` on a system mono font (`Arial` on Windows, `DejaVuSans` on the rare Linux run). ASCII-only captions for portability |
+| Function | Role |
+|---|---|
+| `say(frame : int; caption : string)` / `say(frame, caption, voice)` | Register a caption + voice anchor at frame index `frame` (matches `capture_apng`'s deterministic frame model). Defaults voice to caption. Lines accumulate in a module-private array; recordings run one at a time so a global is the simplest fit (matches dasImgui's `prepare_recording`) |
+| `prepare_voiceover(apng_path [, base_url, voice_id, model]) : bool` | For each registered line: hit Kokoro TTS at `http://127.0.0.1:8880/v1` with voice `bf_emma`, write `<apng_dir>/voiceover/line_<i>.wav` (skipped if already on disk, so re-runs are cheap), measure duration |
+| `convert_to_mp4_voiced(apng_path, music_feature, daslang_exe, out_mp4, dur_s, fps, bed_db, fade_ms [, font_file]) : bool` | Same shape as `convert_to_mp4` but also mixes each voiceover wav (delayed via ffmpeg `adelay` to its frame's seconds) under the music bed and renders each caption via ffmpeg `drawtext` (timed `enable=between(t, t_start, t_start + dur + 0.4s)`). Codec is tuned for smooth shader-pure content: `-c:v libx264 -tune animation -preset slower -crf 28 -pix_fmt yuv420p -movflags +faststart` (CRF is **five** above the silent path's `-crf 23`: shader-pure content has no skin / film grain so the cosine-palette gradients absorb the bigger quality cut invisibly, and the mp4 ends up about half the size of the silent default). `font_file` defaults to the Windows `arial.ttf` (ffmpeg-escaped form); pass another path on Linux |
 
 A driver that adds voice + captions then looks like:
 
 ```daslang
-say(0,   "The Mandelbrot set, drawn pixel by pixel from a time push constant.")
-say(150, "Zoom and rotation both come from a single float.")
+say( 30, "dasVulkan tutorial 2 -- Mandelbrot zoom",
+        "das Vulkan tutorial two. The Mandelbrot zoom.")
+say(360, "Time drives the animation",
+        "One time push constant drives the whole animation. Zoom, rotation, color.")
+say(720, "daslang to SPIR-V",
+        "Authored in daslang. Lowered to Spear V.")
+
 let ok = capture_apng(...) $(frame) { ... }
-convert_to_mp4_voiced(apng, music, daslang_exe, out_mp4, voiceover_dir, dur_s, fps, -13, 100)
+if (!prepare_voiceover(apng)) { panic("voiceover failed -- is Kokoro running at :8880?") }
+convert_to_mp4_voiced(apng, music, daslang_exe, out_mp4, dur_s, fps, -13, 100)
 ```
 
-The voice + caption code lives in `tutorial_record.das` so it ships with the
-shared utility, not per-driver.
+`record_mandelbrot.das` is the canonical voiced exemplar.
+
+### Caption vs voice text — pronunciation conventions
+
+`say(...)` takes **two strings**: a terse on-screen `caption` and a natural
+spoken `voice` (which defaults to the caption when omitted). They diverge
+because TTS engines don't read brand-name camelCase or hyphenated acronyms the
+way a human does — captions stay canonical, voice text is respelled
+phonetically for Kokoro / `bf_emma`:
+
+| Canonical (caption) | Voice text |
+|---|---|
+| `dasVulkan` | `das Vulkan` (split the camelCase — TTS reads it as two natural words) |
+| `dasSpirv` | `das Spear V` |
+| `SPIR-V` | `Spear V` (Khronos's intended pronunciation per the spec preamble) |
+| `daslang` | `daslang` (Kokoro reads it acceptably as written) |
+| `2` / `3` / … | `two` / `three` / … (force the word form when it has to read aloud — digit-form is fine in captions) |
+
+`-`, `--`, and other ASCII punctuation in caption text are fine for the eye
+but get spelled out by the TTS — strip them from voice text. ASCII-only
+applies to both (the Windows / Linux fallback fonts ffmpeg `drawtext` resolves
+to don't carry em-dash / arrow / smart-quote glyphs).
+
+**Use periods, not commas, to force pauses.** Kokoro's `bf_emma` runs through
+comma-separated phrases at conversational pace; a clear three-beat list like
+*"Zoom. Rotation. Color."* (three sentences) sits much better than
+*"Zoom, rotation, color."* — the periods land as a deliberate beat, the
+captions still read fine, and the line ends with the intended cadence.
+
+### Quality tuning — when to push CRF higher
+
+The voiced default is `-crf 28` (the silent path is `-crf 23` — the libx264
+default). That five-step gap was tuned on the mandelbrot scene: same fixture,
+`-crf 23` produced ~13.5 MB, `-crf 28` produced 6.95 MB (768×768, 30 s, 900
+frames). Eyeballed at 100% on a 4K display — no banding in the cosine palette,
+no block artifacts on the fractal edges, no mush on the captions. Both
+`-tune animation` and `-preset slower` matter: the tune biases x264 toward
+larger blocks (good for smooth gradients, smooth pans, large flat regions —
+exactly what shader-pure tutorial content produces), and the slower preset
+gives the motion search enough headroom that smooth zooms don't stutter at the
+higher CRF.
+
+CRF is logarithmic — each `+6` ≈ half the bitrate. So `-crf 28` ≈ a third of
+`-crf 23`'s bitrate, and that's the size win. **Procedure when adding a new
+voiced recording:** start at `-crf 28`, eyeball, bump up (`30`, `32`, …) until
+artifacts appear, then back off one step. Cosine-palette shader content
+tolerates very aggressive CRF; anything with real photographic detail
+(textures from disk, blit-from-camera) won't, so default back to `-crf 23`
+there. Photographic content lives outside this pipeline today — when it shows
+up, expose the CRF as a parameter rather than hard-coding it.
 
 ## Reproduction (if it ever has to happen elsewhere)
 

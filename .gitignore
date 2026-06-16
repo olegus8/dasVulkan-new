@@ -36,6 +36,8 @@ modules/
 tutorials/**/recording/*.apng
 tutorials/**/recording/*.wav
 tutorials/**/recording/*.png
+tutorials/**/recording/voiceover/
+tutorials/**/*.mp4.ffmpeg.txt
 
 # Sphinx build-time copies of tutorial recordings (the tracked source is
 # tutorials/<name>/*.mp4; conf.py copies them here at build).
