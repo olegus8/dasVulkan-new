@@ -154,8 +154,9 @@ third windowed compute tutorial appears.
 - **macOS works via MoltenVK** (no opt-in). One-time host setup:
   `brew install molten-vk vulkan-loader vulkan-tools`. `vk_surface_from_native`
   has a Metal arm (`src/dasVULKAN.metal.mm`, `vkCreateMetalSurfaceEXT` from a
-  `CAMetalLayer`); `das_volkInitialize` finds the Homebrew/SDK loader off volk's
-  default search; and `create_instance` auto-enables
+  `CAMetalLayer`); `das_volkInitialize` finds the loader that volk's built-in
+  macOS search misses, by dlopen'ing the Homebrew/SDK paths; and `create_instance`
+  auto-enables
   `VK_KHR_portability_enumeration`. Windowed apps call
   `glfwInitVulkanLoader(vk_get_instance_proc_addr())` before `glfwInit`. See
   `ROADMAP.md`.
