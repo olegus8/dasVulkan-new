@@ -7,9 +7,11 @@ name: Integration tests
 # GPU. The package vendors volk + Vulkan-Headers and the generated bindings are
 # committed, so the build needs no Vulkan SDK.
 #
-# Linux-first (lavapipe is the most reliable software Vulkan in CI). Windows
-# (lavapipe/swiftshader via jakoch/install-vulkan-sdk-action) is a follow-on;
-# macOS headless Vulkan is impractical and skipped.
+# Linux lane runs the full offscreen suite on Mesa lavapipe (the llvmpipe software
+# Vulkan ICD). macOS lane is build + loader-discovery only: GitHub's macOS runners
+# expose only a paravirtualized GPU that MoltenVK can't render on, so it gates the
+# macOS build (Metal bridge + frameworks) and the Homebrew loader discovery, not
+# rendering. Windows (lavapipe/swiftshader) is still a follow-on.
 on:
   push:
     branches: [master]
@@ -153,3 +155,109 @@ jobs:
             --timeout 600 \
             --isolated-mode \
             --isolated-mode-threads 4
+
+  build_macos:
+    # macOS build + loader-discovery gate (Apple Silicon). GitHub's macOS runners
+    # expose only a paravirtualized GPU (AppleParavirtGPU) that cannot run the
+    # offscreen render suite -- stock MoltenVK crashes during device init, and even
+    # with Metal argument buffers disabled the render tests fail with
+    # ERROR_OUT_OF_DEVICE_MEMORY allocating targets (the same suite passes on real
+    # Apple GPUs). So this lane gates what CAN be checked headless: the macOS build
+    # (the CMake APPLE branch, the CAMetalLayer bridge dasVULKAN.metal.mm,
+    # Cocoa/QuartzCore linking) plus a no-render smoke that exercises the Homebrew
+    # loader discovery (das_volkInitialize). Render testing stays on real hardware
+    # (local). See ROADMAP "macOS CI".
+    runs-on: macos-14
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: "Checkout daslang"
+        uses: actions/checkout@v4
+        with:
+          repository: GaijinEntertainment/daScript
+          path: daslang-src
+          ref: master
+
+      - name: "Checkout dasVulkan"
+        uses: actions/checkout@v4
+        with:
+          path: dasVulkan
+
+      - name: "Install Vulkan loader + MoltenVK + modern bison"
+        # The loader + MoltenVK let the smoke step exercise das_volkInitialize's
+        # Homebrew-loader discovery (the smoke uses a raw, non-portability
+        # vkCreateInstance, so the loader returns INCOMPATIBLE_DRIVER *before*
+        # MoltenVK's crashing device init -- no GPU is touched).
+        #
+        # bison: macOS ships GNU bison 2.3, too old for daslang's parser grammar
+        # (`expecting string`). Install Homebrew bison 3.x and prepend it to PATH
+        # for the build step via $GITHUB_PATH (the default non-login shell does not
+        # source ~/.bash_profile). `brew --prefix bison` resolves the keg path
+        # regardless of the Homebrew prefix (/opt/homebrew vs /usr/local).
+        run: |
+          set -eux
+          brew install vulkan-loader molten-vk bison
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: "Build daslang"
+        working-directory: daslang-src
+        # Only the daslang binary + its shared runtime dylibs are needed; the module
+        # links lib/liblibDaScriptDyn{,_runtime}.dylib. Generated dasVulkan C++ is
+        # committed, so no generator run -- pugixml/LLVM/HV/GLFW are unnecessary.
+        run: |
+          set -eux
+          bison --version | head -1   # must be Homebrew 3.x, not the macOS system 2.3
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=ON \
+            -DDAS_PUGIXML_DISABLED=ON \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target daslang
+          sccache --show-stats
+          echo "BIN_DIR=bin" >> "$GITHUB_ENV"
+
+      - name: "Build the dasVulkan native module (Metal bridge + frameworks)"
+        # The CMake APPLE branch compiles src/dasVULKAN.metal.mm (the CAMetalLayer
+        # bridge) and links Cocoa + QuartzCore. Bounded --parallel 2 over Ninja +
+        # sccache (the ~55 generated TUs are template-heavy).
+        run: |
+          set -eux
+          cmake -S "${GITHUB_WORKSPACE}/dasVulkan" -B "${GITHUB_WORKSPACE}/dasVulkan/_build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDASLANG_DIR="${GITHUB_WORKSPACE}/daslang-src" \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          cmake --build "${GITHUB_WORKSPACE}/dasVulkan/_build" --config Release --parallel 2
+          sccache --show-stats
+          ls -la "${GITHUB_WORKSPACE}/dasVulkan"/*.shared_module
+
+      - name: "Smoke: module loads + Homebrew loader discovery (no render)"
+        # examples/smoke.das requires the raw `vulkan` module (proves the
+        # .shared_module loads on macOS) and calls volkInitialize -> our
+        # das_volkInitialize, which must find the Homebrew loader off volk's default
+        # dlopen search. It then does a raw (non-portability) vkCreateInstance, which
+        # the loader rejects with INCOMPATIBLE_DRIVER without entering MoltenVK's
+        # device init -- so no GPU. Assert volkInitialize succeeded (loader found).
+        working-directory: ${{ github.workspace }}/dasVulkan
+        run: |
+          set -eux
+          out=$("${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
+            -load_module "${GITHUB_WORKSPACE}/dasVulkan" \
+            "${GITHUB_WORKSPACE}/dasVulkan/examples/smoke.das")
+          echo "$out"
+          echo "$out" | grep -q "Vulkan instance version" \
+            || { echo "loader discovery regressed: das_volkInitialize did not find the Homebrew loader"; exit 1; }
