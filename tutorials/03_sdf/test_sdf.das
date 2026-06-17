@@ -42,7 +42,8 @@ def test_sdf(t : T?) {
     for (j in range(10)) {
         for (i in range(10)) {
             let s = px(p, cx - 80 + i * 16, cy - 40 + j * 16)
-            // blob_color at TEST_TIME is approx (cos(0.72)+0.6 ... ) -- warm/red-dominant
+            // blob_color(p, TEST_TIME) = (0.6 + 0.4*cos(0.72), 0.45 + 0.4*cos(1.52), 0.4 + 0.4*cos(2.32))
+            // ~= (0.90, 0.47, 0.13) before lift/lighting -- warm/red-dominant; oracle asserts red exceeds blue.
             if (s.x > s.z + 15 && s.x > 80) {
                 blob_hits++
             }

@@ -201,7 +201,8 @@ def sdf_main {
     let ro = float3(cos(cam_ang) * cam_dist, cam_y, sin(cam_ang) * cam_dist)
     let target = float3(0.0f, 0.0f, 0.0f)
 
-    // build a right-handed camera basis from forward / world-up / cross
+    // build the camera basis: right = world_up x fwd, up = fwd x right (handedness is whatever the
+    // two cross-product orders below produce; flip either order to mirror the view if needed)
     let fwd = normalize(target - ro)
     let right = normalize(cross(float3(0.0f, 1.0f, 0.0f), fwd))
     let up = cross(fwd, right)
