@@ -144,12 +144,22 @@ def private build_points_pipeline(device : Device; render_pass : RenderPass; lay
 
     var depthstate = VkPipelineDepthStencilStateCreateInfo()
     depthstate.depthTestEnable = VK_TRUE
-    depthstate.depthWriteEnable = VK_TRUE
-    depthstate.depthCompareOp = VkCompareOp.LESS_OR_EQUAL
+    depthstate.depthWriteEnable = VK_FALSE                          // particles read depth (occlusion) but
+    depthstate.depthCompareOp = VkCompareOp.LESS_OR_EQUAL            // never write it, so overlapping splats blend
     depthstate.minDepthBounds = 0.0f
     depthstate.maxDepthBounds = 1.0f
 
+    // Additive blending: each particle's premultiplied RGBA = base_colour * intensity + alpha=intensity
+    // accumulates onto the framebuffer with srcColor + dstColor. Overlapping splats stack into bright
+    // "core + halo" hot spots; isolated particles fade smoothly into the clear colour at their rim.
     var blend_att : VkPipelineColorBlendAttachmentState
+    blend_att.blendEnable = VK_TRUE
+    blend_att.srcColorBlendFactor = VkBlendFactor.ONE
+    blend_att.dstColorBlendFactor = VkBlendFactor.ONE
+    blend_att.colorBlendOp = VkBlendOp.ADD
+    blend_att.srcAlphaBlendFactor = VkBlendFactor.ONE
+    blend_att.dstAlphaBlendFactor = VkBlendFactor.ONE
+    blend_att.alphaBlendOp = VkBlendOp.ADD
     blend_att.colorWriteMask.r = true
     blend_att.colorWriteMask.g = true
     blend_att.colorWriteMask.b = true

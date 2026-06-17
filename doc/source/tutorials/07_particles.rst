@@ -30,6 +30,17 @@ compute pipeline rewrites it every frame via 1/r² gravity, then a
   graphics pipeline is built inline (v3d hard-codes ``TRIANGLE_LIST``) and
   uses ``VkPrimitiveTopology.POINT_LIST`` with no cull. No billboard math,
   no clip-space orientation pass against the projection-matrix Y-flip.
+- **Pretty point sprites via ``gl_PointCoord``** -- the fragment shader reads
+  ``gl_PointCoord`` (BuiltIn ``PointCoord`` Input), the UV inside the
+  rasterised point primitive (``[0, 1]^2`` with ``(0.5, 0.5)`` at the centre).
+  Distance from centre drives a circular ``discard()`` mask + a cubic falloff
+  for the core/halo glow -- no sprite texture upload needed.
+- **Additive blending + depth-test-without-write** -- the pipeline runs
+  ``srcColor + dstColor`` with both factors set to ``ONE`` so overlapping
+  splats accumulate into bright hot spots, and depth-write is disabled so
+  particle-to-particle ordering doesn't punch holes. The fragment outputs
+  premultiplied colour with ``alpha = intensity`` (consistent across colour
+  + alpha channels).
 
 Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpirv.
 

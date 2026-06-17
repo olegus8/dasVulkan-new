@@ -113,11 +113,25 @@ var @out @location = 0 frag_color : float4
 
 [vulkan_fragment_shader(name="particles_frag_spv")]
 def particles_fs {
+    // gl_PointCoord is the UV inside the rasterised point primitive, [0,1]^2 with (0.5, 0.5) at the
+    // centre. Distance from centre gives a circular mask + soft falloff -- the basis for a real
+    // point-sprite look without uploading a texture.
+    let from_center = gl_PointCoord - float2(0.5, 0.5)
+    let d = sqrt(dot(from_center, from_center)) * 2.0     // 0 at centre, 1 at the edge of the inscribed circle
+    if (d > 1.0) {
+        discard()                                          // outside the disc: punch a hole through the square
+    }
+    // soft glow: bright core, falloff to zero alpha at the rim
+    let core = 1.0 - clamp(d, 0.0, 1.0)
+    let glow = core * core * core                          // cubic falloff reads as a hot core + halo
     // colour by speed: cool teal for slow particles, hot magenta for fast
-    let cool = float3(0.18, 0.65, 0.95)
-    let hot  = float3(1.00, 0.30, 0.60)
+    let cool = float3(0.20, 0.70, 1.00)
+    let hot  = float3(1.00, 0.30, 0.55)
     let s = clamp(f_speed * 0.4, 0.0, 1.0)
     let s3 = float3(s, s, s)
     let base = lerp(cool, hot, s3)
-    frag_color = float4(base * f_life, 1.0)
+    // Additive blending on the pipeline means premultiplied colour with alpha=glow gives a pure
+    // additive glow with a per-pixel falloff -- the canonical "particle" look.
+    let intensity = glow * f_life
+    frag_color = float4(base * intensity, intensity)
 }
