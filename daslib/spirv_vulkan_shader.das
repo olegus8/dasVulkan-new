@@ -97,6 +97,12 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     ptr_arg._type.flags.constant = true
     inner.arguments |> emplace(ptr_arg)
 
+    // First pass: collect reachable @uniform struct globals. The generated function takes ONE
+    // (device, memory) pair, so it can only write fields belonging to ONE UBO allocation -- if
+    // a shader reaches >1 @uniform struct (different set/binding => different memory), writing
+    // them all into the same allocation would corrupt the upload. Fail-closed at >1 until the
+    // macro grows per-binding bind functions.
+    var ubo_globals : array<Variable?>
     collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
             if (!(vv.annotation |> find_arg("uniform") is tBool)) continue
@@ -105,30 +111,48 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             // supported here; skip them silently — the SPIR-V emitter has already rejected any
             // invalid combos.
             if (vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) continue
-            let st = vv._type.structType
-            var layout_errors : array<string>
-            var fields : array<BlockField>
-            let layout = compute_block_layout(string(vv.name), st, fields, layout_errors)
-            if (!layout.ok) {
-                delete fields
-                delete layout_errors
-                continue
-            }
-            for (f in fields) {
-                var cll = new ExprCall(at = vv.at, name := "write_field")
-                cll.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "ptr")
-                cll.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(f.offset))
-                var fld_access = new ExprField(at = vv.at,
-                    value <- new ExprVar(at = vv.at, name := vv.name),
-                    name := f.name
-                )
-                cll.arguments |> emplace(fld_access)
-                inner.list |> emplace(cll)
-            }
-            delete fields
-            delete layout_errors
+            ubo_globals |> push(vv)
         }
     }
+    if (length(ubo_globals) > 1) {
+        macro_error(compiling_program(), ubo_globals[0].at,
+            "[vulkan_*_shader]: shader reaches {length(ubo_globals)} @uniform struct globals; bind_uniform_<shader>(device, memory) takes one memory allocation and would corrupt cross-block writes. Split into separate shaders, merge the UBOs into one struct, or wait for per-binding bind functions.")
+        unsafe { delete ubo_globals; }
+        return
+    }
+    for (vv in ubo_globals) {
+        let st = vv._type.structType
+        var layout_errors : array<string>
+        var fields : array<BlockField>
+        let layout = compute_block_layout(string(vv.name), st, fields, layout_errors)
+        if (!layout.ok) {
+            // Fail-closed: a UBO that can't lay out (e.g. a bool field) silently producing a
+            // no-op bind_uniform would write garbage at runtime. Surface the compute_block_layout
+            // diagnostic through macro_error so the shader fails to compile. compute_block_layout
+            // pushes exactly one error on the failure path; take the first.
+            let msg = empty(layout_errors) ? "(no diagnostic)" : layout_errors[0]
+            macro_error(compiling_program(), vv.at,
+                "[vulkan_*_shader]: @uniform '{vv.name}' std140 layout failed: {msg}")
+            delete fields
+            delete layout_errors
+            unsafe { delete ubo_globals; }
+            return
+        }
+        for (f in fields) {
+            var cll = new ExprCall(at = vv.at, name := "write_field")
+            cll.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "ptr")
+            cll.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(f.offset))
+            var fld_access = new ExprField(at = vv.at,
+                value <- new ExprVar(at = vv.at, name := vv.name),
+                name := f.name
+            )
+            cll.arguments |> emplace(fld_access)
+            inner.list |> emplace(cll)
+        }
+        delete fields
+        delete layout_errors
+    }
+    unsafe { delete ubo_globals; }
 
     var mkblk = new ExprMakeBlock(at = fn.at, _block = inner)
     var wmm = new ExprCall(at = fn.at, name := "with_mapped_memory")
@@ -182,31 +206,57 @@ def private generate_push_constants_dummy(fnMain : FunctionPtr) {
 def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; stage : ShaderStage) {
     let stage_uint = stage_to_uint(stage)
     var stmt_list : array<Expression?>
+    // First pass: collect reachable @push_constant struct globals. Vulkan allows at most ONE
+    // push-constant block per stage, and the current macro hard-codes offset=0 for all writes --
+    // emitting two pushes at offset=0 would overlap and corrupt. Fail-closed at >1 until per-range
+    // pushing (offset + size per block) is wired up.
+    var pc_globals : array<Variable?>
     collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
             if (!(vv.annotation |> find_arg("push_constant") is tBool)) continue
             if (vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) continue
-            // size = std140 layout size of the push block. The user's daslang struct should match
-            // this byte-for-byte (no float3-followed-by-scalar surprises) -- the bytes are uploaded
-            // direct from addr(pc_var); if the layouts diverge the shader reads garbage.
-            var errs : array<string>
-            var fields : array<BlockField>
-            let layout_info = compute_block_layout(string(vv.name), vv._type.structType, fields, errs)
+            pc_globals |> push(vv)
+        }
+    }
+    if (length(pc_globals) > 1) {
+        macro_error(compiling_program(), pc_globals[0].at,
+            "[vulkan_*_shader]: shader reaches {length(pc_globals)} @push_constant struct globals; the generated function always pushes at offset=0 and would emit overlapping vkCmdPushConstants writes. Vulkan also caps push-constant blocks at one per stage -- merge the structs.")
+        unsafe { delete pc_globals; }
+        return
+    }
+    for (vv in pc_globals) {
+        // size = std140 layout size of the push block. The user's daslang struct should match
+        // this byte-for-byte (no float3-followed-by-scalar surprises) -- the bytes are uploaded
+        // direct from addr(pc_var); if the layouts diverge the shader reads garbage.
+        var errs : array<string>
+        var fields : array<BlockField>
+        let layout_info = compute_block_layout(string(vv.name), vv._type.structType, fields, errs)
+        if (!layout_info.ok) {
+            // Fail-closed: a @push_constant whose std140 size can't be computed would silently
+            // skip the vkCmdPushConstants update, leaving stale push state and a corrupt frame.
+            // Same rule as the @uniform path -- surface and abort.
+            let msg = empty(errs) ? "(no diagnostic)" : errs[0]
+            macro_error(compiling_program(), vv.at,
+                "[vulkan_*_shader]: @push_constant '{vv.name}' std140 layout failed: {msg}")
             delete fields
             delete errs
-            if (!layout_info.ok) continue
-            let var_name = string(vv.name)
-            let size_expr <- new ExprConstUInt(at = vv.at, value = uint(layout_info.size))
-            let stage_expr <- new ExprConstUInt(at = vv.at, value = stage_uint)
-            stmt_list |> push_block_list <| qmacro_block() {
-                unsafe {
-                    vkCmdPushConstants(boost_value_to_vk(cb), boost_value_to_vk(layout),
-                        VkShaderStageFlags($e(stage_expr)), 0u, $e(size_expr),
-                        reinterpret<void?>(addr($i(var_name))))
-                }
+            unsafe { delete pc_globals; }
+            return
+        }
+        delete fields
+        delete errs
+        let var_name = string(vv.name)
+        let size_expr <- new ExprConstUInt(at = vv.at, value = uint(layout_info.size))
+        let stage_expr <- new ExprConstUInt(at = vv.at, value = stage_uint)
+        stmt_list |> push_block_list <| qmacro_block() {
+            unsafe {
+                vkCmdPushConstants(boost_value_to_vk(cb), boost_value_to_vk(layout),
+                    VkShaderStageFlags($e(stage_expr)), 0u, $e(size_expr),
+                    reinterpret<void?>(addr($i(var_name))))
             }
         }
     }
+    unsafe { delete pc_globals; }
     var body = new ExprBlock(at = fn.at)
     for (s in stmt_list) {
         body.list |> emplace(s)

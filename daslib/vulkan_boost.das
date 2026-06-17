@@ -913,7 +913,11 @@ def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; fra
 //! Block-form device-memory mapping. Maps the whole allocation (VK_WHOLE_SIZE), invokes the block
 //! with the raw mapped pointer, unmaps on block return. Used by the SpirvVulkanShader bind_uniform
 //! macro for one-shot UBO upload: the block writes typed fields at known std140 offsets via
-//! `write_field` and the unmap on exit commits everything.
+//! `write_field`. **Memory must be HOST_VISIBLE | HOST_COHERENT**: with HOST_COHERENT the GPU sees
+//! the writes after vkUnmapMemory without an explicit flush; non-coherent memory needs a
+//! vkFlushMappedMemoryRanges between the writes and the unmap, which this helper does NOT do. The
+//! standard dasVulkan UBO allocation path (mhb / create_host_buffer) picks coherent memory, so the
+//! tutorials are safe; if you allocate non-coherent memory yourself, wrap the writes accordingly.
 def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : block<(ptr : void?) : void>) {
     var mapped : void? = null
     var flags : VkMemoryMapFlags
@@ -928,7 +932,6 @@ def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : bloc
 //! bytes). Designed for std140 field writes: the bind_uniform macro emits one call per @uniform-block
 //! field at its compile-time-computed offset. TT = any 32-bit scalar / vec / float4x4 / float3x4 with
 //! the daslang storage matching std140 directly. float3x3 needs per-column writes (not this).
-[unused_argument(value)]
 def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
     unsafe {
         let dst = reinterpret<void?>(intptr(ptr) + uint64(offset))

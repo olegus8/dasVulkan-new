@@ -32,11 +32,17 @@ The shaders
 -----------
 
 A struct UBO with two ``float4x4`` and one ``float4`` member is the canonical
-std140 layout the host writes column-major. The push constant is a single
-``float4x4`` model matrix at offset 0 -- vertex-only, 64 bytes (well under the
-128-byte push-constant minimum guarantee). The fragment shader reads ``cam.cam_time``
-to fold the camera position into the view direction and the time into the UV
-scroll.
+std140 layout. The push constant is a single ``float4x4`` model matrix at offset
+0 -- vertex-only, 64 bytes (well under the 128-byte push-constant minimum
+guarantee). The fragment shader reads ``cam.cam_time`` to fold the camera
+position into the view direction and the time into the UV scroll. The
+``[vulkan_*_shader]`` annotations synthesise two host-side helpers from
+``var @uniform cam : Camera`` and ``var @push_constant pc : ModelPC``:
+``cube_vs_bind_uniform(device, memory)`` writes each std140 field at its
+computed offset into a mapped UBO, and ``cube_vs_push_constants(cmd, layout)``
+does the ``vkCmdPushConstants`` call. The host writes ``cam.* = ...`` and
+``pc.model = ...`` and calls the helpers -- one source of truth for the
+layout, no manual ``push_from`` / ``upload_bytes`` packing.
 
 .. literalinclude:: ../../../tutorials/04_cube/cube_tut_shaders.das
    :language: das
@@ -51,9 +57,10 @@ uses ``build_cube_context()`` once and calls ``render_cube_frame(ctx, ...)`` in
 a loop -- the long-lived state (instance, device, render pass, framebuffer,
 vertex / index / UBO buffers, texture image+view+sampler, descriptor + pipeline
 layouts, pipeline, readback buffer) is rebuilt once; the per-frame work is just
-rewriting the UBO with the new view+proj+camera+time, supplying the new model
-matrix as a push constant, drawing 36 indexed vertices, and copying the colour
-attachment back. No window required.
+``cam.view = ...; cam.proj = ...; cam.cam_time = ...; cube_vs_bind_uniform(...)``
+for the UBO and ``pc.model = ...; cube_vs_push_constants(...)`` for the
+per-frame model matrix, then drawing 36 indexed vertices and copying the
+colour attachment back. No window required.
 
 .. literalinclude:: ../../../tutorials/04_cube/cube_tut.das
    :language: das

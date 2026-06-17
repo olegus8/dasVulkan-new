@@ -66,7 +66,7 @@ def document_module_vulkan_boost() {
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_compute_pipeline)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth)$%%),
         group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|compute_to_storage_image)$%%),
-        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|map_memory_to_array|read_memory)$%%),
+        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|map_memory_to_array|read_memory|with_mapped_memory|write_field)$%%),
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_draw|copy_image_to_buffer|transition_image)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))

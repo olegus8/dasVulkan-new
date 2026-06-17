@@ -35,12 +35,16 @@ gently bobs, and the cosine-palette pulse cycles the blob hue across the orbit
 The shader
 ----------
 
-The whole pipeline lives in one ``[compute_shader]`` function plus a handful
-of private helpers. ``map(p, t)`` returns ``(distance_to_nearest_surface, material_id)``
-for any point in world space; ``march`` walks the ray; ``get_normal`` does a
-4-tap forward difference (1 baseline + 3 axis-displaced taps -- the cheaper
-asymmetric cousin of the classic 6-tap central difference, visually identical
-at this eps + lighting); ``soft_shadow`` is IQ's penumbra estimate.
+The whole pipeline lives in one ``[vulkan_compute_shader]`` function plus a
+handful of private helpers. ``map(p, t)`` returns
+``(distance_to_nearest_surface, material_id)`` for any point in world space;
+``march`` walks the ray; ``get_normal`` does a 4-tap forward difference (1
+baseline + 3 axis-displaced taps -- the cheaper asymmetric cousin of the
+classic 6-tap central difference, visually identical at this eps + lighting);
+``soft_shadow`` is IQ's penumbra estimate. The ``[vulkan_compute_shader]``
+annotation also synthesises ``sdf_main_push_constants(cmd, layout)`` from
+``var @push_constant pc : Push`` -- the host just writes ``pc.time = time``
+and calls it.
 
 .. literalinclude:: ../../../tutorials/03_sdf/sdf_tut_shaders.das
    :language: das

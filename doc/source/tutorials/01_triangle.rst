@@ -31,12 +31,15 @@ and built without GLFW); it is the run-and-watch companion to the headless oracl
 The shader
 ----------
 
-Both stages are plain daslang functions tagged ``[vertex_shader]`` /
-``[fragment_shader]``. The emitted ``tri_spin_vert_spv`` / ``tri_spin_frag_spv``
-are ``array<uint>`` SPIR-V word blobs, fed straight to ``create_shader_module``.
-The vertex stage reads the rotation angle from a ``@push_constant`` struct, builds
-a 2D rotation, and spins the hardcoded clip-space positions; the fragment stage
-just writes the interpolated varying.
+Both stages are plain daslang functions tagged ``[vulkan_vertex_shader]`` /
+``[vulkan_fragment_shader]``. The emitted ``tri_spin_vert_spv`` /
+``tri_spin_frag_spv`` are ``array<uint>`` SPIR-V word blobs, fed straight to
+``create_shader_module``. The vertex stage reads the rotation angle from a
+``@push_constant`` struct, builds a 2D rotation, and spins the hardcoded
+clip-space positions; the fragment stage just writes the interpolated varying.
+The ``vulkan_*_shader`` annotations also synthesise a per-shader
+``<shader>_push_constants(cb, layout)`` helper that does the
+``vkCmdPushConstants`` call for the host -- see *The render* below.
 
 .. literalinclude:: ../../../tutorials/01_triangle/triangle_tut_shaders.das
    :language: das
@@ -47,8 +50,11 @@ The render
 The offscreen render is the dasVulkan boost path -- an offscreen color target, a
 single-color render pass, a graphics pipeline -- with one addition over a static
 triangle: a vertex **push-constant range** carrying the angle, pushed each draw
-with ``vkCmdPushConstants``. ``render_spin_triangle(angle)`` returns the RGBA8
-pixels, a pure parametric ``frame(angle) -> image``.
+through the macro-generated ``tri_spin_vert_push_constants(cmd, layout)``. The
+host just writes ``pc.angle = angle`` to the shader's ``@push_constant`` global;
+``[vulkan_vertex_shader]`` synthesised the rest of the upload at compile time.
+``render_spin_triangle(angle)`` returns the RGBA8 pixels, a pure parametric
+``frame(angle) -> image``.
 
 .. literalinclude:: ../../../tutorials/01_triangle/triangle_tut.das
    :language: das

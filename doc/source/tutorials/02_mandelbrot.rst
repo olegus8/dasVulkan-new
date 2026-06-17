@@ -15,9 +15,9 @@ view rectangle and iteration cap live at module scope and are shared with the ho
 
 The clip above is the **animated zoom** viewer (``window/show_mandelbrot_blit.das``)
 rendered headlessly into an APNG and muxed with a strudel music bed -- one
-``[compute_shader]`` dispatch per frame, a single ``time`` push constant driving
-both zoom and rotation about the seahorse-valley point. The voiceover is Kokoro
-``bf_emma``; see ``skills/recording.md``.
+``[vulkan_compute_shader]`` dispatch per frame, a single ``time`` push constant
+driving both zoom and rotation about the seahorse-valley point. The voiceover is
+Kokoro ``bf_emma``; see ``skills/recording.md``.
 
 The shader
 ----------
@@ -72,14 +72,16 @@ math rail (``cos`` / ``sin`` / ``pow`` / ``log2``):
 
 .. literalinclude:: ../../../tutorials/02_mandelbrot/window/mandelbrot_zoom_shaders.das
    :language: das
-   :start-at: [compute_shader
+   :start-at: [vulkan_compute_shader
 
 The compute result still lives in a *storage image*, off-screen, and still has to reach the
 swapchain -- a triangle draws straight into it through a render pass, a compute result does not.
 There are two standard ways, and a runnable viewer for each. Both build the resident compute
 resources once (``build_mandel_compute``) and re-dispatch them each frame with the new ``time``
 (``record_compute``); they live in a ``window/`` subfolder the CI gate skips (CI is headless and
-built without GLFW).
+built without GLFW). ``record_compute`` writes ``pc.time = time`` and calls the macro-generated
+``mandelbrot_zoom_push_constants(cmd, mc.pipe_layout)``; ``[vulkan_compute_shader]`` synthesised
+that helper from the shader's ``@push_constant pc : Push`` declaration.
 
 .. literalinclude:: ../../../tutorials/02_mandelbrot/window/mandelbrot_compute.das
    :language: das

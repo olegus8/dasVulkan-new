@@ -111,14 +111,10 @@ def main {
             recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
         }
         // one full turn every 2*pi seconds; pushed to the vertex shader each frame
-        var ang = float(glfwGetTime())
+        pc.angle = float(glfwGetTime())
         let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
-            var pcf : VkShaderStageFlags
-            pcf.vertex = true
-            unsafe {
-                vkCmdPushConstants(boost_value_to_vk(cmd), boost_value_to_vk(layout), pcf, 0u, 4u, reinterpret<void?>(addr(ang)))
-            }
+            tri_spin_vert_push_constants(cmd, layout)
             cmd_draw(cmd, 3u)
         }
         if (!ok) {
