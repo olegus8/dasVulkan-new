@@ -248,8 +248,9 @@ jobs:
       - name: "Smoke: module loads + Homebrew loader discovery (no render)"
         # examples/smoke.das requires the raw `vulkan` module (proves the
         # .shared_module loads on macOS) and calls volkInitialize -> our
-        # das_volkInitialize, which must find the Homebrew loader off volk's default
-        # dlopen search. It then does a raw (non-portability) vkCreateInstance, which
+        # das_volkInitialize, which must find the loader that volk's built-in macOS
+        # search misses (it dlopen's the Homebrew/SDK paths after volk's own search
+        # fails). It then does a raw (non-portability) vkCreateInstance, which
         # the loader rejects with INCOMPATIBLE_DRIVER without entering MoltenVK's
         # device init -- so no GPU. Assert volkInitialize succeeded (loader found).
         working-directory: ${{ github.workspace }}/dasVulkan
