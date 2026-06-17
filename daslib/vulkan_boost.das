@@ -855,9 +855,9 @@ def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : u
 }
 
 //! HostBuffer with caller-chosen usage flags (vertex/index/uniform/storage/transfer_src/...). The
-//! zero-arg overload above hardcodes `transfer_dst` for the readback-buffer role; this overload is
-//! the path tutorials reach for when they want a host-visible buffer with arbitrary usage. Memory is
-//! still HOST_VISIBLE | HOST_COHERENT.
+//! `(device, phys, size)` overload above hardcodes `transfer_dst` for the readback-buffer role;
+//! this overload is the path tutorials reach for when they want a host-visible buffer with
+//! arbitrary usage. Memory is still HOST_VISIBLE | HOST_COHERENT.
 def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : uint64; usage : VkBufferUsageFlags) : HostBuffer {
     var bci : BufferCreateInfo
     bci.size = size
@@ -885,6 +885,7 @@ def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : u
 def public upload_bytes(buf : HostBuffer; device : Device; var data : array<auto(TT)>) {
     if (empty(data)) return
     let nbytes = length(data) * typeinfo sizeof(type<TT>)
+    assert(uint64(nbytes) <= buf.size, "upload_bytes: data exceeds destination HostBuffer.size")
     var mapped : void? = null
     let mf : VkMemoryMapFlags
     unsafe {
@@ -895,9 +896,12 @@ def public upload_bytes(buf : HostBuffer; device : Device; var data : array<auto
 }
 
 //! Create a host-visible buffer sized to fit `data` and upload it in one call. The single-line
-//! "vertex/index buffer from typed array" the tutorials all reach for.
+//! "vertex/index buffer from typed array" the tutorials all reach for. Panics on empty input:
+//! Vulkan requires `VkBufferCreateInfo.size > 0` (VUID-VkBufferCreateInfo-size-00912), so an
+//! empty array can't produce a valid buffer here.
 def public create_host_buffer_from_bytes(device : Device; phys : VkPhysicalDevice;
                                          usage : VkBufferUsageFlags; var data : array<auto(TT)>) : HostBuffer {
+    assert(!empty(data), "create_host_buffer_from_bytes: empty data — VkBuffer.size must be > 0")
     let nbytes = uint64(length(data) * typeinfo sizeof(type<TT>))
     var hb <- create_host_buffer(device, phys, nbytes, usage)
     hb |> upload_bytes(device, data)
@@ -1089,12 +1093,18 @@ def public cmd_bind_vertex_buffer(cmd : CommandBuffer; binding : uint; buffer : 
 //! block at `offset`, for shader stages `stages`. The size is derived from the daslang value, so
 //! the call site no longer carries a hand-counted byte size or a `reinterpret<void?>(addr(...))`.
 //! TT's daslang layout must match the shader's std430 push-constant layout (true for scalar /
-//! vec4 / mat4 packs without vec3 padding surprises).
+//! vec4 / mat4 packs without vec3 padding surprises). Vulkan requires both `offset` and the
+//! resolved size to be multiples of 4 (VUID-vkCmdPushConstants-offset-00370 /
+//! VUID-vkCmdPushConstants-size-00369), so this asserts both — using e.g. a `bool` or `uint8`
+//! TT silently trips driver validation otherwise.
 def public cmd_push_constants(cmd : CommandBuffer; layout : PipelineLayout; stages : VkShaderStageFlags;
                               offset : uint; var value : auto(TT) const) {
+    let sz = uint(typeinfo sizeof(type<TT>))
+    assert((offset & 3u) == 0u, "cmd_push_constants: offset must be a multiple of 4")
+    assert((sz & 3u) == 0u, "cmd_push_constants: sizeof<TT> must be a multiple of 4")
     unsafe {
         vkCmdPushConstants(boost_value_to_vk(cmd), boost_value_to_vk(layout), stages,
-            offset, uint(typeinfo sizeof(type<TT>)), reinterpret<void?>(addr(value)))
+            offset, sz, reinterpret<void?>(addr(value)))
     }
 }
 
