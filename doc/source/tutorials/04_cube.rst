@@ -26,7 +26,8 @@ APNG and ffmpeg-muxed with a daStrudel supersaw-pad bed and a Kokoro voiceover.
 The camera orbits the cube on a lemniscate (small vertical figure-8 over the
 revolution) while the cube breathes via the push-constant scale; the texture's
 sun-disk drifts via a UV scroll keyed off ``cam_time.w``. See
-``skills/recording.md``.
+``skills/recording.md``. To watch it spin live in a resizable window on your own
+GPU, run the windowed viewer (see `See it live`_ below).
 
 The shaders
 -----------
@@ -51,16 +52,25 @@ layout, no manual ``push_from`` / ``upload_bytes`` packing.
 The render (headless)
 ---------------------
 
-``render_synthwave_cube(time, camera_t)`` is the one-shot path used by the
-test: build a fresh ``CubeContext`` and render one frame. The recording driver
-uses ``build_cube_context()`` once and calls ``render_cube_frame(ctx, ...)`` in
-a loop -- the long-lived state (instance, device, render pass, framebuffer,
-vertex / index / UBO buffers, texture image+view+sampler, descriptor + pipeline
-layouts, pipeline, readback buffer) is rebuilt once; the per-frame work is just
-``cam.view = ...; cam.proj = ...; cam.cam_time = ...; cube_vs_bind_uniform(...)``
-for the UBO and ``pc.model = ...; cube_vs_push_constants(...)`` for the
-per-frame model matrix, then drawing 36 indexed vertices and copying the
-colour attachment back. No window required.
+The per-frame work is split into two reusable halves so the windowed viewer can
+share the same render with the offscreen test. ``update_cube_uniforms`` writes
+the new view / projection / camera position into ``cam`` (the UBO) and the new
+model matrix into ``pc`` (the push constant) -- host-only work, no command
+buffer touched. ``record_cube_render_pass`` records the pipeline bind, the
+descriptor set, the push-constants upload, and the indexed draw into a caller-
+supplied command buffer; the render pass's ``finalLayout`` leaves the colour
+attachment in ``TRANSFER_SRC_OPTIMAL`` so a swapchain blit is one command away.
+
+.. literalinclude:: ../../../tutorials/04_cube/cube_tut.das
+   :language: das
+   :start-at: def public update_cube_uniforms
+   :end-before: //! Per-frame work
+
+``render_cube_frame`` is what the headless path uses: call the two helpers
+inside a ``run_cmd_sync``, then copy the colour attachment into the readback
+buffer and clone it out. ``render_synthwave_cube`` is the one-shot wrapper
+(``build_cube_context`` + ``render_cube_frame``) the test calls; the recording
+driver builds the context once and calls ``render_cube_frame`` in a loop.
 
 .. literalinclude:: ../../../tutorials/04_cube/cube_tut.das
    :language: das
@@ -82,6 +92,24 @@ cyan-dominant pixel from the perspective grid).
    :language: das
    :start-at: [test]
 
+See it live
+-----------
+
+``window/show_cube.das`` opens a GLFW window with a Vulkan swapchain and presents
+the spinning cube every frame. It owns its own instance (with surface extensions)
+and device (with ``VK_KHR_swapchain``), then calls ``build_cube_resources`` to
+share the offscreen render pass, framebuffer, geometry, texture and graphics
+pipeline with the headless oracle. Each frame it runs ``update_cube_uniforms`` +
+``record_cube_render_pass`` into the present command buffer, then blits the
+colour attachment onto the swapchain image. It needs a display and the ``glfw``
+module, so it lives in a ``window/`` subfolder that the tutorial's CI gate skips
+(CI is headless and built without GLFW); it is the run-and-watch companion to
+the headless oracle.
+
+.. literalinclude:: ../../../tutorials/04_cube/window/show_cube.das
+   :language: das
+   :start-at: require glfw/glfw_boost
+
 Running it
 ----------
 
@@ -90,3 +118,11 @@ Running it
    # the CI pixel-oracle gate (lavapipe in CI, real GPU locally)
    daslang -load_module <dasVulkan> <daslang>/dastest/dastest.das -- \
        --test <dasVulkan>/tutorials/04_cube
+
+   # watch it live in a window (needs the glfw module + a display)
+   daslang -load_module <dasVulkan> \
+       <dasVulkan>/tutorials/04_cube/window/show_cube.das
+
+   # regenerate the recording (needs stbimage + audio + ffmpeg locally)
+   daslang -load_module <dasVulkan> \
+       <dasVulkan>/tutorials/04_cube/recording/record_cube.das
