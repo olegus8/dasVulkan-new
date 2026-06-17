@@ -30,7 +30,8 @@ APNG and ffmpeg-muxed with a daStrudel ambient pad bed and a Kokoro voiceover.
 The camera completes one full orbit around the scene (period chosen so the
 loop closes seamlessly); the torus rotates around the sphere, the sphere
 gently bobs, and the cosine-palette pulse cycles the blob hue across the orbit
-(cream -> blue -> copper). See ``skills/recording.md``.
+(cream -> blue -> copper). See ``skills/recording.md``. To watch the raymarch
+update live on your own GPU, run the windowed viewer (see `See it live`_ below).
 
 The shader
 ----------
@@ -80,6 +81,23 @@ checkered ground hit), and a warm-toned hero blob in the central band.
    :language: das
    :start-at: [test]
 
+See it live
+-----------
+
+``window/show_sdf.das`` opens a GLFW window with a Vulkan swapchain and
+recomputes the raymarch every frame -- the time push constant comes from
+wall-clock, so the camera orbit and the cosine palette pulse update live as
+the window stays open. It reuses the same ``sdf_spv`` blob the headless render
+uses; the only additions are the surface, swapchain, and a per-frame blit of
+the compute storage image onto the swap image. It needs a display and the
+``glfw`` module, so it lives in a ``window/`` subfolder that the tutorial's CI
+gate skips (CI is headless and built without GLFW); it is the run-and-watch
+companion to the headless oracle.
+
+.. literalinclude:: ../../../tutorials/03_sdf/window/show_sdf.das
+   :language: das
+   :start-at: require glfw/glfw_boost
+
 Running it
 ----------
 
@@ -88,3 +106,11 @@ Running it
    # the CI pixel-oracle gate (lavapipe in CI, real GPU locally)
    daslang -load_module <dasVulkan> <daslang>/dastest/dastest.das -- \
        --test <dasVulkan>/tutorials/03_sdf
+
+   # watch it live in a window (needs the glfw module + a display)
+   daslang -load_module <dasVulkan> \
+       <dasVulkan>/tutorials/03_sdf/window/show_sdf.das
+
+   # regenerate the recording (needs stbimage + audio + ffmpeg locally)
+   daslang -load_module <dasVulkan> \
+       <dasVulkan>/tutorials/03_sdf/recording/record_sdf.das

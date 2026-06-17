@@ -233,14 +233,12 @@ def private upload_bytes(device : Device; memory : DeviceMemory; var data : arra
 
 // ===== reusable per-frame context =====
 
-//! Long-lived Vulkan state shared across recorded frames -- per-call rebuild would dominate a 900
-//! frame recording wall-clock. Split so the test can do a one-shot via render_synthwave_cube and
-//! the recorder can build once and call render_cube_frame in a loop.
-struct public CubeContext {
-    instance    : Instance
-    device      : Device
-    queue       : VkQueue
-    pool        : CommandPool
+//! All cube rendering state that depends only on (device, phys, queue, pool) -- offscreen targets,
+//! render pass, framebuffer, geometry/UBO buffers, procedural texture + sampler + descriptors, the
+//! graphics pipeline, and a host-visible readback buffer. The driver owns instance/device/queue/pool
+//! and passes them into build_cube_resources, so the same resources work behind either an offscreen
+//! oracle (the [test]) or a swapchain blit (window/show_cube.das).
+struct public CubeResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
     render_pass : RenderPass
@@ -264,45 +262,54 @@ struct public CubeContext {
 
 //! Reverse-of-creation cleanup (the desc_set is owned by desc_pool so its raw handle just goes
 //! away when the pool destroys; nothing to delete for it explicitly).
+def public finalize(var r : CubeResources) {
+    unsafe {
+        delete r.readback
+        delete r.pipeline
+        delete r.pipe_layout
+        delete r.desc_pool
+        delete r.set_layouts
+        delete r.sampler
+        delete r.tex_view
+        delete r.tex_image
+        delete r.tex_memory
+        delete r.ubo
+        delete r.ib
+        delete r.vb
+        delete r.framebuffer
+        delete r.render_pass
+        delete r.depth
+        delete r.color
+    }
+}
+
+//! Self-contained one-shot context for the offscreen oracle + recording driver: owns its own
+//! instance/device/queue/pool plus the full CubeResources bundle. Windowed drivers don't use this
+//! type -- they build their own instance (with surface extensions) + device (with VK_KHR_swapchain),
+//! then call build_cube_resources directly.
+struct public CubeContext {
+    instance : Instance
+    device   : Device
+    queue    : VkQueue
+    pool     : CommandPool
+    res      : CubeResources
+}
+
 def public finalize(var ctx : CubeContext) {
     unsafe {
-        delete ctx.readback
-        delete ctx.pipeline
-        delete ctx.pipe_layout
-        delete ctx.desc_pool
-        delete ctx.set_layouts
-        delete ctx.sampler
-        delete ctx.tex_view
-        delete ctx.tex_image
-        delete ctx.tex_memory
-        delete ctx.ubo
-        delete ctx.ib
-        delete ctx.vb
-        delete ctx.framebuffer
-        delete ctx.render_pass
-        delete ctx.depth
-        delete ctx.color
+        delete ctx.res
         delete ctx.pool
         delete ctx.device
         delete ctx.instance
     }
 }
 
-//! One-time setup: instance, device, queue, color+depth offscreen targets, render pass, framebuffer,
-//! vertex+index+UBO buffers, procedural texture (uploaded + transitioned to SHADER_READ_ONLY),
-//! descriptor + pipeline layouts (from reflection), pipeline, readback buffer.
-def public build_cube_context() : CubeContext {
-    if (volkInitialize() != 0) {
-        panic("no Vulkan loader")
-    }
-    var inscope instance <- create_instance("dasVulkan tutorial 04", make_api_version(1u, 3u, 0u))
-    volkLoadInstance(boost_value_to_vk(instance))
-    let phys = select_physical_device(instance)
-    let gfx = select_graphics_queue_family(phys)
-    var inscope device <- create_device(phys, gfx)
-    volkLoadDevice(boost_value_to_vk(device))
+//! Build the cube's render resources against a caller-owned (device, phys, queue, pool). Used by
+//! both build_cube_context (offscreen test/recording) and window/show_cube.das (swapchain blit).
+//! The pool's queue family must equal the family `queue` came from -- the texture upload is recorded
+//! into pool and submitted on queue.
+def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : CubeResources {
     let dev = boost_value_to_vk(device)
-    var queue = get_device_queue(device, gfx, 0u)
 
     var inscope color <- build_offscreen_target(device, phys, CUBE_W, CUBE_H, CUBE_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, CUBE_W, CUBE_H, CUBE_DEPTH_FMT)
@@ -479,9 +486,6 @@ def public build_cube_context() : CubeContext {
 
     let buf_size = uint64(CUBE_W * CUBE_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
-    var poolci : CommandPoolCreateInfo
-    poolci.queueFamilyIndex = gfx
-    var inscope pool <- create_command_pool(device, poolci)
 
     // one-shot texture upload: staging -> tex_image, transitioned UNDEFINED -> TRANSFER_DST -> SHADER_READ_ONLY
     run_cmd_sync(device, pool, queue) $(cmd) {
@@ -511,8 +515,7 @@ def public build_cube_context() : CubeContext {
             to_dst, to_read, xfer, frag_stage)
     }
 
-    return <- CubeContext(
-        instance <- instance, device <- device, queue = queue, pool <- pool,
+    return <- CubeResources(
         color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
         vb <- vb, ib <- ib, ubo <- ubo,
         tex_image <- tex_image, tex_memory <- tex_memory, tex_view <- tex_view, sampler <- sampler,
@@ -521,10 +524,32 @@ def public build_cube_context() : CubeContext {
         buf_size = buf_size, push_size = push_size)
 }
 
-//! Per-frame work: rewrite the UBO with the new camera+time, draw the cube with the new model
-//! matrix as a push constant, copy the color attachment into the readback buffer, and clone the
-//! bytes out as RGBA8.
-def public render_cube_frame(var ctx : CubeContext; time, camera_t : float) : array<uint8> {
+//! Build the offscreen-self-contained context (own instance + device + queue + pool + resources).
+//! The [test] and the recording driver use this; window/show_cube.das does NOT -- it owns its own
+//! instance/device with surface+swapchain extensions and calls build_cube_resources directly.
+def public build_cube_context() : CubeContext {
+    if (volkInitialize() != 0) {
+        panic("no Vulkan loader")
+    }
+    var inscope instance <- create_instance("dasVulkan tutorial 04", make_api_version(1u, 3u, 0u))
+    volkLoadInstance(boost_value_to_vk(instance))
+    let phys = select_physical_device(instance)
+    let gfx = select_graphics_queue_family(phys)
+    var inscope device <- create_device(phys, gfx)
+    volkLoadDevice(boost_value_to_vk(device))
+    var queue = get_device_queue(device, gfx, 0u)
+    var poolci : CommandPoolCreateInfo
+    poolci.queueFamilyIndex = gfx
+    var inscope pool <- create_command_pool(device, poolci)
+    var inscope res <- build_cube_resources(device, phys, queue, pool)
+    return <- CubeContext(
+        instance <- instance, device <- device, queue = queue, pool <- pool, res <- res)
+}
+
+//! Host-side per-frame prep: derive camera matrices + cam_time from `camera_t in [0,1)` and `time`
+//! (seconds), push them into the UBO via cube_vs_bind_uniform, and stamp the model push constant.
+//! Both the offscreen oracle and the windowed driver call this once before recording any commands.
+def public update_cube_uniforms(res : CubeResources; device : Device; time, camera_t : float) {
     let camera_angle = camera_t * 2.0f * PI
     let camera_r = 3.5f
     let cam_x = camera_r * cos(camera_angle)
@@ -537,34 +562,48 @@ def public render_cube_frame(var ctx : CubeContext; time, camera_t : float) : ar
     cam.view = look_at_rh(cam_pos, float3(0.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f))
     cam.proj = perspective_vk(60.0f * PI / 180.0f, float(CUBE_W) / float(CUBE_H), 0.1f, 10.0f)
     cam.cam_time = float4(cam_pos.x, cam_pos.y, cam_pos.z, time)
-    cube_vs_bind_uniform(ctx.device, ctx.ubo.memory)
+    cube_vs_bind_uniform(device, res.ubo.memory)
 
     let breathe = 1.0f + 0.05f * sin(time * 2.0f * PI / 5.0f)
     let spin = time * 0.5f
     pc.model = model_matrix(spin, breathe)
+}
 
+//! Record the cube's render pass + draw into the given command buffer. The render pass ends with
+//! the color attachment in TRANSFER_SRC_OPTIMAL (create_render_pass_color_depth default), so the
+//! windowed driver can blit res.color.image straight into the swap target without an extra
+//! transition. Caller must have run update_cube_uniforms first so the UBO + push-constant globals
+//! carry the desired frame data.
+def public record_cube_render_pass(res : CubeResources; cmd : CommandBuffer) {
+    let raw_cmd = boost_value_to_vk(cmd)
+    var clears <- [clear_color(0.02f, 0.0f, 0.06f, 1.0f), clear_depth(1.0f)]
+    record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(CUBE_W, CUBE_H), clears) {
+        cmd_bind_pipeline(cmd, res.pipeline)
+        let sets <- [vk_value_to_boost(res.desc_set)]
+        var no_dyn : array<uint>
+        cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
+        cube_vs_push_constants(cmd, res.pipe_layout)
+        unsafe {
+            var raw_vb = boost_value_to_vk(res.vb.buffer)
+            var zero_off = 0ul
+            vkCmdBindVertexBuffers(raw_cmd, 0u, 1u, addr(raw_vb), addr(zero_off))
+            vkCmdBindIndexBuffer(raw_cmd, boost_value_to_vk(res.ib.buffer), 0ul, VkIndexType.UINT16)
+            vkCmdDrawIndexed(raw_cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
+        }
+    }
+    delete clears
+}
+
+//! Per-frame work: update UBO + push constant, record the render pass, copy the color attachment
+//! into the readback buffer, clone the bytes out as RGBA8.
+def public render_cube_frame(var ctx : CubeContext; time, camera_t : float) : array<uint8> {
+    update_cube_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        let raw_cmd = boost_value_to_vk(cmd)
-        var clears <- [clear_color(0.02f, 0.0f, 0.06f, 1.0f), clear_depth(1.0f)]
-        record_render_pass(cmd, ctx.render_pass, ctx.framebuffer, full_area(CUBE_W, CUBE_H), clears) {
-            cmd_bind_pipeline(cmd, ctx.pipeline)
-            let sets <- [vk_value_to_boost(ctx.desc_set)]
-            var no_dyn : array<uint>
-            cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, ctx.pipe_layout, 0u, sets, no_dyn)
-            cube_vs_push_constants(cmd, ctx.pipe_layout)
-            unsafe {
-                var raw_vb = boost_value_to_vk(ctx.vb.buffer)
-                var zero_off = 0ul
-                vkCmdBindVertexBuffers(raw_cmd, 0u, 1u, addr(raw_vb), addr(zero_off))
-                vkCmdBindIndexBuffer(raw_cmd, boost_value_to_vk(ctx.ib.buffer), 0ul, VkIndexType.UINT16)
-                vkCmdDrawIndexed(raw_cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
-            }
-        }
-        delete clears
-        copy_image_to_buffer(cmd, ctx.color.image, ctx.readback, CUBE_W, CUBE_H)
+        record_cube_render_pass(ctx.res, cmd)
+        copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, CUBE_W, CUBE_H)
     }
-    map_memory_to_array(ctx.device, ctx.readback.memory, ctx.buf_size) $(m) {
+    map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {
         pixels := m
     }
     return <- pixels
