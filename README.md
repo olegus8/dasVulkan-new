@@ -9,7 +9,7 @@ The binding generator is itself written in daslang (`generator/`), parsing `vk.x
 
 ## Status
 
-Working. The raw `vulkan` module covers the full API surface, and the generated `vulkan_boost` layer makes it ergonomic — RAII-owned handle wrappers, sType-filling constructors, `array<T>`-based struct views, and high-level builders. Three offscreen examples (triangle, compute, device enumeration) run on a real GPU, on Mesa lavapipe (Linux CI), and on MoltenVK (macOS CI).
+Working. The raw `vulkan` module covers the full API surface, and the generated `vulkan_boost` layer makes it ergonomic — RAII-owned handle wrappers, sType-filling constructors, `array<T>`-based struct views, and high-level builders. Three offscreen examples (triangle, compute, device enumeration) run on a real GPU and on Mesa lavapipe (Linux CI); a macOS CI lane build-gates the MoltenVK path (GitHub's macOS runners have no GPU to render on, so render testing stays on real hardware).
 
 ```
 daslang -load_module <path-to-dasVulkan> examples/offscreen_triangle_boost.das   # boost triangle

@@ -7,10 +7,11 @@ name: Integration tests
 # GPU. The package vendors volk + Vulkan-Headers and the generated bindings are
 # committed, so the build needs no Vulkan SDK.
 #
-# Two lanes: Linux on Mesa lavapipe (the llvmpipe software Vulkan ICD), and macOS
-# on MoltenVK (Vulkan-over-Metal) via a stock `brew install molten-vk vulkan-loader
-# vulkan-tools` -- the same offscreen suite on both. Windows (lavapipe/swiftshader
-# via jakoch/install-vulkan-sdk-action) is still a follow-on.
+# Linux lane runs the full offscreen suite on Mesa lavapipe (the llvmpipe software
+# Vulkan ICD). macOS lane is build + loader-discovery only: GitHub's macOS runners
+# expose only a paravirtualized GPU that MoltenVK can't render on, so it gates the
+# macOS build (Metal bridge + frameworks) and the Homebrew loader discovery, not
+# rendering. Windows (lavapipe/swiftshader) is still a follow-on.
 on:
   push:
     branches: [master]
@@ -155,17 +156,20 @@ jobs:
             --isolated-mode \
             --isolated-mode-threads 4
 
-  integration_macos:
-    # MoltenVK (Vulkan-over-Metal) on an Apple-Silicon runner, same in-process
-    # offscreen suite as the Linux lane. GitHub's macOS runners expose only a
-    # paravirtualized GPU (AppleParavirtGPU); stock MoltenVK crashes on it during
-    # vkCreateInstance -> initMetalFeatures (newArgumentEncoder... unrecognized
-    # selector). MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0 tells MoltenVK never to
-    # use Metal argument buffers, which avoids that probe path on the virtual GPU.
+  build_macos:
+    # macOS build + loader-discovery gate (Apple Silicon). GitHub's macOS runners
+    # expose only a paravirtualized GPU (AppleParavirtGPU) that cannot run the
+    # offscreen render suite -- stock MoltenVK crashes during device init, and even
+    # with Metal argument buffers disabled the render tests fail with
+    # ERROR_OUT_OF_DEVICE_MEMORY allocating targets (the same suite passes on real
+    # Apple GPUs). So this lane gates what CAN be checked headless: the macOS build
+    # (the CMake APPLE branch, the CAMetalLayer bridge dasVULKAN.metal.mm,
+    # Cocoa/QuartzCore linking) plus a no-render smoke that exercises the Homebrew
+    # loader discovery (das_volkInitialize). Render testing stays on real hardware
+    # (local). See ROADMAP "macOS CI".
     runs-on: macos-14
     env:
       SCCACHE_GHA_ENABLED: "true"
-      MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS: "0"
     defaults:
       run:
         shell: bash
@@ -182,21 +186,20 @@ jobs:
         with:
           path: dasVulkan
 
-      - name: "Install MoltenVK + Vulkan loader + tools (+ modern bison)"
-        # macOS has no native Vulkan driver; MoltenVK translates to Metal. The
-        # Homebrew loader auto-discovers MoltenVK's ICD (its SYSCONFDIR is the
-        # Homebrew prefix), and dasVulkan's das_volkInitialize finds the Homebrew
-        # loader off volk's default dlopen search -- so no VK_ICD_FILENAMES / DYLD_*
-        # override is needed (this is exactly the "just works" path users get).
+      - name: "Install Vulkan loader + MoltenVK + modern bison"
+        # The loader + MoltenVK let the smoke step exercise das_volkInitialize's
+        # Homebrew-loader discovery (the smoke uses a raw, non-portability
+        # vkCreateInstance, so the loader returns INCOMPATIBLE_DRIVER *before*
+        # MoltenVK's crashing device init -- no GPU is touched).
         #
         # bison: macOS ships GNU bison 2.3, too old for daslang's parser grammar
         # (`expecting string`). Install Homebrew bison 3.x and prepend it to PATH
-        # for the later build step via $GITHUB_PATH (the default non-login shell
-        # does not source ~/.bash_profile). `brew --prefix bison` resolves the keg
-        # path regardless of the Homebrew prefix (/opt/homebrew vs /usr/local).
+        # for the build step via $GITHUB_PATH (the default non-login shell does not
+        # source ~/.bash_profile). `brew --prefix bison` resolves the keg path
+        # regardless of the Homebrew prefix (/opt/homebrew vs /usr/local).
         run: |
           set -eux
-          brew install molten-vk vulkan-loader vulkan-tools bison
+          brew install vulkan-loader molten-vk bison
           echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
 
       - name: "Install CMake and Ninja"
@@ -226,7 +229,7 @@ jobs:
           sccache --show-stats
           echo "BIN_DIR=bin" >> "$GITHUB_ENV"
 
-      - name: "Build the dasVulkan native module"
+      - name: "Build the dasVulkan native module (Metal bridge + frameworks)"
         # The CMake APPLE branch compiles src/dasVULKAN.metal.mm (the CAMetalLayer
         # bridge) and links Cocoa + QuartzCore. Bounded --parallel 2 over Ninja +
         # sccache (the ~55 generated TUs are template-heavy).
@@ -242,34 +245,19 @@ jobs:
           sccache --show-stats
           ls -la "${GITHUB_WORKSPACE}/dasVulkan"/*.shared_module
 
-      - name: "Verify MoltenVK is visible to the loader"
-        # Fail loudly here if no device enumerates (e.g. Metal unavailable on the
-        # runner) rather than letting the suite report a confusing
-        # ERROR_INCOMPATIBLE_DRIVER. vulkaninfo handles portability internally.
-        run: vulkaninfo --summary | grep -iE "deviceName|MoltenVK|apiVersion"
-
-      - name: "Run integration tests (offscreen, MoltenVK)"
-        # Same in-process offscreen suite as the Linux lane. create_instance
-        # auto-enables VK_KHR_portability_enumeration on MoltenVK; no env vars.
+      - name: "Smoke: module loads + Homebrew loader discovery (no render)"
+        # examples/smoke.das requires the raw `vulkan` module (proves the
+        # .shared_module loads on macOS) and calls volkInitialize -> our
+        # das_volkInitialize, which must find the Homebrew loader off volk's default
+        # dlopen search. It then does a raw (non-portability) vkCreateInstance, which
+        # the loader rejects with INCOMPATIBLE_DRIVER without entering MoltenVK's
+        # device init -- so no GPU. Assert volkInitialize succeeded (loader found).
         working-directory: ${{ github.workspace }}/dasVulkan
         run: |
           set -eux
-          "${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
+          out=$("${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
             -load_module "${GITHUB_WORKSPACE}/dasVulkan" \
-            "${GITHUB_WORKSPACE}/daslang-src/dastest/dastest.das" -- \
-            --test "${GITHUB_WORKSPACE}/dasVulkan/tests/integration" \
-            --timeout 600 \
-            --isolated-mode \
-            --isolated-mode-threads 4
-
-      - name: "Run tutorial pixel-oracle gates (offscreen, MoltenVK)"
-        working-directory: ${{ github.workspace }}/dasVulkan
-        run: |
-          set -eux
-          "${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
-            -load_module "${GITHUB_WORKSPACE}/dasVulkan" \
-            "${GITHUB_WORKSPACE}/daslang-src/dastest/dastest.das" -- \
-            --test "${GITHUB_WORKSPACE}/dasVulkan/tutorials" \
-            --timeout 600 \
-            --isolated-mode \
-            --isolated-mode-threads 4
+            "${GITHUB_WORKSPACE}/dasVulkan/examples/smoke.das")
+          echo "$out"
+          echo "$out" | grep -q "Vulkan instance version" \
+            || { echo "loader discovery regressed: das_volkInitialize did not find the Homebrew loader"; exit 1; }

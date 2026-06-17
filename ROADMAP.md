@@ -71,8 +71,17 @@ different-DPI display mid-session keeps its original scale — a proper fix need
 display-change hook reconciling `contentsScale` alongside the existing
 swapchain-extent recreation. Deferred (single-display is the common case).
 
-A macOS CI lane is wired (`tests.yml` `integration_macos`, MoltenVK on an
-Apple-Silicon runner), so the offscreen suite now regression-gates on macOS too.
+A macOS CI lane is wired (`tests.yml` `build_macos`, Apple-Silicon runner), but it
+is **build + loader-discovery only**, not a render gate. GitHub-hosted macOS
+runners expose only a paravirtualized GPU (`AppleParavirtGPU`): stock MoltenVK
+crashes during device init, and even with `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`
+the render tests fail with `ERROR_OUT_OF_DEVICE_MEMORY` allocating targets (the
+same suite passes on real Apple GPUs). So the lane gates the macOS build (the CMake
+`APPLE` branch, `dasVULKAN.metal.mm`, Cocoa/QuartzCore linking) and a no-render
+smoke (module load + Homebrew loader discovery). Running the offscreen render suite
+on macOS needs real hardware (local) or a future GPU-backed runner; a SwiftShader
+(CPU ICD) lane is the other option if render coverage on macOS CI becomes worth the
+setup.
 
 ## Windows CI
 
