@@ -266,6 +266,45 @@ def public create_render_pass_single_color(device : Device; format : VkFormat;
 //! Two-attachment render pass: color at index 0, depth at index 1. Color clears+stores like the
 //! single-color path; depth clears+discards (no read after the pass). Framebuffers built against
 //! this must pass `[color_view, depth_view]` in attachment order.
+//! Depth-only render pass for the shadow-mapping pattern. One attachment: depth, loadOp=CLEAR,
+//! storeOp=STORE, finalLayout=DEPTH_STENCIL_READ_ONLY_OPTIMAL so the main pass can sample the
+//! produced depth without a manual barrier. Vertex-only pipelines (no fragment) are valid against
+//! this pass — there are no color attachments to write.
+def public create_render_pass_depth_only(device : Device; depth_format : VkFormat;
+                                         final_layout : VkImageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL) : RenderPass {
+    var depth : VkAttachmentDescription
+    depth.format = depth_format
+    depth.samples._1 = true
+    depth.loadOp = VkAttachmentLoadOp.CLEAR
+    depth.storeOp = VkAttachmentStoreOp.STORE
+    depth.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
+    depth.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
+    depth.initialLayout = VkImageLayout.UNDEFINED
+    depth.finalLayout = final_layout
+
+    var depth_ref : VkAttachmentReference
+    depth_ref.attachment = 0u
+    depth_ref.layout = VkImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+
+    var subpass : VkSubpassDescription
+    subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
+
+    var ci = VkRenderPassCreateInfo()
+    ci.attachmentCount = 1u
+    ci.subpassCount = 1u
+    var h : VkRenderPass
+    unsafe {
+        subpass.pDepthStencilAttachment = addr(depth_ref)
+        ci.pAttachments = addr(depth)
+        ci.pSubpasses = addr(subpass)
+        vk_check(vkCreateRenderPass(boost_value_to_vk(device), ci, null, h), null)
+    }
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def public create_render_pass_color_depth(device : Device; color_format, depth_format : VkFormat;
                                           color_final_layout : VkImageLayout = VkImageLayout.TRANSFER_SRC_OPTIMAL) : RenderPass {
     var attaches : array<VkAttachmentDescription>
@@ -554,6 +593,44 @@ def public transition_image(cmd : CommandBuffer; image : Image; old_layout, new_
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
+//! Depth-aspect counterpart of `transition_image`. Same barrier mechanics; flips the aspectMask
+//! to `depth = true`. Used by the shadow-mapping pattern when the shadow map is sampled in pass 2
+//! after being written in pass 1, or any other depth-image layout transition not covered by the
+//! render-pass-driven finalLayout. Stencil-combined formats need the stencil bit too — caller can
+//! use the explicit `transition_image_aspect` overload below for that case.
+def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                                  src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
+    var aspect : VkImageAspectFlags
+    aspect.depth = true
+    transition_image_aspect(cmd, image, old_layout, new_layout, src_access, dst_access, src_stage, dst_stage, aspect)
+}
+
+//! Fully general `transition_image` — caller supplies the `aspectMask`. Use this for stencil
+//! aspects, combined depth+stencil, or anything `transition_image` / `transition_depth_image`
+//! don't cover. `levelCount = layerCount = 1` (matching the convenience helpers); for mip
+//! chains / array layers drop to a raw `cmd_pipeline_barrier`.
+def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                                   src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags;
+                                   aspect : VkImageAspectFlags) {
+    var barrier : ImageMemoryBarrier
+    barrier.srcAccessMask = src_access
+    barrier.dstAccessMask = dst_access
+    barrier.oldLayout = old_layout
+    barrier.newLayout = new_layout
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+    barrier.image = weak_copy(image)
+    barrier.subresourceRange.aspectMask = aspect
+    barrier.subresourceRange.levelCount = 1u
+    barrier.subresourceRange.layerCount = 1u
+    var no_mem : array<MemoryBarrier>
+    var no_buf : array<BufferMemoryBarrier>
+    var imgs : array<ImageMemoryBarrier>
+    imgs |> emplace(barrier)
+    var no_dep : VkDependencyFlags
+    cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
+}
+
 //! Run a compute shader that writes an Rgba8 storage image and return the w*h RGBA8 pixels. `words` is
 //! an emitted SPIR-V compute blob whose entry point binds a storage image2D at set=0/binding=0 and
 //! `imageStore`s a color per invocation over an 8x8 local size. A one-shot: it creates its own
@@ -773,6 +850,16 @@ def public finalize(var d : OffscreenDepth) {
 
 def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
                                  format : VkFormat = VkFormat.D32_SFLOAT) : OffscreenDepth {
+    var extra : VkImageUsageFlags  // default: empty
+    return <- build_offscreen_depth(device, phys, width, height, format, extra)
+}
+
+//! `build_offscreen_depth` overload taking caller-supplied extra usage flags. The base helper
+//! always sets `depth_stencil_attachment`; this overload adds whatever else the caller needs —
+//! `sampled` for shadow maps (the image is read by a `sampler2DShadow` in the next pass),
+//! `transfer_src` for offscreen-depth readback, etc. Memory + view stay device-local D32_SFLOAT.
+def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
+                                 format : VkFormat; extra_usage : VkImageUsageFlags) : OffscreenDepth {
     var ici : ImageCreateInfo
     ici.imageType = VkImageType._2D
     ici.format = format
@@ -783,6 +870,7 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
     ici.arrayLayers = 1u
     ici.samples._1 = true
     ici.tiling = VkImageTiling.OPTIMAL
+    ici.usage = extra_usage
     ici.usage.depth_stencil_attachment = true
     ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope image <- create_image(device, ici)
@@ -1066,6 +1154,25 @@ def public clear_depth(depth : float = 1.0f; stencil : uint = 0u) : VkClearValue
     c.depthStencil.depth = depth
     c.depthStencil.stencil = stencil
     return c
+}
+
+//! Depth-compare ("shadow") sampler. Enables `compareEnable` + `compareOp = LESS` (Vulkan's "depth
+//! < reference" → return 1 = lit semantics) and uses LINEAR filtering so the hardware PCFs the 2x2
+//! footprint around the sample point. Address mode is CLAMP_TO_BORDER with a white (fully-lit)
+//! border so off-shadow-map fragments default to lit, the convention every shadow-map tutorial
+//! relies on. Consumed by `sampler2DShadow` + `textureCompare(...)` in the shader.
+def public create_sampler_shadow(device : Device; compare_op : VkCompareOp = VkCompareOp.LESS) : Sampler {
+    var sci : SamplerCreateInfo
+    sci.magFilter = VkFilter.LINEAR
+    sci.minFilter = VkFilter.LINEAR
+    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
+    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_BORDER
+    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_BORDER
+    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_BORDER
+    sci.borderColor = VkBorderColor.FLOAT_OPAQUE_WHITE
+    sci.compareEnable = VK_TRUE
+    sci.compareOp = compare_op
+    return <- create_sampler(device, sci)
 }
 
 //! bind a pipeline (defaults to the graphics bind point; pass COMPUTE for a compute pipeline)

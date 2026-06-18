@@ -127,3 +127,11 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/06_skybox/recording/record_skybox.das
+
+Next
+----
+
+:doc:`07_particles` hands the **vertex stream itself** to a compute shader:
+one ``VkBuffer`` lives as a storage-buffer SSBO for compute and as a
+per-vertex stream for graphics, with a single pipeline barrier between the
+passes. The first GPU-driven scene of the series.
