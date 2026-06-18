@@ -1091,25 +1091,7 @@ def public update_deferred_uniforms(res : DeferredResources; device : Device; ti
     scene.col1 = float4(0.6f, 3.6f, 1.0f, 1.5f)
     scene.pos2 = float4(lr * cos(lt + 4.188f), lh, lr * sin(lt + 4.188f), 6.0f)
     scene.col2 = float4(0.8f, 1.2f, 4.0f, 1.5f)
-    write_scene_ubo_manual(device, res.scene_ubo.memory)
-}
-
-//! Manual scene UBO write (the auto bind_uniform helper for lighting_fs isn't picking up scene --
-//! debugging suspects the macro sees two @uniform globals in the module and skips the non-first
-//! one for the lighting fragment's helper). Writes std140 layout directly: light_vp at 0, light_dir
-//! at 64, camera_pos at 80, then pos0/col0/pos1/col1/pos2/col2 at 96/112/128/144/160/176.
-def private write_scene_ubo_manual(device : Device; memory : DeviceMemory) {
-    with_mapped_memory(device, memory) $(ptr) {
-        write_field(ptr, 0u,    scene.light_vp)
-        write_field(ptr, 64u,   scene.light_dir)
-        write_field(ptr, 80u,   scene.camera_pos)
-        write_field(ptr, 96u,   scene.pos0)
-        write_field(ptr, 112u,  scene.col0)
-        write_field(ptr, 128u,  scene.pos1)
-        write_field(ptr, 144u,  scene.col1)
-        write_field(ptr, 160u,  scene.pos2)
-        write_field(ptr, 176u,  scene.col2)
-    }
+    lighting_fs_bind_uniform(device, res.scene_ubo.memory)
 }
 
 // ===== per-frame recording =====

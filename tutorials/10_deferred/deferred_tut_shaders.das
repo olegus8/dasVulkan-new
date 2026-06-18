@@ -195,8 +195,10 @@ def gbuffer_fs {
     var spec_intensity = 0.0
     var perturbed_normal = float3(0.0, 1.0, 0.0)
 
-    // Material branch by world_pos.y -- floor sits at y=0, cube at y=0.5..1.5
-    // (push-constant `f_material` read currently unreliable; positional check is robust).
+    // Material branch by world_pos.y — floor sits at y=0, cube at y=0.5..1.5. The natural form
+    // `f_material == 1` (push-constant routed via the @flat int varying) requires the SPIR-V emitter
+    // to emit the Flat decoration on integer varyings (Vulkan spec mandate); once that ships we'll
+    // switch this to a push-constant branch.
     if (f_world_pos.y < 0.5) {
         // Floor: brick pattern, low specularity, bumpy normal from mortar grooves.
         let uv = float2(f_world_pos.x, f_world_pos.z) * 0.5

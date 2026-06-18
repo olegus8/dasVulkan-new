@@ -105,12 +105,14 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     var ubo_globals : array<Variable?>
     collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
-            if (!(vv.annotation |> find_arg("uniform") is tBool)) continue
-            // Only struct-typed @uniform globals (the std140 interface-block case). Samplers /
-            // images / standalone scalars under @uniform either bind via descriptors or aren't
-            // supported here; skip them silently — the SPIR-V emitter has already rejected any
-            // invalid combos.
-            if (vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) continue
+            // Only struct-typed @uniform globals with at least one field (the std140 interface-block
+            // case). Sampler / image markers (sampler2D, sampler2DShadow, image2D, subpassInput …)
+            // are also `tStructure` at the AST level but with an empty field list — they bind via
+            // descriptor-set writes, not via mapped memory, so skip them here. Standalone scalars
+            // under @uniform are rejected by the SPIR-V emitter, so they never reach this point.
+            if (!(vv.annotation |> find_arg("uniform") is tBool) ||
+                vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null ||
+                empty(vv._type.structType.fields)) continue
             ubo_globals |> push(vv)
         }
     }
@@ -213,8 +215,8 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
     var pc_globals : array<Variable?>
     collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
-            if (!(vv.annotation |> find_arg("push_constant") is tBool)) continue
-            if (vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) continue
+            if (!(vv.annotation |> find_arg("push_constant") is tBool) ||
+                vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) continue
             pc_globals |> push(vv)
         }
     }
