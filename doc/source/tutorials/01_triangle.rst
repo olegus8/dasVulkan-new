@@ -90,3 +90,10 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/01_triangle/recording/record_triangle.das
+
+Next
+----
+
+:doc:`02_mandelbrot` swaps the graphics pipeline for the **compute** pipeline:
+the shader writes pixel colors directly to a storage image via ``imageStore``,
+no rasterizer involved. Same daslang→SPIR-V rails, different GPU stage.

@@ -127,3 +127,12 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/05_instancing/recording/record_instancing.das
+
+Next
+----
+
+:doc:`06_skybox` wraps the scene in an **environment** — a 6-face cubemap
+rendered as a unit cube behind everything else. The shader uses a
+``samplerCube`` (a daslang sampler type that lowers to ``OpTypeImage`` with
+``Cube`` dim), and a depth-test-only / depth-write-disabled rail keeps the
+sky from clipping the geometry.

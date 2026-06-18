@@ -135,6 +135,16 @@ Bitfield of shader-stage bits (``vertex``, ``fragment``, ``compute``, …). The
 stage mask telling Vulkan which shader stages read a push-constant update;
 consumed by ``cmd_push_constants``.
 
+.. _alias-vkimageaspectflags:
+
+``vulkan::VkImageAspectFlags``
+------------------------------
+
+Bitfield of image-aspect bits (``color``, ``depth``, ``stencil``). Selects
+which aspect of an image a layout transition or descriptor applies to;
+consumed by ``transition_image_aspect`` (the depth / stencil counterpart of
+the color-by-default ``transition_image``).
+
 .. _handle-vulkan-vkclearvalue:
 
 ``vulkan::VkClearValue``

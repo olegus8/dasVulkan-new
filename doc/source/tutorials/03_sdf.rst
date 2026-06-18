@@ -114,3 +114,11 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/03_sdf/recording/record_sdf.das
+
+Next
+----
+
+:doc:`04_cube` switches back to the **graphics** pipeline and adds the rest of
+a "real" 3D scene: per-vertex attributes, a depth attachment, a procedurally
+generated texture, an MVP matrix carried in a UBO, and proper Blinn-Phong-ish
+lighting.

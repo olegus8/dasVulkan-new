@@ -132,3 +132,10 @@ Running it
    # watch it live -- method 2: sample the result as a texture
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/02_mandelbrot/window/show_mandelbrot_sampled.das
+
+Next
+----
+
+:doc:`03_sdf` stays on the compute pipeline but trades the 2D fractal for a
+real 3D scene: a ray-marched signed distance field rendering primitives,
+soft shadows, and ambient occlusion from a fragment-style shader.

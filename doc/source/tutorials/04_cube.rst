@@ -1,9 +1,9 @@
 04 - The Synthwave Cube (graphics + depth)
 ==========================================
 
-The first two tutorials drew with the **graphics** pipeline (triangle) and the
-**compute** pipeline (Mandelbrot). This one is the first to need the whole
-graphics-with-depth surface: a textured 3D cube, lit, with a depth attachment
+:doc:`01_triangle` drew with the **graphics** pipeline; :doc:`02_mandelbrot`
+and :doc:`03_sdf` drew with the **compute** pipeline. This one is the first to
+need the whole graphics-with-depth surface: a textured 3D cube, lit, with a depth attachment
 so back faces are correctly hidden behind front faces. The headline rails:
 
 - a **per-vertex buffer** with position + uv + normal -- ``a_pos`` / ``a_uv`` /
@@ -126,3 +126,12 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/04_cube/recording/record_cube.das
+
+Next
+----
+
+:doc:`05_instancing` keeps the cube's graphics+depth pipeline but draws **a
+thousand of them in a single draw call** — a second vertex binding with
+``INPUT_RATE_INSTANCE`` feeds per-instance offset/color, and
+``vkCmdDrawIndexed`` gains an ``instanceCount`` argument the vertex shader
+reads via ``gl_InstanceIndex``.

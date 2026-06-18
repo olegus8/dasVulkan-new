@@ -137,3 +137,12 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/07_particles/recording/record_particles.das
+
+Next
+----
+
+:doc:`08_shadow` runs **two** render passes per frame: a depth-only pass
+from the light's POV writes a shadow map, then the main pass reads that
+same image as a ``sampler2DShadow``. Same "one image, two roles" discipline
+as this tutorial's compute SSBO + vertex stream, lifted to a depth texture
+across passes.
