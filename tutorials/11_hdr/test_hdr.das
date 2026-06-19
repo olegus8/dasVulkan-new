@@ -11,9 +11,10 @@ options indenting = 4
 //      smear bright energy into the dark margins outside ~50 texels).
 //   2) The frame contains at least one near-saturated emissive cube (>= 240 on the dominant
 //      channel) -- the HDR+ACES pipeline made it through without an early clamp.
-//   3) Bloom is visibly producing a halo: a histogram of luminance shows a heavy tail (>= 1% of
-//      pixels in the "very bright" bucket), which a non-bloom render of the same scene wouldn't
-//      produce -- emissive cubes alone cover <0.5% of the frame even at 8x boost.
+//   3) Bloom is visibly producing a halo: of 1024 sampled points across the central 480x480 band,
+//      at least 50 (~5%) land in the "bright/halo" luma bucket (80..200). A non-bloom render of
+//      the same scene wouldn't produce that count -- emissive cubes alone cover <0.5% of the frame
+//      even at 8x boost, so the surplus is the bloom halo dilation.
 
 require dastest/testing_boost public
 require hdr_tut

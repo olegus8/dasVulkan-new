@@ -23,7 +23,9 @@ options indenting = 4
 //   4. UP      : fullscreen pass with additive blend, 4 invocations (4->3, 3->2, 2->1, 1->0). 9-tap
 //                tent (3x3 with 1-2-1 / 2-4-2 / 1-2-1 / 16 weights) -- the classic Kawase upsample.
 //                Reads the smaller mip via the same push-constant `src_rcp` and adds onto the
-//                larger mip (loadOp=LOAD + COLOR_BLEND srcAlpha=ONE dstAlpha=ONE).
+//                larger mip (loadOp=LOAD + COLOR_BLEND srcColor=ONE dstColor=ONE on RGB; the
+//                colour-write mask drops alpha so the dst alpha stays pinned at the bright-pass
+//                value).
 //
 //   5. COMPOSITE: fullscreen pass to the LDR backbuffer. Reads HDR scene + bloom mip 0; combines as
 //                ``hdr + bloom * bloom_intensity`` (intensity = 0.06 by default, kept conservative so
@@ -31,9 +33,9 @@ options indenting = 4
 //                to encode for the sRGB target.
 //
 // All shaders share `cam_time : float4` in the scene UBO (xyz = camera world position, w = seconds).
-// Push-constants vary per pass: scene has `view_proj`, bright/down/up share `src_rcp + threshold +
-// soft_knee + bloom_intensity` (only the relevant fields read in each pass), composite uses the
-// shared block too.
+// The scene pass has no push-constant -- only the UBO. The four post-process passes share one
+// push-constant block (`BloomCtrl`: `src_rcp + threshold + soft_knee + bloom_intensity`); each pass
+// reads only the fields it needs and the host fills the relevant ones before each draw.
 
 module hdr_tut_shaders public
 
