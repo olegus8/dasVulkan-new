@@ -66,6 +66,13 @@ def main {
 
     var inscope res <- build_hdr_resources(device, phys, queue, pool)
     var inscope swap <- create_swapchain(device, phys, surface, HDR_W, HDR_H)
+    // The composite writes linear 16-bit float; the blit-to-swap relies on the swap surface being
+    // sRGB-encoded so the hardware does linear->sRGB conversion at the format step. If the system
+    // falls back to a non-sRGB surface format the user would see a too-dark presentation (no
+    // gamma encoding applied at all). Fail loudly rather than silently rendering wrong.
+    if (swap.format != VkFormat.B8G8R8A8_SRGB && swap.format != VkFormat.R8G8B8A8_SRGB) {
+        panic("tutorial 11 requires an sRGB swap-target format so the linear->sRGB encoding happens at the blit; got non-sRGB format -- consider extending the tutorial with a runtime gamma-encode path for that platform")
+    }
     var inscope sync <- create_frame_sync(device)
 
     while (glfwWindowShouldClose(window) == 0) {

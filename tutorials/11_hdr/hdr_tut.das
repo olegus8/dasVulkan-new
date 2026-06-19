@@ -351,7 +351,7 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
     sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
     sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.maxLod = 1.0f                              // was 0.0f -- maxLod=0 disables filtering
+    sci.maxLod = 1.0f                              // covers the single mip level the bloom images carry
     var inscope sampler_linear_clamp <- create_sampler(device, sci)
 
     // ----- geometry + UBOs -----
