@@ -24,7 +24,6 @@ require spirv/spirv_reflect public
 require scene_helpers
 
 // ===== Shader fixture =====
-let WG_SIZE = 64
 var @ssbo @binding = 0 csout : array<uint>
 var @workgroup cstile : uint[64]
 

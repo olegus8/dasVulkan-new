@@ -25,9 +25,11 @@ require scene_helpers
 //   - the X strip: xmin = -1 + draw_id * 0.5, xmax = xmin + 0.5  (NDC, 4 strips of width 0.5)
 //   - the output color: 0 -> red, 1 -> green, 2 -> blue, 3 -> yellow
 // gl_VertexIndex picks corner: 0=(xmin,-1) 1=(xmax,-1) 2=(xmax,1) 3=(xmin,-1) 4=(xmax,1) 5=(xmin,1).
-// `flat` on the int varying matches how integer @out / @in gets auto-Flat-decorated (the
-// non-perspective interpolation is required for integers in Vulkan -- no other mode exists).
-var @out @location = 0 di_draw : int
+// dasSpirv auto-applies the Flat decoration to integer @in / @out (per tests/spirv/test_raster.das
+// `test_vertex_flat`); marking the vertex side explicitly @flat here matches the house convention
+// (see tutorials/10_deferred/deferred_tut_shaders.das) and makes the intent unambiguous to
+// readers comparing the cross-stage interface.
+var @flat @out @location = 0 di_draw : int
 
 [vertex_shader(name="draw_id_vert_spv"), marker(no_coverage)]
 def draw_id_vert {
