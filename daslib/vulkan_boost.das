@@ -226,7 +226,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
 //! was promoted to core in 1.2, so a 1.2+ instance can opt into bindless via this struct in the pNext
 //! chain of ``VkDeviceCreateInfo``; no extension string is required. The instance must be at api
 //! version 1.2 (or higher); otherwise ``vkCreateDevice`` rejects the chain with
-//! ``ERROR_FEATURE_NOT_PRESENT``. Caller sets the needed flags; this helper threads the struct in.
+//! ``VK_ERROR_FEATURE_NOT_PRESENT``. Caller sets the needed flags; this helper threads the struct in.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features12 : VkPhysicalDeviceVulkan12Features) : Device {
     var prio = 1.0f
