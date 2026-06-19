@@ -54,9 +54,9 @@ var @uniform @set = 0 @binding = 0 nubo : NestedUBO
 var @push_constant pc : UboPush
 var @out @location = 0 nub_color : float4
 
-// Vertex shader: a 6-vertex fullscreen triangle pair driven by gl_VertexIndex (no vertex buffers).
-// Same trick as the existing test_triangle / textured-quad fixtures.
-var @out @location = 0 nu_uv : float2
+// Vertex shader: a 3-vertex oversized "fullscreen triangle" (verts at (-1,-1), (3,-1), (-1,3))
+// covering the screen with NO vertex buffer -- driven by gl_VertexIndex. The fragment doesn't need
+// a UV varying for this fixture; the per-pixel color is fully driven by the UBO + push constant.
 [vertex_shader(name="ubo_nested_vert_spv"), marker(no_coverage)]
 def ubo_nested_vert {
     let i = gl_VertexIndex
@@ -64,7 +64,6 @@ def ubo_nested_vert {
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
     if (i == 1) { xy = float2( 3.0f, -1.0f) }
     if (i == 2) { xy = float2(-1.0f,  3.0f) }
-    nu_uv = xy * 0.5f + float2(0.5f, 0.5f)
     gl_Position = float4(xy, 0.0f, 1.0f)
 }
 

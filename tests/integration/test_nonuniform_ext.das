@@ -28,8 +28,9 @@ struct NuPush {
 }
 var @binding = 0 nu_samplers : sampler2D[4]
 var @push_constant nupc : NuPush
-var @out @location = 0 nu_color : float4
-var @out @location = 0 nu_uv : float2
+// Vertex outputs the UV at @location 0; the fragment reads it via a separate @in at the same
+// location (two-variable cross-stage varying pattern -- see phase4_shaders.das).
+var @out @location = 0 v_nu_uv : float2
 
 [vertex_shader(name="nu_arr_vert_spv"), marker(no_coverage)]
 def nu_arr_vert {
@@ -38,13 +39,16 @@ def nu_arr_vert {
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
     if (i == 1) { xy = float2( 3.0f, -1.0f) }
     if (i == 2) { xy = float2(-1.0f,  3.0f) }
-    nu_uv = xy * 0.5f + float2(0.5f, 0.5f)
+    v_nu_uv = xy * 0.5f + float2(0.5f, 0.5f)
     gl_Position = float4(xy, 0.0f, 1.0f)
 }
 
+var @in @location = 0 fi_nu_uv : float2
+var @out @location = 0 nu_color : float4
+
 [fragment_shader(name="nu_arr_frag_spv"), marker(no_coverage)]
 def nu_arr_frag {
-    nu_color = texture(nu_samplers[nonuniformEXT(nupc.id)], nu_uv)
+    nu_color = texture(nu_samplers[nonuniformEXT(nupc.id)], fi_nu_uv)
 }
 
 // ===== Host render =====

@@ -28,8 +28,9 @@ struct SamplerPush {
 }
 var @binding = 0 samplers : sampler2D[4]
 var @push_constant pc : SamplerPush
-var @out @location = 0 ba_color : float4
-var @out @location = 0 ba_uv : float2
+// Vertex outputs the UV at @location 0; the fragment reads it via a separate @in at the same
+// location (the canonical two-variable cross-stage varying pattern -- see phase4_shaders.das).
+var @out @location = 0 v_ba_uv : float2
 
 [vertex_shader(name="bindless_arr_vert_spv"), marker(no_coverage)]
 def bindless_arr_vert {
@@ -38,13 +39,16 @@ def bindless_arr_vert {
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
     if (i == 1) { xy = float2( 3.0f, -1.0f) }
     if (i == 2) { xy = float2(-1.0f,  3.0f) }
-    ba_uv = xy * 0.5f + float2(0.5f, 0.5f)
+    v_ba_uv = xy * 0.5f + float2(0.5f, 0.5f)
     gl_Position = float4(xy, 0.0f, 1.0f)
 }
 
+var @in @location = 0 fi_ba_uv : float2
+var @out @location = 0 ba_color : float4
+
 [fragment_shader(name="bindless_arr_frag_spv"), marker(no_coverage)]
 def bindless_arr_frag {
-    ba_color = texture(samplers[pc.id], ba_uv)
+    ba_color = texture(samplers[pc.id], fi_ba_uv)
 }
 
 // ===== Host render =====
