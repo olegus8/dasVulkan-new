@@ -159,7 +159,14 @@ def hdr_bright_fs {
     let knee = max(pc.soft_knee, 0.0001)
     let t = clamp((luma - pc.threshold + knee) / (2.0 * knee), 0.0, 1.0)
     let curve = t * t * (3.0 - 2.0 * t)
-    frag_bright = float4(hdr * curve, 1.0)
+    // Karis 2014 partial-Karis weight `1/(1 + luma)` ("Next Generation Post Processing in Call of
+    // Duty Advanced Warfare", SIGGRAPH 2014, slide 142). Without this, an 8x-boosted emissive cube
+    // writes raw HDR ~8.0 into bloom mip 0; the composite's bilinear read produces a value > 1.0
+    // for most of the texel span, which clamps to white at the LDR target -- the sharp axis-aligned
+    // square block instead of a smooth halo. The Karis weight crushes 8.0 down to 8 / 9 ~= 0.89 so
+    // the pyramid carries values in [0, 1] and bilinear filtering at composite gives smooth bloom.
+    let karis_weight = 1.0 / (1.0 + luma)
+    frag_bright = float4(hdr * karis_weight * curve, 1.0)
 }
 
 // ===== DOWN pass (Kawase / Karis-bilinear, 5 samples) =====
@@ -232,9 +239,10 @@ def hdr_composite_fs {
     let bloom = textureLod(src_bloom, f_uv, 0.0).xyz
     let merged = hdr + bloom * pc.bloom_intensity
     let mapped = aces_fit(merged)
-    // gamma 1/2.2 encode for the R8G8B8A8_UNORM offscreen LDR target (the composite writes here,
-    // not the swapchain -- the windowed viewer blits this image onto whatever the swap target is).
-    // We don't bind an sRGB image view, so the shader does the gamma encode.
-    let g = float3(pow(mapped.x, 1.0 / 2.2), pow(mapped.y, 1.0 / 2.2), pow(mapped.z, 1.0 / 2.2))
-    frag_ldr = float4(g, 1.0)
+    // Output LINEAR post-tonemap values in [0,1]. The LDR target is R16G16B16A16_SFLOAT (16-bit
+    // float linear). Gamma encoding happens at the *blit* step where the destination is sRGB --
+    // for the window the swap target is B8G8R8A8_SRGB; for the static test we blit through an
+    // R8G8B8A8_SRGB readback image. Both routes get the linear->sRGB encoding for free in hardware,
+    // with ~12-bit equivalent dark-region precision -- no banding visible in smooth bloom halos.
+    frag_ldr = float4(mapped, 1.0)
 }
