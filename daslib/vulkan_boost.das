@@ -100,6 +100,49 @@ def public instance_extension_available(name : string) : bool {
     return found
 }
 
+//! is `name` advertised among `phys`'s available device extensions? Use this to gate an optional
+//! device extension before enabling it (e.g. skip a VK_EXT_mesh_shader test on a driver -- such as an
+//! older Mesa lavapipe -- that does not advertise it, rather than crashing vkCreateDevice).
+def public device_extension_available(phys : VkPhysicalDevice; name : string) : bool {
+    var count = 0u
+    if (vkEnumerateDeviceExtensionProperties(phys, "", count, null) != VkResult.SUCCESS || count == 0u) {
+        return false
+    }
+    var props : array<VkExtensionProperties>
+    props |> resize(int(count))
+    let rc = vkEnumerateDeviceExtensionProperties(phys, "", count, unsafe(addr(props[0])))
+    if (rc != VkResult.SUCCESS) {
+        return false
+    }
+    var found = false
+    for (p in props) {
+        unsafe {
+            if ("{reinterpret<string>(addr(p.extensionName[0]))}" == name) {
+                found = true
+                break
+            }
+        }
+    }
+    return found
+}
+
+//! True iff ``phys`` both advertises ``VK_EXT_mesh_shader`` AND reports the ``meshShader`` and
+//! ``taskShader`` feature bits as supported (queried via ``vkGetPhysicalDeviceFeatures2``). The
+//! extension string alone is not sufficient: a driver can list the extension yet report a feature
+//! bit as 0, which would still fail ``vkCreateDevice``. Use this to gate mesh-pipeline setup.
+def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_EXT_mesh_shader")) {
+        return false
+    }
+    var mf = VkPhysicalDeviceMeshShaderFeaturesEXT()   // sType pre-filled by the ctor
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = reinterpret<void?>(addr(mf))
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return mf.meshShader != 0u && mf.taskShader != 0u
+}
+
 def public create_instance(application_name : string; api_version : uint; extensions : array<string>) : Instance {
     var ai = VkApplicationInfo()
     ai.apiVersion = api_version
@@ -306,6 +349,57 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     return <- b
+}
+
+//! Create a device with ``VK_EXT_mesh_shader`` enabled. Caller sets the wanted feature flags (e.g.
+//! ``mf.meshShader = 1u``, ``mf.taskShader = 1u``); this helper threads
+//! ``VkPhysicalDeviceMeshShaderFeaturesEXT`` into the ``VkDeviceCreateInfo`` pNext chain. The caller
+//! MUST also pass the ``"VK_EXT_mesh_shader"`` device-extension string in ``extensions`` (the feature
+//! flags alone are not enough). Mesh/task shaders execute SPIR-V 1.4, which is core in Vulkan 1.2, so
+//! the instance must be at api version >= 1.2. Pairs with the dasSpirv mesh emitter and
+//! ``cmd_draw_mesh_tasks_e_x_t``. Verify the device advertises the features via a
+//! ``VkPhysicalDeviceMeshShaderFeaturesEXT`` queried through ``VkPhysicalDeviceFeatures2`` before
+//! enabling them; an unsupported flag fails ``vkCreateDevice``.
+def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
+                         var meshFeatures : VkPhysicalDeviceMeshShaderFeaturesEXT) : Device {
+    var prio = 1.0f
+    var qci = VkDeviceQueueCreateInfo()
+    qci.queueFamilyIndex = queue_family
+    qci.queueCount = 1u
+    unsafe {
+        qci.pQueuePriorities = addr(prio)
+    }
+    meshFeatures.sType = VkStructureType.PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = 1u
+    unsafe {
+        ci.pQueueCreateInfos = addr(qci)
+        ci.pNext = reinterpret<void?>(addr(meshFeatures))
+    }
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+        }
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    return <- b
+}
+
+//! Create a device with the mesh-shader pipeline enabled: ``meshShader`` + ``taskShader`` features plus
+//! the ``VK_EXT_mesh_shader`` device-extension string, in one call. This is the entry point Tutorial 13
+//! and its pixel-oracle (``tutorials/13_mesh/test_mesh.das``) use. The instance must be at api version >= 1.2 (SPIR-V 1.4).
+def public create_device_mesh_shader(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    if (!mesh_shader_supported(phys)) {
+        panic("create_device_mesh_shader: device does not support the VK_EXT_mesh_shader meshShader+taskShader features")
+    }
+    var mf : VkPhysicalDeviceMeshShaderFeaturesEXT
+    mf.meshShader = 1u
+    mf.taskShader = 1u
+    return <- create_device(phys, queue_family, ["VK_EXT_mesh_shader"], mf)
 }
 
 def public get_device_queue(device : Device; queue_family, index : uint) : VkQueue {
@@ -550,6 +644,92 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
         gp.pStages = addr(stages[0])
         gp.pVertexInputState = addr(vinput)
         gp.pInputAssemblyState = addr(iasm)
+        gp.pViewportState = addr(vpstate)
+        gp.pRasterizationState = addr(raster)
+        gp.pMultisampleState = addr(msaa)
+        gp.pColorBlendState = addr(blend)
+        vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
+    }
+    delete dyn_states
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+//! Graphics pipeline for the VK_EXT_mesh_shader pipeline: a task -> mesh -> fragment stage chain with
+//! NO vertex input and NO input-assembly state (a mesh pipeline amplifies geometry on the GPU; those
+//! two states are ignored, so they are left null). Everything else — viewport, rasterizer, MSAA-off,
+//! opaque color blend — matches `create_graphics_pipeline_simple`. The device must have been created
+//! with `create_device_mesh_shader` (or equivalent) and the shaders authored with `[vulkan_task_shader]`
+//! / `[vulkan_mesh_shader]` / `[vulkan_fragment_shader]`. Draw with `cmd_draw_mesh_tasks_e_x_t`.
+def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
+                                task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
+                                width, height : int; dynamic_viewport : bool = false) : Pipeline {
+    var stages : array<VkPipelineShaderStageCreateInfo>
+    stages |> resize(3)
+    stages[0] = VkPipelineShaderStageCreateInfo()
+    stages[0].stage.task_ext = true
+    stages[0].module_ = boost_value_to_vk(task)
+    stages[0].pName = "main"
+    stages[1] = VkPipelineShaderStageCreateInfo()
+    stages[1].stage.mesh_ext = true
+    stages[1].module_ = boost_value_to_vk(mesh)
+    stages[1].pName = "main"
+    stages[2] = VkPipelineShaderStageCreateInfo()
+    stages[2].stage.fragment = true
+    stages[2].module_ = boost_value_to_vk(frag)
+    stages[2].pName = "main"
+
+    var viewport : VkViewport
+    viewport.width = float(width)
+    viewport.height = float(height)
+    viewport.maxDepth = 1.0f
+    var scissor : VkRect2D
+    scissor.extent.width = uint(width)
+    scissor.extent.height = uint(height)
+    var vpstate = VkPipelineViewportStateCreateInfo()
+    vpstate.viewportCount = 1u
+    vpstate.scissorCount = 1u
+
+    var raster = VkPipelineRasterizationStateCreateInfo()
+    raster.polygonMode = VkPolygonMode.FILL
+    raster.frontFace = VkFrontFace.COUNTER_CLOCKWISE
+    raster.lineWidth = 1.0f
+    var msaa = VkPipelineMultisampleStateCreateInfo()
+    msaa.rasterizationSamples._1 = true
+    var blend_att : VkPipelineColorBlendAttachmentState
+    blend_att.colorWriteMask.r = true
+    blend_att.colorWriteMask.g = true
+    blend_att.colorWriteMask.b = true
+    blend_att.colorWriteMask.a = true
+    var blend = VkPipelineColorBlendStateCreateInfo()
+    blend.attachmentCount = 1u
+
+    var dyn_states : array<VkDynamicState>
+    var dynstate = VkPipelineDynamicStateCreateInfo()
+    if (dynamic_viewport) {
+        dyn_states |> push(VkDynamicState.VIEWPORT)
+        dyn_states |> push(VkDynamicState.SCISSOR)
+        dynstate.dynamicStateCount = uint(length(dyn_states))
+    }
+
+    var gp = VkGraphicsPipelineCreateInfo()
+    gp.stageCount = 3u
+    gp.layout = boost_value_to_vk(layout)
+    gp.renderPass = boost_value_to_vk(render_pass)
+    var h : VkPipeline
+    unsafe {
+        if (dynamic_viewport) {
+            dynstate.pDynamicStates = addr(dyn_states[0])
+            gp.pDynamicState = addr(dynstate)
+        } else {
+            vpstate.pViewports = addr(viewport)
+            vpstate.pScissors = addr(scissor)
+        }
+        blend.pAttachments = addr(blend_att)
+        gp.pStages = addr(stages[0])
+        // NB: pVertexInputState + pInputAssemblyState deliberately left null — ignored for mesh pipelines.
         gp.pViewportState = addr(vpstate)
         gp.pRasterizationState = addr(raster)
         gp.pMultisampleState = addr(msaa)

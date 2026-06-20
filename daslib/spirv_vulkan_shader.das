@@ -55,6 +55,20 @@ class SpirvVulkanFragmentShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.Fragment
 }
 
+// VK_EXT_mesh_shader stages. The base SpirvShader.apply reads the mesh output config
+// (max_vertices / max_primitives / output_topology) from the annotation args when shader_stage()
+// is Mesh, so [vulkan_mesh_shader(max_vertices=3, ...)] works exactly like [mesh_shader(...)] but
+// also gets the Vulkan uniform/push-constant bind helpers. Pairs with create_device_mesh_shader.
+[function_macro(name="vulkan_mesh_shader")]
+class SpirvVulkanMeshShader : SpirvVulkanShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Mesh
+}
+
+[function_macro(name="vulkan_task_shader")]
+class SpirvVulkanTaskShader : SpirvVulkanShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Task
+}
+
 // Reserve an empty bind_uniform_<shader>(device : Device; memory : DeviceMemory) function so
 // consumer code referencing it resolves during the first inference pass. The body is filled in
 // patch by generate_bind_uniform; until then `exports = true` flags the function as still dummy.
@@ -174,6 +188,8 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
 def private stage_to_uint(stage : ShaderStage) : uint {
     if (stage == ShaderStage.Vertex) return 0x1u
     if (stage == ShaderStage.Fragment) return 0x10u
+    if (stage == ShaderStage.Task) return 0x40u   // VK_SHADER_STAGE_TASK_BIT_EXT
+    if (stage == ShaderStage.Mesh) return 0x80u   // VK_SHADER_STAGE_MESH_BIT_EXT
     return 0x20u  // compute
 }
 

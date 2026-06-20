@@ -62,8 +62,9 @@ def document_module_vulkan_boost() {
     var mod = find_module("vulkan_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Device selection", mod, %regex~^(select_physical_device|select_graphics_queue_family|find_memory_type)$%%),
-        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|get_device_queue|instance_extension_available)$%%),
+        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|get_device_queue|instance_extension_available|device_extension_available)$%%),
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_graphics_pipeline_dyn|create_compute_pipeline)$%%),
+        group_by_regex("Mesh shaders",     mod, %regex~^(create_device_mesh_shader|mesh_shader_supported|create_mesh_pipeline)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth|depth_only)$%%),
         group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
         group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|write_field|upload_bytes)$%%),
