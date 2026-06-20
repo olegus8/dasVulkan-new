@@ -391,7 +391,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
 
 //! Create a device with the mesh-shader pipeline enabled: ``meshShader`` + ``taskShader`` features plus
 //! the ``VK_EXT_mesh_shader`` device-extension string, in one call. This is the entry point Tutorial 13
-//! and ``tests/integration/test_mesh_*.das`` use. The instance must be at api version >= 1.2 (SPIR-V 1.4).
+//! and its pixel-oracle (``tutorials/13_mesh/test_mesh.das``) use. The instance must be at api version >= 1.2 (SPIR-V 1.4).
 def public create_device_mesh_shader(phys : VkPhysicalDevice; queue_family : uint) : Device {
     if (!mesh_shader_supported(phys)) {
         panic("create_device_mesh_shader: device does not support the VK_EXT_mesh_shader meshShader+taskShader features")
