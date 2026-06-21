@@ -214,6 +214,8 @@ struct public DeferredResources {
     depth         : OffscreenDepth
     shadow_map    : OffscreenDepth
     shadow_sampler : Sampler
+    env_tex       : Texture            // HDR equirect environment (IBL)
+    env_sampler   : Sampler
 
     rp_shadow     : RenderPass
     rp_deferred   : RenderPass
@@ -276,6 +278,8 @@ def public finalize(var r : DeferredResources) {
         delete r.fb_shadow
         delete r.rp_deferred
         delete r.rp_shadow
+        delete r.env_sampler
+        delete r.env_tex
         delete r.shadow_sampler
         delete r.scene_ubo
         delete r.xform_ubo
@@ -337,6 +341,17 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     var inscope final_color <- build_offscreen_target(device, phys, DEFERRED_W, DEFERRED_H, FINAL_FMT, samples1, final_extra)
 
     var inscope shadow_sampler <- create_sampler_shadow(device)
+
+    // HDR equirect environment (Cannon, Poly Haven CC0) + a linear sampler (wrap azimuth, clamp poles)
+    var inscope env_tex <- load_texture_hdr(device, phys, queue, pool,
+        path_join(tutorial_asset_dir("hdri"), "cannon_2k.hdr"))
+    var esci : SamplerCreateInfo
+    esci.magFilter = VkFilter.LINEAR
+    esci.minFilter = VkFilter.LINEAR
+    esci.addressModeU = VkSamplerAddressMode.REPEAT
+    esci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
+    esci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
+    var inscope env_sampler <- create_sampler(device, esci)
 
     // ----- render passes -----
     var inscope rp_shadow   <- create_render_pass_depth_only(device, DEPTH_FMT)
@@ -432,7 +447,7 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     dpci.pPoolSizes |> push(p_ia)
     var p_smp : DescriptorPoolSize
     p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = 1u                                     // shadow_map for lighting
+    p_smp.descriptorCount = 2u                                     // shadow_map + env_map for lighting
     dpci.pPoolSizes |> push(p_smp)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -459,6 +474,7 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     writes |> emplace(write_input_attachment(lighting_set0, 3u, ssao_img.view))
     writes |> emplace(write_shadow_sampler(lighting_set1, 0u, shadow_map.view, shadow_sampler))
     writes |> emplace(write_ubo(lighting_set1, 1u, scene_ubo.buffer, SCENE_SIZE))
+    writes |> emplace(write_image_sampler(lighting_set1, 2u, env_tex.view, env_sampler))
 
     var no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
@@ -498,6 +514,8 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     r.depth <- depth
     r.shadow_map <- shadow_map
     r.shadow_sampler <- shadow_sampler
+    r.env_tex <- env_tex
+    r.env_sampler <- env_sampler
     r.rp_shadow <- rp_shadow
     r.rp_deferred <- rp_deferred
     r.fb_shadow <- fb_shadow
@@ -585,6 +603,21 @@ def private write_shadow_sampler(set : VkDescriptorSet; binding : uint; view : I
     ii.sampler = weak_copy(sampler)
     ii.imageView = weak_copy(view)
     ii.imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    w.pImageInfo |> push(ii)
+    return <- w
+}
+
+//! A regular sampled image (SHADER_READ_ONLY layout) — for the HDR environment map.
+def private write_image_sampler(set : VkDescriptorSet; binding : uint; view : ImageView; sampler : Sampler) : WriteDescriptorSet {
+    var w : WriteDescriptorSet
+    w.dstSet = vk_value_to_boost(set)
+    w.dstBinding = binding
+    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    w.descriptorCount = 1u
+    var ii : DescriptorImageInfo
+    ii.sampler = weak_copy(sampler)
+    ii.imageView = weak_copy(view)
+    ii.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
     w.pImageInfo |> push(ii)
     return <- w
 }

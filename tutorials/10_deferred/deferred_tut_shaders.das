@@ -266,6 +266,11 @@ var @set = 0 @binding = 3 @input_attachment_index = 3 lit_in_ssao     : subpassI
 
 var @uniform @set = 1 @binding = 0 shadow_map : sampler2DShadow
 
+//! Equirectangular HDR environment map (Cannon, Poly Haven, CC0). RGBA32F. Sampled by direction for
+//! image-based lighting: the env colour along the surface normal tints the diffuse ambient, and along
+//! the reflected view gives a real specular reflection.
+var @uniform @set = 1 @binding = 2 env_map : sampler2D
+
 let SHADOW_MAP_PX = 1024.0
 
 def private pcf_shadow(uv : float2; ref : float) : float {
@@ -278,6 +283,14 @@ def private pcf_shadow(uv : float2; ref : float) : float {
         }
     }
     return sum * (1.0 / 25.0)
+}
+
+//! Direction -> equirectangular UV. atan2/acos confirmed working in dasSpirv (the "no inverse trig"
+//! gap was a phantom). u wraps the azimuth, v maps the polar angle top(0) -> bottom(1).
+def private equirect_uv(d : float3) : float2 {
+    let u = atan2(d.z, d.x) * 0.15915494 + 0.5        // 1 / (2*pi)
+    let v = acos(clamp(d.y, -1.0, 1.0)) * 0.31830989  // 1 / pi
+    return float2(u, v)
 }
 
 var @in @location = 0 f_uv_lit : float2
@@ -385,14 +398,23 @@ def lighting_fs {
     pt_contrib = pt_contrib + point_light_contrib(scene.pos1, scene.col1, p, n, view_dir, shininess, spec_intensity)
     pt_contrib = pt_contrib + point_light_contrib(scene.pos2, scene.col2, p, n, view_dir, shininess, spec_intensity)
 
-    // ----- Hemisphere ambient (modulated by SSAO) -----
+    // ----- Hemisphere ambient + HDR environment IBL (modulated by SSAO) -----
     let sky_color = float3(0.22, 0.24, 0.36)
     let ground_color = float3(0.08, 0.06, 0.05)
     let amb_t = n.y * 0.5 + 0.5
-    let ambient = lerp(ground_color, sky_color, float3(amb_t, amb_t, amb_t))
+    let hemi_ambient = lerp(ground_color, sky_color, float3(amb_t, amb_t, amb_t))
+    // env colour along the normal tints the diffuse ambient (cheap irradiance approximation); env
+    // colour along the reflected view gives a real specular reflection, weighted by Fresnel + material.
+    let env_amb = texture(env_map, equirect_uv(n)).rgb
+    let ambient = lerp(hemi_ambient, env_amb, float3(0.4, 0.4, 0.4))   // splat t — dasSpirv FMix needs vec t
+    let inc = float3(-view_dir.x, -view_dir.y, -view_dir.z)
+    let rdir = inc - n * (2.0 * dot(n, inc))
+    let env_refl = texture(env_map, equirect_uv(rdir)).rgb
+    let fres = pow(1.0 - max(dot(n, view_dir), 0.0), 4.0)
+    let env_spec = env_refl * (spec_intensity * (0.10 + 0.7 * fres))
 
     let ao = clamp(ssao_factor, 0.0, 1.0)
-    let lighting = (ambient * ao) + (sun_contrib + pt_contrib) * (0.65 + 0.35 * ao)
+    let lighting = (ambient * ao) + (sun_contrib + pt_contrib) * (0.65 + 0.35 * ao) + env_spec * ao
 
     if (dbg.debug_mode == 5) {
         frag_color = float4(lighting, 1.0)
