@@ -665,7 +665,8 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
 //! / `[vulkan_mesh_shader]` / `[vulkan_fragment_shader]`. Draw with `cmd_draw_mesh_tasks_e_x_t`.
 def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
                                 task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
-                                width, height : int; dynamic_viewport : bool = false) : Pipeline {
+                                width, height : int; dynamic_viewport : bool = false;
+                                enable_depth : bool = false) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(3)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -706,6 +707,16 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
 
+    // depth test + write (LESS_OR_EQUAL) when the render pass carries a depth attachment; left off
+    // (pDepthStencilState null) by default so the depthless Tutorial 13 path is unchanged.
+    var depthstate = VkPipelineDepthStencilStateCreateInfo()
+    if (enable_depth) {
+        depthstate.depthTestEnable = VK_TRUE
+        depthstate.depthWriteEnable = VK_TRUE
+        depthstate.depthCompareOp = VkCompareOp.LESS_OR_EQUAL
+        depthstate.maxDepthBounds = 1.0f
+    }
+
     var dyn_states : array<VkDynamicState>
     var dynstate = VkPipelineDynamicStateCreateInfo()
     if (dynamic_viewport) {
@@ -733,6 +744,9 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
         gp.pViewportState = addr(vpstate)
         gp.pRasterizationState = addr(raster)
         gp.pMultisampleState = addr(msaa)
+        if (enable_depth) {
+            gp.pDepthStencilState = addr(depthstate)
+        }
         gp.pColorBlendState = addr(blend)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }

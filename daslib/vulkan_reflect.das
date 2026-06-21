@@ -34,6 +34,12 @@ def to_vk_stage_flags(stages : SpirvStageFlags) : VkShaderStageFlags {
     if (stages.compute) {
         f.compute = true
     }
+    if (stages.task) {
+        f.task_ext = true
+    }
+    if (stages.mesh) {
+        f.mesh_ext = true
+    }
     return f
 }
 
