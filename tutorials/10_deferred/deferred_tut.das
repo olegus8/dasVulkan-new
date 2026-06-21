@@ -92,11 +92,12 @@ def build_cat_geometry(var verts : array<float>; var indices : array<uint>) {
     }
     let center = (bmin + bmax) * 0.5
     let s = CAT_HEIGHT / max(bmax.y - bmin.y, 0.001)
-    verts |> reserve(length(frag.vertices) * 6)
+    verts |> reserve(length(frag.vertices) * 8)
     for (gv in frag.vertices) {
         let p = float3((gv.xyz.x - center.x) * s, (gv.xyz.y - bmin.y) * s, (gv.xyz.z - center.z) * s)
         verts |> push(p.x); verts |> push(p.y); verts |> push(p.z)
         verts |> push(gv.normal.x); verts |> push(gv.normal.y); verts |> push(gv.normal.z)
+        verts |> push(gv.uv.x); verts |> push(gv.uv.y)
     }
     indices |> reserve(length(frag.indices))
     for (gi in frag.indices) {
@@ -107,11 +108,12 @@ def build_cat_geometry(var verts : array<float>; var indices : array<uint>) {
 
 // Floor quad: 4 verts pos + (normal = 0, 1, 0). Big enough to catch the sun's shadow at all
 // camera angles. Triangle winding matches the +Y face above (CCW from above).
+// stride 32 = pos + normal + uv; the floor is procedural (world-pos tri-planar), so its uv is a dummy.
 let private floor_vertices : array<float> <- [
-    -6.0, 0.0,  6.0,  0.0, 1.0, 0.0,
-     6.0, 0.0,  6.0,  0.0, 1.0, 0.0,
-     6.0, 0.0, -6.0,  0.0, 1.0, 0.0,
-    -6.0, 0.0, -6.0,  0.0, 1.0, 0.0
+    -6.0, 0.0,  6.0,  0.0, 1.0, 0.0,  0.0, 0.0,
+     6.0, 0.0,  6.0,  0.0, 1.0, 0.0,  1.0, 0.0,
+     6.0, 0.0, -6.0,  0.0, 1.0, 0.0,  1.0, 1.0,
+    -6.0, 0.0, -6.0,  0.0, 1.0, 0.0,  0.0, 1.0
 ]
 
 let private floor_indices : array<uint16> <- [
@@ -216,6 +218,10 @@ struct public DeferredResources {
     shadow_sampler : Sampler
     env_tex       : Texture            // HDR equirect environment (IBL)
     env_sampler   : Sampler
+    cat_albedo    : Texture            // cat PBR: diff / nor_gl / arm
+    cat_normal    : Texture
+    cat_arm       : Texture
+    cat_sampler   : Sampler
 
     rp_shadow     : RenderPass
     rp_deferred   : RenderPass
@@ -278,6 +284,10 @@ def public finalize(var r : DeferredResources) {
         delete r.fb_shadow
         delete r.rp_deferred
         delete r.rp_shadow
+        delete r.cat_sampler
+        delete r.cat_arm
+        delete r.cat_normal
+        delete r.cat_albedo
         delete r.env_sampler
         delete r.env_tex
         delete r.shadow_sampler
@@ -352,6 +362,24 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     esci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
     esci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
     var inscope env_sampler <- create_sampler(device, esci)
+
+    // Cat statue PBR maps (concrete_cat_statue, CC0): diff is sRGB albedo; nor_gl + arm are linear.
+    let cat_tex_dir = path_join(tutorial_asset_dir("cat"), "textures")
+    var inscope cat_albedo <- load_texture_2d(device, phys, queue, pool,
+        path_join(cat_tex_dir, "concrete_cat_statue_diff_2k.jpg"), true)
+    var inscope cat_normal <- load_texture_2d(device, phys, queue, pool,
+        path_join(cat_tex_dir, "concrete_cat_statue_nor_gl_2k.jpg"), false)
+    var inscope cat_arm <- load_texture_2d(device, phys, queue, pool,
+        path_join(cat_tex_dir, "concrete_cat_statue_arm_2k.jpg"), false)
+    var csci : SamplerCreateInfo
+    csci.magFilter = VkFilter.LINEAR
+    csci.minFilter = VkFilter.LINEAR
+    csci.mipmapMode = VkSamplerMipmapMode.LINEAR
+    csci.addressModeU = VkSamplerAddressMode.REPEAT
+    csci.addressModeV = VkSamplerAddressMode.REPEAT
+    csci.addressModeW = VkSamplerAddressMode.REPEAT
+    csci.maxLod = 16.0f
+    var inscope cat_sampler <- create_sampler(device, csci)
 
     // ----- render passes -----
     var inscope rp_shadow   <- create_render_pass_depth_only(device, DEPTH_FMT)
@@ -447,7 +475,7 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     dpci.pPoolSizes |> push(p_ia)
     var p_smp : DescriptorPoolSize
     p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = 2u                                     // shadow_map + env_map for lighting
+    p_smp.descriptorCount = 5u                                     // shadow_map + env_map + 3 cat maps
     dpci.pPoolSizes |> push(p_smp)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -465,6 +493,9 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write_ubo(shadow_set, 0u, xform_ubo.buffer, XFORM_SIZE))
     writes |> emplace(write_ubo(gbuffer_set, 0u, xform_ubo.buffer, XFORM_SIZE))
+    writes |> emplace(write_image_sampler(gbuffer_set, 1u, cat_albedo.view, cat_sampler))
+    writes |> emplace(write_image_sampler(gbuffer_set, 2u, cat_normal.view, cat_sampler))
+    writes |> emplace(write_image_sampler(gbuffer_set, 3u, cat_arm.view, cat_sampler))
     writes |> emplace(write_ubo(ssao_set, 1u, scene_ubo.buffer, SCENE_SIZE))
     writes |> emplace(write_input_attachment(ssao_set_input, 0u, g_normal.view))
     writes |> emplace(write_input_attachment(ssao_set_input, 1u, g_worldpos.view))
@@ -516,6 +547,10 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     r.shadow_sampler <- shadow_sampler
     r.env_tex <- env_tex
     r.env_sampler <- env_sampler
+    r.cat_albedo <- cat_albedo
+    r.cat_normal <- cat_normal
+    r.cat_arm <- cat_arm
+    r.cat_sampler <- cat_sampler
     r.rp_shadow <- rp_shadow
     r.rp_deferred <- rp_deferred
     r.fb_shadow <- fb_shadow
@@ -806,7 +841,7 @@ def private build_shadow_pipeline_d(device : Device; rp : RenderPass; layout : P
     var vbindings : array<VkVertexInputBindingDescription>
     var vb_desc : VkVertexInputBindingDescription
     vb_desc.binding = 0u
-    vb_desc.stride = 24u                                            // pos + normal (stride 24, normal unused in shadow pass)
+    vb_desc.stride = 32u                                            // pos + normal + uv (shadow uses only pos@0)
     vb_desc.inputRate = VkVertexInputRate.VERTEX
     vbindings |> push(vb_desc)
     var vattrs : array<VkVertexInputAttributeDescription>
@@ -909,7 +944,7 @@ def private build_gbuffer_pipeline(device : Device; rp : RenderPass; layout : Pi
     var vbindings : array<VkVertexInputBindingDescription>
     var vb_desc : VkVertexInputBindingDescription
     vb_desc.binding = 0u
-    vb_desc.stride = 24u
+    vb_desc.stride = 32u                                            // pos(12) + normal(12) + uv(8)
     vb_desc.inputRate = VkVertexInputRate.VERTEX
     vbindings |> push(vb_desc)
     var vattrs : array<VkVertexInputAttributeDescription>
@@ -925,6 +960,12 @@ def private build_gbuffer_pipeline(device : Device; rp : RenderPass; layout : Pi
     an.format = VkFormat.R32G32B32_SFLOAT
     an.offset = 12u
     vattrs |> push(an)
+    var au : VkVertexInputAttributeDescription
+    au.location = 2u
+    au.binding = 0u
+    au.format = VkFormat.R32G32_SFLOAT
+    au.offset = 24u
+    vattrs |> push(au)
 
     var vinput = VkPipelineVertexInputStateCreateInfo()
     var iasm = VkPipelineInputAssemblyStateCreateInfo()

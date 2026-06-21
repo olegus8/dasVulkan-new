@@ -83,6 +83,7 @@ var @push_constant op : ObjectPush
 
 var @in @location = 0 a_pos    : float3
 var @in @location = 1 a_normal : float3
+var @in @location = 2 a_uv     : float2
 
 // ===== shadow pass =====
 
@@ -99,6 +100,7 @@ def shadow_vs {
 var @out @location = 0 v_world_pos     : float3
 var @out @location = 1 v_world_normal  : float3
 var @flat @out @location = 2 v_material : int
+var @out @location = 3 v_uv            : float2
 
 [vulkan_vertex_shader(name="gbuffer_vert_spv")]
 def gbuffer_vs {
@@ -107,12 +109,20 @@ def gbuffer_vs {
     let n_world4 = op.model * float4(a_normal, 0.0)
     v_world_normal = normalize(float3(n_world4.x, n_world4.y, n_world4.z))
     v_material = op.material
+    v_uv = a_uv
     gl_Position = xform.proj * xform.view * world4
 }
+
+// Cat statue PBR maps (concrete_cat_statue, CC0): diff = sRGB albedo, nor_gl = OpenGL-convention
+// tangent normal, arm = AO(r) / Roughness(g) / Metallic(b). UV-mapped (the cat carries OBJ UVs).
+var @uniform @set = 0 @binding = 1 cat_albedo : sampler2D
+var @uniform @set = 0 @binding = 2 cat_normal : sampler2D
+var @uniform @set = 0 @binding = 3 cat_arm    : sampler2D
 
 var @in @location = 0 f_world_pos    : float3
 var @in @location = 1 f_world_normal : float3
 var @flat @in @location = 2 f_material : int
+var @in @location = 3 f_uv           : float2
 
 var @out @location = 0 g_albedo_out   : float4   // rgb = albedo, a = specular intensity
 var @out @location = 1 g_normal_out   : float4   // rgb = perturbed world-space normal, a = shininess (Blinn exp)
@@ -186,12 +196,18 @@ def gbuffer_fs {
         let tn = sample_floor_normal(uv)
         perturbed_normal = perturb_normal(n, f_world_pos, uv, tn)
     } else {
-        // Cat: matte concrete statue. Warm light gray with a faint tri-planar stone grain; the
-        // organic mesh + its smooth vertex normals carry the form (real AO + HDR IBL come next).
-        let grain = sin(f_world_pos.x * 37.0) * sin(f_world_pos.y * 37.0) * sin(f_world_pos.z * 37.0) * 0.03
-        albedo = float3(0.64 + grain, 0.62 + grain, 0.58 + grain)
-        spec_intensity = 0.12
-        perturbed_normal = n
+        // Cat: real concrete-statue PBR maps, UV-mapped. ARM packs AO/Roughness/Metallic; the diff is
+        // the albedo and nor_gl perturbs the geometric normal via the derivative TBN. Texture AO is
+        // baked into the albedo; roughness drives the specular intensity (so the HDR env reflection is
+        // stronger on the smoother, less-rough regions).
+        let alb = texture(cat_albedo, f_uv).rgb
+        let arm = texture(cat_arm, f_uv).rgb
+        let tex_ao = arm.x
+        let rough = arm.y
+        albedo = alb * (0.55 + 0.45 * tex_ao)
+        spec_intensity = (1.0 - rough) * 0.6
+        let tn = texture(cat_normal, f_uv).rgb * 2.0 - float3(1.0, 1.0, 1.0)
+        perturbed_normal = perturb_normal(n, f_world_pos, f_uv, tn)
     }
 
     g_albedo_out   = float4(albedo, spec_intensity)
