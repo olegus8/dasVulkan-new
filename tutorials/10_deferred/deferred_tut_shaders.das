@@ -146,20 +146,6 @@ def private brick_bump(uv : float2) : float {
     return ex * ey
 }
 
-def private brushed_albedo(uv : float2) : float3 {
-    // Subtle hairline + grain. Was too high-contrast (visible barcode); now a soft micro-tint.
-    let hair = sin(uv.x * 24.0) * 0.5 + 0.5
-    let grain = sin(uv.y * 6.0 + sin(uv.x * 2.7) * 0.4) * 0.5 + 0.5
-    let v = 0.55 + 0.06 * (hair * 0.6 + grain * 0.4)
-    return float3(v * 0.92, v * 0.97, v * 1.10)
-}
-
-def private brushed_bump(uv : float2) : float {
-    let hair = sin(uv.x * 24.0) * 0.5 + 0.5
-    let grain = sin(uv.y * 6.0 + sin(uv.x * 2.7) * 0.4) * 0.5 + 0.5
-    return 0.5 + 0.1 * (hair * 0.6 + grain * 0.4)
-}
-
 //! Derivative-based TBN reconstruction (Schueler 2010). NO per-vertex tangent buffer required.
 def private perturb_normal(n : float3; p : float3; uv : float2; tn : float3) : float3 {
     let dp1 = dFdx(p)
@@ -181,13 +167,6 @@ def private sample_floor_normal(uv : float2) : float3 {
     return normalize(float3(-dx * 0.5, -dy * 0.5, 1.0))
 }
 
-def private sample_cube_normal(uv : float2) : float3 {
-    let eps = 0.01
-    let dx = (brushed_bump(uv + float2(eps, 0.0)) - brushed_bump(uv - float2(eps, 0.0))) * 0.5 / eps
-    let dy = (brushed_bump(uv + float2(0.0, eps)) - brushed_bump(uv - float2(0.0, eps))) * 0.5 / eps
-    return normalize(float3(-dx * 0.2, -dy * 0.2, 1.0))
-}
-
 [vulkan_fragment_shader(name="gbuffer_frag_spv")]
 def gbuffer_fs {
     let n = normalize(f_world_normal)
@@ -195,11 +174,11 @@ def gbuffer_fs {
     var spec_intensity = 0.0
     var perturbed_normal = float3(0.0, 1.0, 0.0)
 
-    // Material branch by world_pos.y — floor sits at y=0, cube at y=0.5..1.5. The natural form
-    // `f_material == 1` (push-constant routed via the @flat int varying) requires the SPIR-V emitter
-    // to emit the Flat decoration on integer varyings (Vulkan spec mandate); once that ships we'll
-    // switch this to a push-constant branch.
-    if (f_world_pos.y < 0.5) {
+    // Material branch by the per-draw tag. f_material is the @flat int varying routed from the push
+    // constant (0 = the cat statue, 1 = the floor). dasSpirv emits the Flat decoration on int
+    // varyings, so this is reliable — and unlike the old `world_pos.y < 0.5` hack it lets the cat
+    // sit ON the floor (its paws at y=0) without the lower body picking up the brick material.
+    if (f_material == 1) {
         // Floor: brick pattern, low specularity, bumpy normal from mortar grooves.
         let uv = float2(f_world_pos.x, f_world_pos.z) * 0.5
         albedo = brick_pattern(uv)
@@ -207,23 +186,12 @@ def gbuffer_fs {
         let tn = sample_floor_normal(uv)
         perturbed_normal = perturb_normal(n, f_world_pos, uv, tn)
     } else {
-        // Cube: tri-planar brushed-metal albedo, glossy.
-        let abs_n = float3(abs(n.x), abs(n.y), abs(n.z))
-        let wsum = max(abs_n.x + abs_n.y + abs_n.z, 0.001)
-        let wn = abs_n / float3(wsum, wsum, wsum)
-        let uvx = float2(f_world_pos.y, f_world_pos.z)
-        let uvy = float2(f_world_pos.x, f_world_pos.z)
-        let uvz = float2(f_world_pos.x, f_world_pos.y)
-        albedo = brushed_albedo(uvx) * wn.x + brushed_albedo(uvy) * wn.y + brushed_albedo(uvz) * wn.z
-        spec_intensity = 0.7
-        var dom_uv = uvy
-        if (abs_n.x >= abs_n.y && abs_n.x >= abs_n.z) {
-            dom_uv = uvx
-        } elif (abs_n.z >= abs_n.x && abs_n.z >= abs_n.y) {
-            dom_uv = uvz
-        }
-        let tn = sample_cube_normal(dom_uv)
-        perturbed_normal = perturb_normal(n, f_world_pos, dom_uv, tn)
+        // Cat: matte concrete statue. Warm light gray with a faint tri-planar stone grain; the
+        // organic mesh + its smooth vertex normals carry the form (real AO + HDR IBL come next).
+        let grain = sin(f_world_pos.x * 37.0) * sin(f_world_pos.y * 37.0) * sin(f_world_pos.z * 37.0) * 0.03
+        albedo = float3(0.64 + grain, 0.62 + grain, 0.58 + grain)
+        spec_intensity = 0.12
+        perturbed_normal = n
     }
 
     g_albedo_out   = float4(albedo, spec_intensity)

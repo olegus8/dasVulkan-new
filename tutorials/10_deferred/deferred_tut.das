@@ -41,6 +41,9 @@ module deferred_tut
 require vulkan public
 require vulkan/vulkan_boost public
 require vulkan/vulkan_reflect
+require vulkan/vulkan_assets        // tutorial_asset_dir
+require geometry/geom_gen           // load_obj_mesh (text OBJ, no stbimage)
+require daslib/fio                  // path_join
 require deferred_tut_shaders public
 require math
 
@@ -68,49 +71,39 @@ let public DBG_SSAO      = 4
 let public DBG_LIGHT     = 5
 let public DBG_MODE_COUNT = 6
 
-// ===== cube geometry (24 verts, 36 indices; stride 24 = pos + normal) =====
+// ===== cat statue geometry (loaded from an OBJ; stride 24 = pos + normal, uint32 indices) =====
+// The concrete-cat-statue model (CC0, tutorials/_assets/cat) replaces the old cube: organic geometry
+// shows off deferred shading, shadows, AO and IBL far better than a box. load_obj_mesh is a plain text
+// reader (no stbimage), so the GEOMETRY is CI-safe; the HDR + textures (next phases) are what pull in
+// stbimage. The G-buffer derives UVs tri-planar from world pos, so only pos + normal are uploaded.
 
-let private cube_vertices : array<float> <- [
-    // +Z face
-    -0.5, -0.5, 0.5,   0.0, 0.0, 1.0,
-     0.5, -0.5, 0.5,   0.0, 0.0, 1.0,
-     0.5,  0.5, 0.5,   0.0, 0.0, 1.0,
-    -0.5,  0.5, 0.5,   0.0, 0.0, 1.0,
-    // -Z face
-     0.5, -0.5, -0.5,  0.0, 0.0, -1.0,
-    -0.5, -0.5, -0.5,  0.0, 0.0, -1.0,
-    -0.5,  0.5, -0.5,  0.0, 0.0, -1.0,
-     0.5,  0.5, -0.5,  0.0, 0.0, -1.0,
-    // +X face
-     0.5, -0.5,  0.5,  1.0, 0.0, 0.0,
-     0.5, -0.5, -0.5,  1.0, 0.0, 0.0,
-     0.5,  0.5, -0.5,  1.0, 0.0, 0.0,
-     0.5,  0.5,  0.5,  1.0, 0.0, 0.0,
-    // -X face
-    -0.5, -0.5, -0.5, -1.0, 0.0, 0.0,
-    -0.5, -0.5,  0.5, -1.0, 0.0, 0.0,
-    -0.5,  0.5,  0.5, -1.0, 0.0, 0.0,
-    -0.5,  0.5, -0.5, -1.0, 0.0, 0.0,
-    // +Y face
-    -0.5,  0.5,  0.5,  0.0, 1.0, 0.0,
-     0.5,  0.5,  0.5,  0.0, 1.0, 0.0,
-     0.5,  0.5, -0.5,  0.0, 1.0, 0.0,
-    -0.5,  0.5, -0.5,  0.0, 1.0, 0.0,
-    // -Y face
-    -0.5, -0.5, -0.5,  0.0, -1.0, 0.0,
-     0.5, -0.5, -0.5,  0.0, -1.0, 0.0,
-     0.5, -0.5,  0.5,  0.0, -1.0, 0.0,
-    -0.5, -0.5,  0.5,  0.0, -1.0, 0.0
-]
+let CAT_HEIGHT = 2.2f       // fitted height in world units; base sits at y=0, centred in x/z
 
-let private cube_indices : array<uint16> <- [
-    uint16(0), uint16(1), uint16(2),  uint16(0), uint16(2), uint16(3),
-    uint16(4), uint16(5), uint16(6),  uint16(4), uint16(6), uint16(7),
-    uint16(8), uint16(9), uint16(10), uint16(8), uint16(10), uint16(11),
-    uint16(12), uint16(13), uint16(14), uint16(12), uint16(14), uint16(15),
-    uint16(16), uint16(17), uint16(18), uint16(16), uint16(18), uint16(19),
-    uint16(20), uint16(21), uint16(22), uint16(20), uint16(22), uint16(23)
-]
+//! Load + fit the cat into `verts` (interleaved pos.xyz + normal.xyz, stride 24) and `indices`
+//! (uint32). The model is centred in x/z, its base dropped to y=0, and scaled to CAT_HEIGHT tall.
+def build_cat_geometry(var verts : array<float>; var indices : array<uint>) {
+    let dir = tutorial_asset_dir("cat")
+    var frag <- load_obj_mesh(path_join(dir, "concrete_cat_statue.obj"))
+    var bmin = float3(1.0e30)
+    var bmax = float3(-1.0e30)
+    for (gv in frag.vertices) {
+        bmin = min(bmin, gv.xyz)
+        bmax = max(bmax, gv.xyz)
+    }
+    let center = (bmin + bmax) * 0.5
+    let s = CAT_HEIGHT / max(bmax.y - bmin.y, 0.001)
+    verts |> reserve(length(frag.vertices) * 6)
+    for (gv in frag.vertices) {
+        let p = float3((gv.xyz.x - center.x) * s, (gv.xyz.y - bmin.y) * s, (gv.xyz.z - center.z) * s)
+        verts |> push(p.x); verts |> push(p.y); verts |> push(p.z)
+        verts |> push(gv.normal.x); verts |> push(gv.normal.y); verts |> push(gv.normal.z)
+    }
+    indices |> reserve(length(frag.indices))
+    for (gi in frag.indices) {
+        indices |> push(uint(gi))
+    }
+    delete frag
+}
 
 // Floor quad: 4 verts pos + (normal = 0, 1, 0). Big enough to catch the sun's shadow at all
 // camera angles. Triangle winding matches the +Y face above (CCW from above).
@@ -125,7 +118,6 @@ let private floor_indices : array<uint16> <- [
     uint16(0), uint16(1), uint16(2),  uint16(0), uint16(2), uint16(3)
 ]
 
-let public N_CUBE_INDICES = 36
 let public N_FLOOR_INDICES = 6
 
 // ===== matrix builders (column-major) =====
@@ -228,8 +220,9 @@ struct public DeferredResources {
     fb_shadow     : Framebuffer
     fb_deferred   : Framebuffer
 
-    cube_vb : HostBuffer
-    cube_ib : HostBuffer
+    cube_vb : HostBuffer               // the cat model (loaded from OBJ)
+    cube_ib : HostBuffer               // uint32 indices
+    cat_index_count : uint
     floor_vb : HostBuffer
     floor_ib : HostBuffer
     xform_ubo : HostBuffer
@@ -383,14 +376,15 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
 
-    var cube_v_copy : array<float>
-    cube_v_copy |> push_from(cube_vertices)
-    var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, cube_v_copy)
-    delete cube_v_copy
-    var cube_i_copy : array<uint16>
-    cube_i_copy |> push_from(cube_indices)
-    var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, cube_i_copy)
-    delete cube_i_copy
+    // cube_vb/cube_ib now hold the CAT model (loaded from the OBJ; uint32 indices)
+    var cat_v : array<float>
+    var cat_i : array<uint>
+    build_cat_geometry(cat_v, cat_i)
+    let cat_index_count = uint(length(cat_i))
+    var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, cat_v)
+    delete cat_v
+    var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, cat_i)
+    delete cat_i
 
     var floor_v_copy : array<float>
     floor_v_copy |> push_from(floor_vertices)
@@ -510,6 +504,7 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     r.fb_deferred <- fb_deferred
     r.cube_vb <- cube_vb
     r.cube_ib <- cube_ib
+    r.cat_index_count = cat_index_count
     r.floor_vb <- floor_vb
     r.floor_ib <- floor_ib
     r.xform_ubo <- xform_ubo
@@ -1153,16 +1148,16 @@ def public record_deferred_render(res : DeferredResources; cmd : CommandBuffer) 
 //! Draw cube + floor with the appropriate ObjectPush per object. Used by BOTH the shadow pass and
 //! the gbuffer pass; the only difference is the bound pipeline.
 def private draw_casters(res : DeferredResources; cmd : CommandBuffer; pipe_layout : PipelineLayout) {
-    // Cube: rotates around Y, hovers at y=1
-    op.model = mat4_mul(translate_m4(float3(0.0f, 1.0f, 0.0f)), rotate_y_m4(scene.camera_pos.w * 0.6f))
+    // Cat: sits on the floor (base at y=0, baked into the verts), slow spin around Y.
+    op.model = rotate_y_m4(scene.camera_pos.w * 0.3f)
     op.material = 0
     let cube_vbufs <- [weak_copy(res.cube_vb.buffer)]
     var cube_offs : array<uint64>
     cube_offs |> push(0ul)
     cmd_bind_vertex_buffers(cmd, 0u, cube_vbufs, cube_offs)
-    cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT16)
+    cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT32)
     push_object_pc(cmd, pipe_layout)
-    cmd_draw_indexed(cmd, uint(N_CUBE_INDICES), 1u, 0u, 0, 0u)
+    cmd_draw_indexed(cmd, res.cat_index_count, 1u, 0u, 0, 0u)
 
     // Floor: identity transform
     op.model = identity_m4()
