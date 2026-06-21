@@ -22,7 +22,7 @@ Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpi
 .. video:: cube.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into an
-APNG and ffmpeg-muxed with a daStrudel supersaw-pad bed and a Kokoro voiceover.
+APNG and ffmpeg-muxed with a daStrudel supersaw-pad bed.
 The camera orbits the cube on a lemniscate (small vertical figure-8 over the
 revolution) while the cube breathes via the push-constant scale; the texture's
 sun-disk drifts via a UV scroll keyed off ``cam_time.w``. See

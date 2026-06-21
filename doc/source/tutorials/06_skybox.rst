@@ -32,7 +32,7 @@ Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpi
 .. video:: skybox.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into
-an APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover.
+an APNG and ffmpeg-muxed with a daStrudel music bed.
 The camera completes one full orbit and the sun glow tracks across the sky as
 it does. See ``skills/recording.md``. To watch it live on your own GPU, run
 the windowed viewer (see `See it live`_ below).

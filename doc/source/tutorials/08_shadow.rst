@@ -57,7 +57,7 @@ Every line of every shader is daslang, lowered to SPIR-V at compile time.
 .. video:: shadow.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into an
-APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover. The
+APNG and ffmpeg-muxed with a daStrudel music bed. The
 camera orbits while the sun rotates faster, so the cube's shadow sweeps over
 the floor and the cube's lit-face glint rotates around the geometry. The
 ``[test]`` checks shadow contrast on the floor at a fixed time -- the CI

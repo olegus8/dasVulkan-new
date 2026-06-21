@@ -55,8 +55,7 @@ time.
 .. video:: hdr.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured
-into an APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro
-voiceover. Watch the emissive cubes bloom into soft halos against the
+into an APNG and ffmpeg-muxed with a daStrudel music bed. Watch the emissive cubes bloom into soft halos against the
 deep purple background. The ``[test]`` checks structural signal at a
 fixed frame -- background corners stay dark, at least one near-saturated
 emissive cube exists, and the histogram tail shows the bloom halo
