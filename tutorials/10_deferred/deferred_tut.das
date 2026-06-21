@@ -221,7 +221,10 @@ struct public DeferredResources {
     cat_albedo    : Texture            // cat PBR: diff / nor_gl / arm
     cat_normal    : Texture
     cat_arm       : Texture
-    cat_sampler   : Sampler
+    cat_sampler   : Sampler            // shared linear/repeat/mip sampler (cat + floor brick)
+    floor_albedo  : Texture            // floor brick: Color / NormalGL / AO
+    floor_normal  : Texture
+    floor_ao      : Texture
 
     rp_shadow     : RenderPass
     rp_deferred   : RenderPass
@@ -284,6 +287,9 @@ def public finalize(var r : DeferredResources) {
         delete r.fb_shadow
         delete r.rp_deferred
         delete r.rp_shadow
+        delete r.floor_ao
+        delete r.floor_normal
+        delete r.floor_albedo
         delete r.cat_sampler
         delete r.cat_arm
         delete r.cat_normal
@@ -381,6 +387,15 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     csci.maxLod = 16.0f
     var inscope cat_sampler <- create_sampler(device, csci)
 
+    // Floor brick maps (ambientCG Bricks031, CC0): Color sRGB, NormalGL + AO linear. Reuse cat_sampler.
+    let brick_dir = tutorial_asset_dir("brick")
+    var inscope floor_albedo <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_Color.jpg"), true)
+    var inscope floor_normal <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_NormalGL.jpg"), false)
+    var inscope floor_ao <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_AmbientOcclusion.jpg"), false)
+
     // ----- render passes -----
     var inscope rp_shadow   <- create_render_pass_depth_only(device, DEPTH_FMT)
     var inscope rp_deferred <- build_deferred_render_pass(device)
@@ -475,7 +490,7 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     dpci.pPoolSizes |> push(p_ia)
     var p_smp : DescriptorPoolSize
     p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = 5u                                     // shadow_map + env_map + 3 cat maps
+    p_smp.descriptorCount = 8u                                     // shadow + env + 3 cat + 3 floor-brick maps
     dpci.pPoolSizes |> push(p_smp)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -496,6 +511,9 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     writes |> emplace(write_image_sampler(gbuffer_set, 1u, cat_albedo.view, cat_sampler))
     writes |> emplace(write_image_sampler(gbuffer_set, 2u, cat_normal.view, cat_sampler))
     writes |> emplace(write_image_sampler(gbuffer_set, 3u, cat_arm.view, cat_sampler))
+    writes |> emplace(write_image_sampler(gbuffer_set, 4u, floor_albedo.view, cat_sampler))
+    writes |> emplace(write_image_sampler(gbuffer_set, 5u, floor_normal.view, cat_sampler))
+    writes |> emplace(write_image_sampler(gbuffer_set, 6u, floor_ao.view, cat_sampler))
     writes |> emplace(write_ubo(ssao_set, 1u, scene_ubo.buffer, SCENE_SIZE))
     writes |> emplace(write_input_attachment(ssao_set_input, 0u, g_normal.view))
     writes |> emplace(write_input_attachment(ssao_set_input, 1u, g_worldpos.view))
@@ -551,6 +569,9 @@ def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; qu
     r.cat_normal <- cat_normal
     r.cat_arm <- cat_arm
     r.cat_sampler <- cat_sampler
+    r.floor_albedo <- floor_albedo
+    r.floor_normal <- floor_normal
+    r.floor_ao <- floor_ao
     r.rp_shadow <- rp_shadow
     r.rp_deferred <- rp_deferred
     r.fb_shadow <- fb_shadow

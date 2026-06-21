@@ -119,6 +119,12 @@ var @uniform @set = 0 @binding = 1 cat_albedo : sampler2D
 var @uniform @set = 0 @binding = 2 cat_normal : sampler2D
 var @uniform @set = 0 @binding = 3 cat_arm    : sampler2D
 
+// Floor brick maps (ambientCG Bricks031, CC0): Color = sRGB albedo, NormalGL = tangent normal,
+// AmbientOcclusion = AO. World-XZ tiled.
+var @uniform @set = 0 @binding = 4 floor_albedo : sampler2D
+var @uniform @set = 0 @binding = 5 floor_normal : sampler2D
+var @uniform @set = 0 @binding = 6 floor_ao     : sampler2D
+
 var @in @location = 0 f_world_pos    : float3
 var @in @location = 1 f_world_normal : float3
 var @flat @in @location = 2 f_material : int
@@ -127,34 +133,6 @@ var @in @location = 3 f_uv           : float2
 var @out @location = 0 g_albedo_out   : float4   // rgb = albedo, a = specular intensity
 var @out @location = 1 g_normal_out   : float4   // rgb = perturbed world-space normal, a = shininess (Blinn exp)
 var @out @location = 2 g_worldpos_out : float4   // rgb = world pos, a = material tag
-
-// ----- procedural pattern helpers (all from world position; no UV vertex attribute) -----
-
-def private brick_pattern(uv : float2) : float3 {
-    let row = floor(uv.y * 2.0)
-    let row_offset = (int(row) % 2 == 0) ? 0.0 : 0.5
-    let bx = fract(uv.x + row_offset)
-    let by = fract(uv.y * 2.0)
-    let grout = 0.06
-    let in_brick_x = bx > grout && bx < 1.0 - grout
-    let in_brick_y = by > grout && by < 1.0 - grout
-    if (in_brick_x && in_brick_y) {
-        let noise = sin(uv.x * 23.7 + uv.y * 41.3) * 0.05
-        return float3(0.55 + noise, 0.28 + noise * 0.5, 0.20 + noise * 0.3)
-    }
-    return float3(0.16, 0.15, 0.14)               // mortar
-}
-
-def private brick_bump(uv : float2) : float {
-    let row = floor(uv.y * 2.0)
-    let row_offset = (int(row) % 2 == 0) ? 0.0 : 0.5
-    let bx = fract(uv.x + row_offset)
-    let by = fract(uv.y * 2.0)
-    let grout = 0.06
-    let ex = smoothstep(0.0, grout, bx) * smoothstep(0.0, grout, 1.0 - bx)
-    let ey = smoothstep(0.0, grout, by) * smoothstep(0.0, grout, 1.0 - by)
-    return ex * ey
-}
 
 //! Derivative-based TBN reconstruction (Schueler 2010). NO per-vertex tangent buffer required.
 def private perturb_normal(n : float3; p : float3; uv : float2; tn : float3) : float3 {
@@ -170,13 +148,6 @@ def private perturb_normal(n : float3; p : float3; uv : float2; tn : float3) : f
     return normalize(T * (tn.x * invmax) + B * (tn.y * invmax) + n * tn.z)
 }
 
-def private sample_floor_normal(uv : float2) : float3 {
-    let eps = 0.01
-    let dx = (brick_bump(uv + float2(eps, 0.0)) - brick_bump(uv - float2(eps, 0.0))) * 0.5 / eps
-    let dy = (brick_bump(uv + float2(0.0, eps)) - brick_bump(uv - float2(0.0, eps))) * 0.5 / eps
-    return normalize(float3(-dx * 0.5, -dy * 0.5, 1.0))
-}
-
 [vulkan_fragment_shader(name="gbuffer_frag_spv")]
 def gbuffer_fs {
     let n = normalize(f_world_normal)
@@ -189,11 +160,13 @@ def gbuffer_fs {
     // varyings, so this is reliable — and unlike the old `world_pos.y < 0.5` hack it lets the cat
     // sit ON the floor (its paws at y=0) without the lower body picking up the brick material.
     if (f_material == 1) {
-        // Floor: brick pattern, low specularity, bumpy normal from mortar grooves.
-        let uv = float2(f_world_pos.x, f_world_pos.z) * 0.5
-        albedo = brick_pattern(uv)
-        spec_intensity = 0.1
-        let tn = sample_floor_normal(uv)
+        // Floor: real ambientCG Bricks031 maps, tiled by world XZ. Texture AO baked into the albedo;
+        // the normal map gives mortar relief via the derivative TBN. Brick is matte -> low spec.
+        let uv = float2(f_world_pos.x, f_world_pos.z) * 0.35
+        let fb_ao = texture(floor_ao, uv).x
+        albedo = texture(floor_albedo, uv).rgb * (0.5 + 0.5 * fb_ao)
+        spec_intensity = 0.12
+        let tn = texture(floor_normal, uv).rgb * 2.0 - float3(1.0, 1.0, 1.0)
         perturbed_normal = perturb_normal(n, f_world_pos, uv, tn)
     } else {
         // Cat: real concrete-statue PBR maps, UV-mapped. ARM packs AO/Roughness/Metallic; the diff is
