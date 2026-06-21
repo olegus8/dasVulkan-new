@@ -47,7 +47,7 @@ Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpi
 .. video:: particles.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into an
-APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover. The
+APNG and ffmpeg-muxed with a daStrudel music bed. The
 1024 particles swirl around the central attractor; the colour is mapped to
 instantaneous speed (cool teal at the slow end, hot magenta at the fast end).
 See ``skills/recording.md``. To watch the swarm live on your own GPU, run the

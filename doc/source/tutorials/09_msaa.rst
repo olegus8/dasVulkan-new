@@ -53,7 +53,7 @@ sampled four times.
 .. video:: msaa.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into
-an APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover.
+an APNG and ffmpeg-muxed with a daStrudel music bed.
 The 16-row mode strip at the top flips every 2 s -- watch the cube's edges
 go from jaggy (red strip) to smooth (green strip) and back. The ``[test]``
 checks the structural MSAA signal at a fixed frame -- the CI regression gate.

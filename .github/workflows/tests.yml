@@ -77,10 +77,13 @@ jobs:
 
       - name: "Build daslang"
         working-directory: daslang-src
-        # Only the `daslang` binary + its shared runtime libs are needed. Building
-        # that target also produces lib/liblibDaScriptDyn{,_runtime}.so (the module
-        # links them). The generated dasVulkan C++ is committed, so no generator run
-        # in CI -- pugixml/LLVM/HV/GLFW are all unnecessary.
+        # The `daslang` binary + its shared runtime libs, plus `dasModuleStbImage`:
+        # the texture tutorials' oracle gates (tut 8/10) load real JPG/HDR maps via
+        # `require stbimage`, so its shared lib must be built (it is enabled by
+        # default in daslang -- `--target daslang` alone just never builds it).
+        # Building daslang also produces lib/liblibDaScriptDyn{,_runtime}.so (the
+        # module links them). The generated dasVulkan C++ is committed, so no
+        # generator run in CI -- pugixml/LLVM/HV/GLFW are all unnecessary.
         run: |
           set -eux
           cmake --no-warn-unused-cli -B./build \
@@ -92,7 +95,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja
-          cmake --build ./build --parallel --target daslang
+          cmake --build ./build --parallel --target daslang dasModuleStbImage
           sccache --show-stats
           echo "BIN_DIR=bin" >> "$GITHUB_ENV"
 
@@ -210,8 +213,10 @@ jobs:
 
       - name: "Build daslang"
         working-directory: daslang-src
-        # Only the daslang binary + its shared runtime dylibs are needed; the module
-        # links lib/liblibDaScriptDyn{,_runtime}.dylib. Generated dasVulkan C++ is
+        # The daslang binary + its shared runtime dylibs, plus `dasModuleStbImage`:
+        # the texture tutorials' oracle gates (tut 8/10) load real JPG/HDR maps via
+        # `require stbimage`, so its shared lib must be built. The module links
+        # lib/liblibDaScriptDyn{,_runtime}.dylib. Generated dasVulkan C++ is
         # committed, so no generator run -- pugixml/LLVM/HV/GLFW are unnecessary.
         run: |
           set -eux
@@ -225,7 +230,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja
-          cmake --build ./build --parallel --target daslang
+          cmake --build ./build --parallel --target daslang dasModuleStbImage
           sccache --show-stats
           echo "BIN_DIR=bin" >> "$GITHUB_ENV"
 

@@ -17,23 +17,25 @@ options indenting = 4
 //     of world-pos and tri-planar UV, then a tangent-space normal sample is rotated into world
 //     space and written to the G-buffer.
 //
-//   * SSAO PASS  (ssao_vs fullscreen tri + ssao_fs) -- reads normal + world-pos subpassInputs
-//     (subpass dependency 0 -> 1 orders the reads behind the G-buffer writes), uses a
-//     curvature-based AO approximation (the input-attachment surface only sees the CURRENT
-//     fragment, so true screen-space sampling needs sampled images instead; the curvature-AO is a
-//     pedagogical-clarity choice that keeps the multi-subpass rail in focus).
+//   * SSAO PASS  (ssao_vs fullscreen tri + ssao_fs) -- samples the G-buffer normal + world-position
+//     as SAMPLED textures (NEAREST), so it can read NEIGHBOUR texels. Real screen-space AO: a
+//     hemisphere of sample points around each fragment's world position is projected back to screen
+//     and tested against the stored surface depth -- crevices + the cat-floor contact darken.
 //
-//   * LIGHTING PASS  (lighting_vs fullscreen tri + lighting_fs) -- reads ALL FOUR subpassInputs
-//     (albedo+spec, normal, world-pos, ssao), samples the shadow map (sampler2DShadow + 5x5 PCF),
-//     accumulates contributions from ONE directional sun + NUM_LIGHTS orbiting colored point
-//     lights packed in the scene UBO. A 6-mode `debug_mode` push constant flips between the
-//     composed lit result and the raw G-buffer / SSAO / lighting-only visualizations.
+//   * LIGHTING PASS  (lighting_vs fullscreen tri + lighting_fs) -- samples the G-buffer (albedo+spec,
+//     normal, world-pos) + the SSAO factor as SAMPLED textures, samples the shadow map
+//     (sampler2DShadow + 5x5 PCF) + the HDR environment, and accumulates ONE directional sun +
+//     NUM_LIGHTS orbiting colored point lights packed in the scene UBO. A 6-mode `debug_mode` push
+//     constant flips between the composed lit result and the raw G-buffer / SSAO / lighting-only views.
 //
-// UBO LAYOUT (two UBOs because set 0 on the SSAO + lighting pipelines is taken by subpassInputs):
-//   * `xform : XformCam` at set 0 / binding 0  -- view + proj + light_vp (gbuffer + shadow passes)
-//   * `scene : SceneCam` at set 1 / binding 1  -- duplicated light_vp + light_dir + camera_pos +
-//     point lights array (SSAO + lighting passes). Slight duplication is the cost of avoiding a
-//     descriptor-set-index conflict with the input attachments at set 0.
+// Three single-subpass render passes hand off via attachment finalLayouts (gbuffer color ->
+// SHADER_READ_ONLY -> sampled by ssao + lighting; ssao -> SHADER_READ_ONLY -> sampled by lighting),
+// the more common real-world deferred architecture than one multi-subpass pass with input attachments.
+//
+// UBO LAYOUT (two UBOs):
+//   * `xform : XformCam` at set 0 / binding 0  -- view + proj + light_vp (gbuffer + shadow + ssao)
+//   * `scene : SceneCam` at set 1 / binding 1  -- light_vp + light_dir + camera_pos + point lights
+//     (lighting pass). Two UBOs keep the gbuffer's per-object xform separate from the scene globals.
 
 module deferred_tut_shaders public
 
@@ -83,6 +85,7 @@ var @push_constant op : ObjectPush
 
 var @in @location = 0 a_pos    : float3
 var @in @location = 1 a_normal : float3
+var @in @location = 2 a_uv     : float2
 
 // ===== shadow pass =====
 
@@ -99,6 +102,7 @@ def shadow_vs {
 var @out @location = 0 v_world_pos     : float3
 var @out @location = 1 v_world_normal  : float3
 var @flat @out @location = 2 v_material : int
+var @out @location = 3 v_uv            : float2
 
 [vulkan_vertex_shader(name="gbuffer_vert_spv")]
 def gbuffer_vs {
@@ -107,58 +111,30 @@ def gbuffer_vs {
     let n_world4 = op.model * float4(a_normal, 0.0)
     v_world_normal = normalize(float3(n_world4.x, n_world4.y, n_world4.z))
     v_material = op.material
+    v_uv = a_uv
     gl_Position = xform.proj * xform.view * world4
 }
+
+// Cat statue PBR maps (concrete_cat_statue, CC0): diff = sRGB albedo, nor_gl = OpenGL-convention
+// tangent normal, arm = AO(r) / Roughness(g) / Metallic(b). UV-mapped (the cat carries OBJ UVs).
+var @uniform @set = 0 @binding = 1 cat_albedo : sampler2D
+var @uniform @set = 0 @binding = 2 cat_normal : sampler2D
+var @uniform @set = 0 @binding = 3 cat_arm    : sampler2D
+
+// Floor brick maps (ambientCG Bricks031, CC0): Color = sRGB albedo, NormalGL = tangent normal,
+// AmbientOcclusion = AO. World-XZ tiled.
+var @uniform @set = 0 @binding = 4 floor_albedo : sampler2D
+var @uniform @set = 0 @binding = 5 floor_normal : sampler2D
+var @uniform @set = 0 @binding = 6 floor_ao     : sampler2D
 
 var @in @location = 0 f_world_pos    : float3
 var @in @location = 1 f_world_normal : float3
 var @flat @in @location = 2 f_material : int
+var @in @location = 3 f_uv           : float2
 
 var @out @location = 0 g_albedo_out   : float4   // rgb = albedo, a = specular intensity
 var @out @location = 1 g_normal_out   : float4   // rgb = perturbed world-space normal, a = shininess (Blinn exp)
 var @out @location = 2 g_worldpos_out : float4   // rgb = world pos, a = material tag
-
-// ----- procedural pattern helpers (all from world position; no UV vertex attribute) -----
-
-def private brick_pattern(uv : float2) : float3 {
-    let row = floor(uv.y * 2.0)
-    let row_offset = (int(row) % 2 == 0) ? 0.0 : 0.5
-    let bx = fract(uv.x + row_offset)
-    let by = fract(uv.y * 2.0)
-    let grout = 0.06
-    let in_brick_x = bx > grout && bx < 1.0 - grout
-    let in_brick_y = by > grout && by < 1.0 - grout
-    if (in_brick_x && in_brick_y) {
-        let noise = sin(uv.x * 23.7 + uv.y * 41.3) * 0.05
-        return float3(0.55 + noise, 0.28 + noise * 0.5, 0.20 + noise * 0.3)
-    }
-    return float3(0.16, 0.15, 0.14)               // mortar
-}
-
-def private brick_bump(uv : float2) : float {
-    let row = floor(uv.y * 2.0)
-    let row_offset = (int(row) % 2 == 0) ? 0.0 : 0.5
-    let bx = fract(uv.x + row_offset)
-    let by = fract(uv.y * 2.0)
-    let grout = 0.06
-    let ex = smoothstep(0.0, grout, bx) * smoothstep(0.0, grout, 1.0 - bx)
-    let ey = smoothstep(0.0, grout, by) * smoothstep(0.0, grout, 1.0 - by)
-    return ex * ey
-}
-
-def private brushed_albedo(uv : float2) : float3 {
-    // Subtle hairline + grain. Was too high-contrast (visible barcode); now a soft micro-tint.
-    let hair = sin(uv.x * 24.0) * 0.5 + 0.5
-    let grain = sin(uv.y * 6.0 + sin(uv.x * 2.7) * 0.4) * 0.5 + 0.5
-    let v = 0.55 + 0.06 * (hair * 0.6 + grain * 0.4)
-    return float3(v * 0.92, v * 0.97, v * 1.10)
-}
-
-def private brushed_bump(uv : float2) : float {
-    let hair = sin(uv.x * 24.0) * 0.5 + 0.5
-    let grain = sin(uv.y * 6.0 + sin(uv.x * 2.7) * 0.4) * 0.5 + 0.5
-    return 0.5 + 0.1 * (hair * 0.6 + grain * 0.4)
-}
 
 //! Derivative-based TBN reconstruction (Schueler 2010). NO per-vertex tangent buffer required.
 def private perturb_normal(n : float3; p : float3; uv : float2; tn : float3) : float3 {
@@ -174,20 +150,6 @@ def private perturb_normal(n : float3; p : float3; uv : float2; tn : float3) : f
     return normalize(T * (tn.x * invmax) + B * (tn.y * invmax) + n * tn.z)
 }
 
-def private sample_floor_normal(uv : float2) : float3 {
-    let eps = 0.01
-    let dx = (brick_bump(uv + float2(eps, 0.0)) - brick_bump(uv - float2(eps, 0.0))) * 0.5 / eps
-    let dy = (brick_bump(uv + float2(0.0, eps)) - brick_bump(uv - float2(0.0, eps))) * 0.5 / eps
-    return normalize(float3(-dx * 0.5, -dy * 0.5, 1.0))
-}
-
-def private sample_cube_normal(uv : float2) : float3 {
-    let eps = 0.01
-    let dx = (brushed_bump(uv + float2(eps, 0.0)) - brushed_bump(uv - float2(eps, 0.0))) * 0.5 / eps
-    let dy = (brushed_bump(uv + float2(0.0, eps)) - brushed_bump(uv - float2(0.0, eps))) * 0.5 / eps
-    return normalize(float3(-dx * 0.2, -dy * 0.2, 1.0))
-}
-
 [vulkan_fragment_shader(name="gbuffer_frag_spv")]
 def gbuffer_fs {
     let n = normalize(f_world_normal)
@@ -195,35 +157,32 @@ def gbuffer_fs {
     var spec_intensity = 0.0
     var perturbed_normal = float3(0.0, 1.0, 0.0)
 
-    // Material branch by world_pos.y — floor sits at y=0, cube at y=0.5..1.5. The natural form
-    // `f_material == 1` (push-constant routed via the @flat int varying) requires the SPIR-V emitter
-    // to emit the Flat decoration on integer varyings (Vulkan spec mandate); once that ships we'll
-    // switch this to a push-constant branch.
-    if (f_world_pos.y < 0.5) {
-        // Floor: brick pattern, low specularity, bumpy normal from mortar grooves.
-        let uv = float2(f_world_pos.x, f_world_pos.z) * 0.5
-        albedo = brick_pattern(uv)
-        spec_intensity = 0.1
-        let tn = sample_floor_normal(uv)
+    // Material branch by the per-draw tag. f_material is the @flat int varying routed from the push
+    // constant (0 = the cat statue, 1 = the floor). dasSpirv emits the Flat decoration on int
+    // varyings, so this is reliable — and unlike the old `world_pos.y < 0.5` hack it lets the cat
+    // sit ON the floor (its paws at y=0) without the lower body picking up the brick material.
+    if (f_material == 1) {
+        // Floor: real ambientCG Bricks031 maps, tiled by world XZ. Texture AO baked into the albedo;
+        // the normal map gives mortar relief via the derivative TBN. Brick is matte -> low spec.
+        let uv = float2(f_world_pos.x, f_world_pos.z) * 0.35
+        let fb_ao = texture(floor_ao, uv).x
+        albedo = texture(floor_albedo, uv).rgb * (0.5 + 0.5 * fb_ao)
+        spec_intensity = 0.12
+        let tn = texture(floor_normal, uv).rgb * 2.0 - float3(1.0, 1.0, 1.0)
         perturbed_normal = perturb_normal(n, f_world_pos, uv, tn)
     } else {
-        // Cube: tri-planar brushed-metal albedo, glossy.
-        let abs_n = float3(abs(n.x), abs(n.y), abs(n.z))
-        let wsum = max(abs_n.x + abs_n.y + abs_n.z, 0.001)
-        let wn = abs_n / float3(wsum, wsum, wsum)
-        let uvx = float2(f_world_pos.y, f_world_pos.z)
-        let uvy = float2(f_world_pos.x, f_world_pos.z)
-        let uvz = float2(f_world_pos.x, f_world_pos.y)
-        albedo = brushed_albedo(uvx) * wn.x + brushed_albedo(uvy) * wn.y + brushed_albedo(uvz) * wn.z
-        spec_intensity = 0.7
-        var dom_uv = uvy
-        if (abs_n.x >= abs_n.y && abs_n.x >= abs_n.z) {
-            dom_uv = uvx
-        } elif (abs_n.z >= abs_n.x && abs_n.z >= abs_n.y) {
-            dom_uv = uvz
-        }
-        let tn = sample_cube_normal(dom_uv)
-        perturbed_normal = perturb_normal(n, f_world_pos, dom_uv, tn)
+        // Cat: real concrete-statue PBR maps, UV-mapped. ARM packs AO/Roughness/Metallic; the diff is
+        // the albedo and nor_gl perturbs the geometric normal via the derivative TBN. Texture AO is
+        // baked into the albedo; roughness drives the specular intensity (so the HDR env reflection is
+        // stronger on the smoother, less-rough regions).
+        let alb = texture(cat_albedo, f_uv).rgb
+        let arm = texture(cat_arm, f_uv).rgb
+        let tex_ao = arm.x
+        let rough = arm.y
+        albedo = alb * (0.55 + 0.45 * tex_ao)
+        spec_intensity = (1.0 - rough) * 0.6
+        let tn = texture(cat_normal, f_uv).rgb * 2.0 - float3(1.0, 1.0, 1.0)
+        perturbed_normal = perturb_normal(n, f_world_pos, f_uv, tn)
     }
 
     g_albedo_out   = float4(albedo, spec_intensity)
@@ -231,7 +190,14 @@ def gbuffer_fs {
     g_worldpos_out = float4(f_world_pos, float(f_material))
 }
 
-// ===== SSAO pass (subpass 1) =====
+// ===== SSAO pass (real screen-space ambient occlusion) =====
+// The G-buffer normal + world-position are SAMPLED images here (not subpass inputs), so this pass can
+// read NEIGHBOUR texels -- the thing input attachments cannot do. For each fragment we sample a small
+// hemisphere of points around its world position, project each back to screen, and compare the stored
+// surface depth there against the sample's depth: points that fall behind nearby geometry are
+// occluded. occlusion = occluded / K darkens crevices and the cat-floor contact, which is what grounds
+// the cat. A production AO would add a noise texture + a separable blur; we keep a per-pixel hash
+// rotation + a 16-sample spiral for tutorial clarity.
 
 var @out @location = 0 v_uv_ssao : float2
 
@@ -246,28 +212,69 @@ def ssao_vs {
     v_uv_ssao = float2((x + 1.0) * 0.5, (y + 1.0) * 0.5)
 }
 
-var @set = 0 @binding = 0 @input_attachment_index = 0 ssao_in_normal   : subpassInput
-var @set = 0 @binding = 1 @input_attachment_index = 1 ssao_in_worldpos : subpassInput
+// G-buffer as sampled textures (NEAREST). xform (set 0 / binding 0, shared with the gbuffer pass)
+// supplies view + proj so we can project hemisphere sample points back to screen space.
+var @uniform @set = 0 @binding = 1 ssao_g_normal   : sampler2D
+var @uniform @set = 0 @binding = 2 ssao_g_worldpos : sampler2D
 
 var @in @location = 0 f_uv_ssao : float2
 var @out @location = 0 ssao_out : float4
 
-//! Curvature-based AO. Pure input-attachment surfaces can only sample the CURRENT fragment, so
-//! true SSAO that reads neighbours needs sampled images instead. We use a |n . view| curvature
-//! darkening: surfaces facing the camera = bright, grazing-angle = darker. Pedagogically this
-//! teaches "G-buffer reads + post-pass write" cleanly; a production SSAO would attach the G-buffer
-//! as sampled images and randomly sample a hemisphere of offsets around the world position.
+let SSAO_K        = 16
+let SSAO_RADIUS   = 0.6
+let SSAO_BIAS     = 0.03
+let SSAO_STRENGTH = 1.7      // scales raw occlusion so the cat-floor crease reads in the composite
+
+//! Per-pixel rotation hash -- breaks the 16-sample spiral pattern so the AO doesn't band.
+def private hash21(p : float2) : float {
+    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453)
+}
+
 [vulkan_fragment_shader(name="ssao_frag_spv")]
 def ssao_fs {
-    let n = subpassLoad(ssao_in_normal).xyz
-    let p = subpassLoad(ssao_in_worldpos).xyz
-    if (dot(n, n) < 0.01) {
-        ssao_out = float4(1.0, 1.0, 1.0, 1.0)   // background -> no AO darkening
+    let uv = f_uv_ssao
+    let n_raw = texture(ssao_g_normal, uv).xyz
+    if (dot(n_raw, n_raw) < 0.01) {
+        ssao_out = float4(1.0, 1.0, 1.0, 1.0)        // background -> no darkening
         return
     }
-    let view = normalize(scene.camera_pos.xyz - p)
-    let facing = max(dot(normalize(n), view), 0.0)
-    let ao = 0.55 + 0.45 * pow(facing, 0.6)
+    let n = normalize(n_raw)
+    let p = texture(ssao_g_worldpos, uv).xyz
+    let cur_vz = (xform.view * float4(p, 1.0)).z
+
+    // Tangent basis around the normal (pick a non-parallel up vector).
+    var up = float3(0.0, 1.0, 0.0)
+    if (abs(n.y) > 0.95) {
+        up = float3(1.0, 0.0, 0.0)
+    }
+    let tangent = normalize(cross(up, n))
+    let bitangent = cross(n, tangent)
+    let ang0 = hash21(uv * 1024.0) * 6.2831853
+
+    var occ = 0.0
+    for (i in range(SSAO_K)) {
+        let fi = (float(i) + 0.5) / float(SSAO_K)
+        let ang = ang0 + float(i) * 2.3998277                       // golden angle, radians
+        let rr = SSAO_RADIUS * sqrt(fi)
+        // Hemisphere-biased offset: spiral in the tangent plane, lifted along the normal.
+        let off = (cos(ang) * tangent + sin(ang) * bitangent) * rr + n * (rr * 0.5)
+        let sp = p + off
+        let clip = xform.proj * xform.view * float4(sp, 1.0)
+        let w = max(clip.w, 0.0001)
+        let suv = float2(clip.x / w * 0.5 + 0.5, clip.y / w * 0.5 + 0.5)
+        let stored_n = texture(ssao_g_normal, suv).xyz
+        let stored_p = texture(ssao_g_worldpos, suv).xyz
+        let stored_vz = (xform.view * float4(stored_p, 1.0)).z
+        let sample_vz = (xform.view * float4(sp, 1.0)).z
+        let range_check = smoothstep(0.0, 1.0, SSAO_RADIUS / max(abs(cur_vz - stored_vz), 0.0001))
+        // View looks down -Z: a stored surface CLOSER to the camera has a GREATER (less negative) z,
+        // so it occludes the sample point. Guard against off-screen + background samples.
+        if (clip.w > 0.0 && suv.x >= 0.0 && suv.x <= 1.0 && suv.y >= 0.0 && suv.y <= 1.0
+                && dot(stored_n, stored_n) > 0.01 && stored_vz >= sample_vz + SSAO_BIAS) {
+            occ += range_check
+        }
+    }
+    let ao = clamp(1.0 - SSAO_STRENGTH * occ / float(SSAO_K), 0.0, 1.0)
     ssao_out = float4(ao, ao, ao, 1.0)
 }
 
@@ -291,12 +298,19 @@ struct DebugPC {
 }
 var @push_constant dbg : DebugPC
 
-var @set = 0 @binding = 0 @input_attachment_index = 0 lit_in_albedo   : subpassInput
-var @set = 0 @binding = 1 @input_attachment_index = 1 lit_in_normal   : subpassInput
-var @set = 0 @binding = 2 @input_attachment_index = 2 lit_in_worldpos : subpassInput
-var @set = 0 @binding = 3 @input_attachment_index = 3 lit_in_ssao     : subpassInput
+// G-buffer + SSAO as sampled textures (NEAREST, set 0). The fullscreen-triangle uv maps 1:1 to the
+// G-buffer texels, so a NEAREST fetch reads each fragment's own deferred values exactly.
+var @uniform @set = 0 @binding = 0 lit_albedo   : sampler2D
+var @uniform @set = 0 @binding = 1 lit_normal   : sampler2D
+var @uniform @set = 0 @binding = 2 lit_worldpos : sampler2D
+var @uniform @set = 0 @binding = 3 lit_ssao     : sampler2D
 
 var @uniform @set = 1 @binding = 0 shadow_map : sampler2DShadow
+
+//! Equirectangular HDR environment map (Cannon, Poly Haven, CC0). RGBA32F. Sampled by direction for
+//! image-based lighting: the env colour along the surface normal tints the diffuse ambient, and along
+//! the reflected view gives a real specular reflection.
+var @uniform @set = 1 @binding = 2 env_map : sampler2D
 
 let SHADOW_MAP_PX = 1024.0
 
@@ -310,6 +324,14 @@ def private pcf_shadow(uv : float2; ref : float) : float {
         }
     }
     return sum * (1.0 / 25.0)
+}
+
+//! Direction -> equirectangular UV. atan2/acos confirmed working in dasSpirv (the "no inverse trig"
+//! gap was a phantom). u wraps the azimuth, v maps the polar angle top(0) -> bottom(1).
+def private equirect_uv(d : float3) : float2 {
+    let u = atan2(d.z, d.x) * 0.15915494 + 0.5        // 1 / (2*pi)
+    let v = acos(clamp(d.y, -1.0, 1.0)) * 0.31830989  // 1 / pi
+    return float2(u, v)
 }
 
 var @in @location = 0 f_uv_lit : float2
@@ -349,10 +371,10 @@ def lighting_fs {
         return
     }
 
-    let albedo_spec = subpassLoad(lit_in_albedo)
-    let normal_mat  = subpassLoad(lit_in_normal)
-    let worldpos_mt = subpassLoad(lit_in_worldpos)
-    let ssao_factor = subpassLoad(lit_in_ssao).x
+    let albedo_spec = texture(lit_albedo, f_uv_lit)
+    let normal_mat  = texture(lit_normal, f_uv_lit)
+    let worldpos_mt = texture(lit_worldpos, f_uv_lit)
+    let ssao_factor = texture(lit_ssao, f_uv_lit).x
 
     let albedo = albedo_spec.rgb
     let spec_intensity = albedo_spec.a
@@ -417,14 +439,23 @@ def lighting_fs {
     pt_contrib = pt_contrib + point_light_contrib(scene.pos1, scene.col1, p, n, view_dir, shininess, spec_intensity)
     pt_contrib = pt_contrib + point_light_contrib(scene.pos2, scene.col2, p, n, view_dir, shininess, spec_intensity)
 
-    // ----- Hemisphere ambient (modulated by SSAO) -----
+    // ----- Hemisphere ambient + HDR environment IBL (modulated by SSAO) -----
     let sky_color = float3(0.22, 0.24, 0.36)
     let ground_color = float3(0.08, 0.06, 0.05)
     let amb_t = n.y * 0.5 + 0.5
-    let ambient = lerp(ground_color, sky_color, float3(amb_t, amb_t, amb_t))
+    let hemi_ambient = lerp(ground_color, sky_color, float3(amb_t, amb_t, amb_t))
+    // env colour along the normal tints the diffuse ambient (cheap irradiance approximation); env
+    // colour along the reflected view gives a real specular reflection, weighted by Fresnel + material.
+    let env_amb = texture(env_map, equirect_uv(n)).rgb
+    let ambient = lerp(hemi_ambient, env_amb, float3(0.4, 0.4, 0.4))   // splat t — dasSpirv FMix needs vec t
+    let inc = float3(-view_dir.x, -view_dir.y, -view_dir.z)
+    let rdir = inc - n * (2.0 * dot(n, inc))
+    let env_refl = texture(env_map, equirect_uv(rdir)).rgb
+    let fres = pow(1.0 - max(dot(n, view_dir), 0.0), 4.0)
+    let env_spec = env_refl * (spec_intensity * (0.10 + 0.7 * fres))
 
     let ao = clamp(ssao_factor, 0.0, 1.0)
-    let lighting = (ambient * ao) + (sun_contrib + pt_contrib) * (0.65 + 0.35 * ao)
+    let lighting = (ambient * ao) + (sun_contrib + pt_contrib) * (0.55 + 0.45 * ao) + env_spec * ao
 
     if (dbg.debug_mode == 5) {
         frag_color = float4(lighting, 1.0)

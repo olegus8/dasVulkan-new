@@ -69,7 +69,7 @@ Every line of every shader is daslang, lowered to SPIR-V at compile time.
 .. video:: deferred.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into
-an APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover.
+an APNG and ffmpeg-muxed with a daStrudel music bed.
 The 16-row mode strip at the top cycles every 2.5 s -- watch the scene
 decompose itself into albedo, normal, world-pos, SSAO, and lighting-only,
 then back to the lit composition. The ``[test]`` checks the structural

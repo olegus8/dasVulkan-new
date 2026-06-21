@@ -26,7 +26,7 @@ Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpi
 .. video:: sdf.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into an
-APNG and ffmpeg-muxed with a daStrudel ambient pad bed and a Kokoro voiceover.
+APNG and ffmpeg-muxed with a daStrudel ambient pad bed.
 The camera completes one full orbit around the scene (period chosen so the
 loop closes seamlessly); the torus rotates around the sphere, the sphere
 gently bobs, and the cosine-palette pulse cycles the blob hue across the orbit

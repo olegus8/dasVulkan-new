@@ -57,6 +57,56 @@ let private cube_indices : array<uint16> <- [
     // -Z face (back, inward normal = +Z): v0, v1, v2, v3
     uint16(0), uint16(1), uint16(2),  uint16(0), uint16(2), uint16(3)]
 
+// ===== reflective sphere + floor geometry (pos.xyz + normal.xyz, stride 24) =====
+
+let SPHERE_LAT = 48
+let SPHERE_LON = 64
+let SPHERE_R = 1.0f
+let SPHERE_CY = 1.05f                // sphere centre height (sits just above the floor at y=0)
+let FLOOR_HALF = 9.0f
+
+//! UV sphere centred at (0, SPHERE_CY, 0). Each vertex is position + outward unit normal. Rendered
+//! with a no-cull pipeline so winding doesn't matter.
+def gen_sphere(var verts : array<float>; var indices : array<uint16>) {
+    verts |> reserve((SPHERE_LAT + 1) * (SPHERE_LON + 1) * 6)
+    indices |> reserve(SPHERE_LAT * SPHERE_LON * 6)
+    for (i in range(SPHERE_LAT + 1)) {
+        let theta = float(i) / float(SPHERE_LAT) * PI
+        let st = sin(theta)
+        let ct = cos(theta)
+        for (j in range(SPHERE_LON + 1)) {
+            let phi = float(j) / float(SPHERE_LON) * 2.0f * PI
+            let nx = st * cos(phi)
+            let ny = ct
+            let nz = st * sin(phi)
+            verts |> push(nx * SPHERE_R); verts |> push(ny * SPHERE_R + SPHERE_CY); verts |> push(nz * SPHERE_R)
+            verts |> push(nx); verts |> push(ny); verts |> push(nz)
+        }
+    }
+    let row = SPHERE_LON + 1
+    for (i in range(SPHERE_LAT)) {
+        for (j in range(SPHERE_LON)) {
+            let a = i * row + j
+            let b = a + row
+            indices |> push(uint16(a)); indices |> push(uint16(b)); indices |> push(uint16(a + 1))
+            indices |> push(uint16(a + 1)); indices |> push(uint16(b)); indices |> push(uint16(b + 1))
+        }
+    }
+}
+
+//! Large floor quad in the XZ plane at y=0, normal up.
+def gen_floor(var verts : array<float>; var indices : array<uint16>) {
+    verts |> reserve(24)
+    indices |> reserve(6)
+    let h = FLOOR_HALF
+    verts |> push(-h); verts |> push(0.0f); verts |> push(-h); verts |> push(0.0f); verts |> push(1.0f); verts |> push(0.0f)
+    verts |> push(h); verts |> push(0.0f); verts |> push(-h); verts |> push(0.0f); verts |> push(1.0f); verts |> push(0.0f)
+    verts |> push(h); verts |> push(0.0f); verts |> push(h); verts |> push(0.0f); verts |> push(1.0f); verts |> push(0.0f)
+    verts |> push(-h); verts |> push(0.0f); verts |> push(h); verts |> push(0.0f); verts |> push(1.0f); verts |> push(0.0f)
+    indices |> push(uint16(0)); indices |> push(uint16(1)); indices |> push(uint16(2))
+    indices |> push(uint16(0)); indices |> push(uint16(2)); indices |> push(uint16(3))
+}
+
 // ===== matrix builders (column-major) =====
 
 def perspective_vk(fov_y, aspect, znear, zfar : float) : float4x4 {
@@ -183,6 +233,12 @@ struct public SkyboxResources {
     framebuffer : Framebuffer
     vb          : HostBuffer
     ib          : HostBuffer
+    sphere_vb   : HostBuffer
+    sphere_ib   : HostBuffer
+    floor_vb    : HostBuffer
+    floor_ib    : HostBuffer
+    sphere_index_count : int
+    floor_index_count  : int
     ubo         : HostBuffer
     sky_image   : Image
     sky_memory  : DeviceMemory
@@ -193,6 +249,8 @@ struct public SkyboxResources {
     desc_set    : VkDescriptorSet
     pipe_layout : PipelineLayout
     pipeline    : Pipeline
+    sphere_pipeline : Pipeline
+    floor_pipeline  : Pipeline
     readback    : HostBuffer
     buf_size    : uint64
 }
@@ -200,6 +258,8 @@ struct public SkyboxResources {
 def public finalize(var r : SkyboxResources) {
     unsafe {
         delete r.readback
+        delete r.floor_pipeline
+        delete r.sphere_pipeline
         delete r.pipeline
         delete r.pipe_layout
         delete r.desc_pool
@@ -209,6 +269,10 @@ def public finalize(var r : SkyboxResources) {
         delete r.sky_image
         delete r.sky_memory
         delete r.ubo
+        delete r.floor_ib
+        delete r.floor_vb
+        delete r.sphere_ib
+        delete r.sphere_vb
         delete r.ib
         delete r.vb
         delete r.framebuffer
@@ -233,6 +297,106 @@ def public finalize(var ctx : SkyboxContext) {
         delete ctx.device
         delete ctx.instance
     }
+}
+
+//! Foreground (sphere/floor) pipeline: vertex + fragment, pos+normal vertex input (stride 24), depth
+//! test + write LESS, NO culling (so the procedural sphere/floor winding is irrelevant). Shares the
+//! skybox's pipeline layout (same UBO + cubemap bindings).
+def private build_scene_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+                                 vert, frag : ShaderModule) : Pipeline {
+    var stages : array<VkPipelineShaderStageCreateInfo>
+    stages |> resize(2)
+    stages[0] = VkPipelineShaderStageCreateInfo()
+    stages[0].stage.vertex = true
+    stages[0].module_ = boost_value_to_vk(vert)
+    stages[0].pName = "main"
+    stages[1] = VkPipelineShaderStageCreateInfo()
+    stages[1].stage.fragment = true
+    stages[1].module_ = boost_value_to_vk(frag)
+    stages[1].pName = "main"
+
+    var binding = VkVertexInputBindingDescription()
+    binding.binding = 0u
+    binding.stride = 24u
+    binding.inputRate = VkVertexInputRate.VERTEX
+    var attrs : array<VkVertexInputAttributeDescription>
+    var a_pos = VkVertexInputAttributeDescription()
+    a_pos.location = 0u
+    a_pos.format = VkFormat.R32G32B32_SFLOAT
+    a_pos.offset = 0u
+    attrs |> push(a_pos)
+    var a_norm = VkVertexInputAttributeDescription()
+    a_norm.location = 1u
+    a_norm.format = VkFormat.R32G32B32_SFLOAT
+    a_norm.offset = 12u
+    attrs |> push(a_norm)
+
+    var vinput = VkPipelineVertexInputStateCreateInfo()
+    vinput.vertexBindingDescriptionCount = 1u
+    vinput.vertexAttributeDescriptionCount = uint(length(attrs))
+
+    var ia = VkPipelineInputAssemblyStateCreateInfo()
+    ia.topology = VkPrimitiveTopology.TRIANGLE_LIST
+
+    var viewport = VkViewport()
+    viewport.width = float(SKY_W)
+    viewport.height = float(SKY_H)
+    viewport.maxDepth = 1.0
+    var scissor : VkRect2D
+    scissor.extent.width = uint(SKY_W)
+    scissor.extent.height = uint(SKY_H)
+    var vp = VkPipelineViewportStateCreateInfo()
+    vp.viewportCount = 1u
+    vp.scissorCount = 1u
+
+    var rast = VkPipelineRasterizationStateCreateInfo()
+    rast.polygonMode = VkPolygonMode.FILL          // cullMode left 0 = VK_CULL_MODE_NONE
+    rast.frontFace = VkFrontFace.COUNTER_CLOCKWISE
+    rast.lineWidth = 1.0
+
+    var msaa = VkPipelineMultisampleStateCreateInfo()
+    msaa.rasterizationSamples._1 = true
+
+    var depthstate = VkPipelineDepthStencilStateCreateInfo()
+    depthstate.depthTestEnable = VK_TRUE
+    depthstate.depthWriteEnable = VK_TRUE
+    depthstate.depthCompareOp = VkCompareOp.LESS
+
+    var blend_att : VkPipelineColorBlendAttachmentState
+    blend_att.colorWriteMask.r = true
+    blend_att.colorWriteMask.g = true
+    blend_att.colorWriteMask.b = true
+    blend_att.colorWriteMask.a = true
+    var blend = VkPipelineColorBlendStateCreateInfo()
+    blend.attachmentCount = 1u
+
+    var h : VkPipeline
+    unsafe {
+        var gp = VkGraphicsPipelineCreateInfo()
+        gp.stageCount = 2u
+        gp.pStages = addr(stages[0])
+        gp.pVertexInputState = addr(vinput)
+        vinput.pVertexBindingDescriptions = addr(binding)
+        vinput.pVertexAttributeDescriptions = addr(attrs[0])
+        gp.pInputAssemblyState = addr(ia)
+        vp.pViewports = addr(viewport)
+        vp.pScissors = addr(scissor)
+        gp.pViewportState = addr(vp)
+        gp.pRasterizationState = addr(rast)
+        gp.pMultisampleState = addr(msaa)
+        gp.pDepthStencilState = addr(depthstate)
+        blend.pAttachments = addr(blend_att)
+        gp.pColorBlendState = addr(blend)
+        gp.layout = boost_value_to_vk(layout)
+        gp.renderPass = boost_value_to_vk(rp)
+        vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
+    }
+    delete stages
+    delete attrs
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
 }
 
 //! Build the offscreen targets, the cubemap (uploaded + transitioned to SHADER_READ_ONLY), and the
@@ -265,9 +429,28 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
     delete indices_copy
 
+    // sphere + floor geometry (pos + normal, stride 24)
+    var sphere_v : array<float>
+    var sphere_i : array<uint16>
+    gen_sphere(sphere_v, sphere_i)
+    var inscope sphere_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, sphere_v)
+    var inscope sphere_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, sphere_i)
+    let sphere_index_count = length(sphere_i)
+    delete sphere_v
+    delete sphere_i
+
+    var floor_v : array<float>
+    var floor_i : array<uint16>
+    gen_floor(floor_v, floor_i)
+    var inscope floor_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, floor_v)
+    var inscope floor_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, floor_i)
+    let floor_index_count = length(floor_i)
+    delete floor_v
+    delete floor_i
+
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
-    var inscope ubo <- create_host_buffer(device, phys, 128ul, ubo_usage)        // view (64) + proj (64) = 128 bytes
+    var inscope ubo <- create_host_buffer(device, phys, 224ul, ubo_usage)        // view+proj+view_full (192) + cam_pos (16) + material (16)
 
     // 6-face cubemap: build the procedural sky on the host and stage it through one
     // HOST_VISIBLE/HOST_COHERENT buffer into a device-local cube image.
@@ -321,7 +504,11 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     sci.maxLod = 1.0f
     var inscope sky_sampler <- create_sampler(device, sci)
 
-    var reflections <- [decode_reflection(skybox_vert_spv_reflect), decode_reflection(skybox_frag_spv_reflect)]
+    // Include the scene shaders' reflections so binding 0 (UBO) picks up the FRAGMENT stage flag
+    // (sphere_fs / floor_fs read cam.cam_pos + cam.material) and binding 1 (cubemap) stays fragment.
+    var reflections <- [decode_reflection(skybox_vert_spv_reflect), decode_reflection(skybox_frag_spv_reflect),
+                        decode_reflection(scene_vert_spv_reflect), decode_reflection(sphere_frag_spv_reflect),
+                        decode_reflection(floor_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
     var dpci : DescriptorPoolCreateInfo
@@ -354,7 +541,7 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     w0.descriptorCount = 1u
     var binfo : DescriptorBufferInfo
     binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 128ul
+    binfo.range_ = 224ul
     w0.pBufferInfo |> push(binfo)
     writes |> emplace(w0)
     var w1 : WriteDescriptorSet
@@ -400,6 +587,13 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     delete vbindings
     delete vattrs
 
+    // foreground pipelines: one shared scene vertex shader, two fragment shaders (metal sphere + floor)
+    var inscope scene_vert  <- create_shader_module(device, scene_vert_spv)
+    var inscope sphere_frag <- create_shader_module(device, sphere_frag_spv)
+    var inscope floor_frag  <- create_shader_module(device, floor_frag_spv)
+    var inscope sphere_pipeline <- build_scene_pipeline(device, render_pass, pipe_layout, scene_vert, sphere_frag)
+    var inscope floor_pipeline  <- build_scene_pipeline(device, render_pass, pipe_layout, scene_vert, floor_frag)
+
     let buf_size = uint64(SKY_W * SKY_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
@@ -442,10 +636,15 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
 
     return <- SkyboxResources(
         color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
-        vb <- vb, ib <- ib, ubo <- ubo,
+        vb <- vb, ib <- ib,
+        sphere_vb <- sphere_vb, sphere_ib <- sphere_ib, floor_vb <- floor_vb, floor_ib <- floor_ib,
+        sphere_index_count = sphere_index_count, floor_index_count = floor_index_count,
+        ubo <- ubo,
         sky_image <- sky_image, sky_memory <- sky_memory, sky_view <- sky_view, sky_sampler <- sky_sampler,
         set_layouts <- set_layouts, desc_pool <- desc_pool, desc_set = raw_set,
-        pipe_layout <- pipe_layout, pipeline <- pipeline, readback <- readback,
+        pipe_layout <- pipe_layout, pipeline <- pipeline,
+        sphere_pipeline <- sphere_pipeline, floor_pipeline <- floor_pipeline,
+        readback <- readback,
         buf_size = buf_size)
 }
 
@@ -471,22 +670,39 @@ def public build_skybox_context() : SkyboxContext {
         instance <- instance, device <- device, queue = queue, pool <- pool, res <- res)
 }
 
-//! Host-side per-frame prep: derive the camera matrices from ``camera_t in [0,1)``, strip the
-//! translation so the cube stays glued to the camera, push view + proj into the UBO.
+//! Metal presets the sphere morphs through: float4(tint.rgb, reflectivity).
+let METAL_PRESETS : array<float4> <- [
+    float4(0.95f, 0.96f, 0.98f, 1.00f),   // chrome
+    float4(1.00f, 0.78f, 0.34f, 0.95f),   // gold
+    float4(0.95f, 0.55f, 0.38f, 0.92f),   // copper
+    float4(0.70f, 0.72f, 0.76f, 0.78f)]   // brushed steel
+
+//! Lerp through the metal presets, ~3 s per preset, looping. Drives the sphere's material over time.
+def cycle_metal(time : float) : float4 {
+    let period = 3.0f
+    let n = length(METAL_PRESETS)
+    let t = time / period
+    let idx = int(floor(t)) % n
+    let nxt = (idx + 1) % n
+    let f = t - floor(t)
+    return lerp(METAL_PRESETS[idx], METAL_PRESETS[nxt], float4(f, f, f, f))
+}
+
+//! Host-side per-frame prep: orbit the camera around the sphere (slightly elevated, looking at it),
+//! push the rotation-only view (skybox) + full view + camera pos + cycling material into the UBO.
 def public update_skybox_uniforms(res : SkyboxResources; device : Device; time, camera_t : float) {
-    // time isn't used for the skybox itself (the cubemap is baked at init), but the signature is
-    // kept consistent with the other tutorials' update_*_uniforms helpers so a future combined
-    // scene can drop foreground animation onto the same per-frame call.
-    let _time_unused = time
     let camera_angle = camera_t * 2.0f * PI
-    let cam_x = cos(camera_angle) * 4.0f
-    let cam_z = sin(camera_angle) * 4.0f
-    let cam_y = sin(camera_angle * 2.0f) * 1.2f          // gentle vertical sway
-    let cam_pos = float3(cam_x, cam_y, cam_z)
-    var view = look_at_rh(cam_pos, float3(0.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f))
-    cam.view = strip_translation(view)
+    let cam_x = cos(camera_angle) * 4.5f
+    let cam_z = sin(camera_angle) * 4.5f
+    let cam_y = 2.2f + sin(camera_angle * 2.0f) * 0.6f      // elevated, gentle sway
+    let cam_eye = float3(cam_x, cam_y, cam_z)
+    var view = look_at_rh(cam_eye, float3(0.0f, 0.9f, 0.0f), float3(0.0f, 1.0f, 0.0f))
+    cam.view_full = view                                     // full view (COPY before strip_translation mutates `view`)
+    cam.view = strip_translation(view)                       // skybox: rotation only (strips `view` in place)
     cam.proj = perspective_vk(70.0f * PI / 180.0f, float(SKY_W) / float(SKY_H), 0.1f, 50.0f)
-    skybox_vs_bind_uniform(device, res.ubo.memory)
+    cam.cam_pos = float4(cam_eye.x, cam_eye.y, cam_eye.z, 0.0f)
+    cam.material = cycle_metal(time)
+    skybox_vs_bind_uniform(device, res.ubo.memory)          // writes the whole cam block
 }
 
 //! Record the skybox draw into the given command buffer. The render pass ends with the colour
@@ -495,13 +711,28 @@ def public update_skybox_uniforms(res : SkyboxResources; device : Device; time, 
 def public record_skybox_render_pass(res : SkyboxResources; cmd : CommandBuffer) {
     var clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f), clear_depth(1.0f)]
     record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(SKY_W, SKY_H), clears) {
-        cmd_bind_pipeline(cmd, res.pipeline)
         let sets <- [vk_value_to_boost(res.desc_set)]
         var no_dyn : array<uint>
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
-        let vbufs <- [weak_copy(res.vb.buffer)]
         var voffs : array<uint64>
         voffs |> push(0ul)
+
+        // foreground first (depth write): reflective sphere, then checker floor
+        cmd_bind_pipeline(cmd, res.sphere_pipeline)
+        let sphere_vbufs <- [weak_copy(res.sphere_vb.buffer)]
+        cmd_bind_vertex_buffers(cmd, 0u, sphere_vbufs, voffs)
+        cmd_bind_index_buffer(cmd, weak_copy(res.sphere_ib.buffer), 0ul, VkIndexType.UINT16)
+        cmd_draw_indexed(cmd, uint(res.sphere_index_count), 1u, 0u, 0, 0u)
+
+        cmd_bind_pipeline(cmd, res.floor_pipeline)
+        let floor_vbufs <- [weak_copy(res.floor_vb.buffer)]
+        cmd_bind_vertex_buffers(cmd, 0u, floor_vbufs, voffs)
+        cmd_bind_index_buffer(cmd, weak_copy(res.floor_ib.buffer), 0ul, VkIndexType.UINT16)
+        cmd_draw_indexed(cmd, uint(res.floor_index_count), 1u, 0u, 0, 0u)
+
+        // skybox last: its z=1.0 trick + LESS_OR_EQUAL fills only where no foreground was drawn
+        cmd_bind_pipeline(cmd, res.pipeline)
+        let vbufs <- [weak_copy(res.vb.buffer)]
         cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
         cmd_bind_index_buffer(cmd, weak_copy(res.ib.buffer), 0ul, VkIndexType.UINT16)
         cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)

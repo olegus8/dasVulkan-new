@@ -32,7 +32,7 @@ def main {
     // (dasVulkan -> "das Vulkan", SPIR-V -> "Spear V" per Khronos, digits -> words for the ear).
     // Periods (not commas) force the TTS to pause between beats.
     say( 30, "dasVulkan tutorial 3 -- SDF raymarch",
-            "das Vulkan tutorial three. The SDF raymarch.")
+            "das Vulkan tutorial three. The SDF ray march.")
     say(360, "No vertices. No textures. Just math",
             "No vertices. No textures. The whole scene is math.")
     say(720, "daslang to SPIR-V",

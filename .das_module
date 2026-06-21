@@ -9,7 +9,7 @@ def initialize(project_path : string) {
     let boost_paths = [
         "vulkan_runtime", "vulkan_ctors", "vulkan_handles", "vulkan_structs", "vulkan_commands", "vulkan_cmds",
         "vulkan_boost", "vulkan_window", "vulkan_reflect", "vulkan_lint_data", "vulkan_lint",
-        "spirv_vulkan_shader"
+        "spirv_vulkan_shader", "vulkan_assets"
     ]
     for (p in boost_paths) {
         register_native_path("vulkan", "{p}", "{project_path}/daslib/{p}.das")

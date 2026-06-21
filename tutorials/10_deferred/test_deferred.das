@@ -1,8 +1,8 @@
 options gen2
 options indenting = 4
 
-// Tutorial 10 pixel-oracle gate. The scene is a brick-floor + brushed-cube lit by ONE directional
-// sun (PCF-shadowed) + THREE orbiting coloured point lights, composed via deferred shading. The
+// Tutorial 10 pixel-oracle gate. The scene is a brick-floor + concrete-cat statue lit by ONE
+// directional sun (PCF-shadowed) + THREE orbiting coloured point lights, composed via deferred. The
 // LIT mode (debug_mode=0) is the load-bearing visual; we additionally check the indicator strip
 // flips colour with debug_mode (proves the lighting fragment's mode switch + the host's push-
 // constant flow), and that the G-buffer ALBEDO mode shows orange bricks where the lit-mode shows
@@ -40,14 +40,20 @@ def test_deferred_oracle(t : T?) {
     t |> success(bg_r < 50 && bg_g < 60 && bg_b < 90,
         "top-quarter sky is dark blue (got {bg_r},{bg_g},{bg_b})")
 
-    // ----- centre: cube should be visible (non-background) -----
-    let cy = DEFERRED_H / 2 + 60                  // slightly below centre where the cube sits
-    let centre_off = (cy * DEFERRED_W + cx) * 4
-    let cr = int(lit_pixels[centre_off])
-    let cg = int(lit_pixels[centre_off + 1])
-    let cb = int(lit_pixels[centre_off + 2])
-    t |> success(cr > 60 || cg > 60 || cb > 60,
-        "cube area is lit (got {cr},{cg},{cb})")
+    // ----- centre: the cat should be visible + lit -----
+    // A single hardcoded sample is fragile under camera motion + the contact-AO darkening, so scan a
+    // box around the centre where the cat sits and require its brightest pixel to be clearly lit.
+    var cat_bright = 0
+    let cy = DEFERRED_H / 2 + 20
+    for (dy in range(-80, 81)) {
+        for (dx in range(-70, 71)) {
+            let o = ((cy + dy) * DEFERRED_W + (cx + dx)) * 4
+            let m = max(int(lit_pixels[o]), max(int(lit_pixels[o + 1]), int(lit_pixels[o + 2])))
+            cat_bright = max(cat_bright, m)
+        }
+    }
+    t |> success(cat_bright > 90,
+        "cat area has a clearly lit pixel (brightest in centre box = {cat_bright})")
 
     // ----- floor: scan a row below the cube; expect to see orange-warm bricks somewhere -----
     var floor_warm_hits = 0

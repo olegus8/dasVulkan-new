@@ -16,8 +16,7 @@ view rectangle and iteration cap live at module scope and are shared with the ho
 The clip above is the **animated zoom** viewer (``window/show_mandelbrot_blit.das``)
 rendered headlessly into an APNG and muxed with a strudel music bed -- one
 ``[vulkan_compute_shader]`` dispatch per frame, a single ``time`` push constant
-driving both zoom and rotation about the seahorse-valley point. The voiceover is
-Kokoro ``bf_emma``; see ``skills/recording.md``.
+driving both zoom and rotation about the seahorse-valley point.
 
 The shader
 ----------

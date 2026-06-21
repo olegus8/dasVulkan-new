@@ -10,6 +10,8 @@ out/
 *.pdb
 *.ilk
 *.obj
+# mesh assets (Wavefront OBJ) are NOT C++ object files -- keep them tracked
+!tutorials/_assets/**/*.obj
 
 # runtime / scratch
 *.log

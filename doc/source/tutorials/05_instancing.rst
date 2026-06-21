@@ -28,7 +28,7 @@ Every line of the shader is daslang, lowered to SPIR-V at compile time by dasSpi
 .. video:: instancing.mp4
 
 The clip above is the headless recording: 30 seconds, 30 fps, captured into an
-APNG and ffmpeg-muxed with a daStrudel music bed and a Kokoro voiceover. The
+APNG and ffmpeg-muxed with a daStrudel music bed. The
 camera orbits the swarm once per 30 seconds; each cube breathes at its own
 per-instance phase so the swarm pulses like a slow chorus rather than a unison
 heartbeat. See ``skills/recording.md``. To watch it live on your own GPU, run

@@ -33,8 +33,11 @@ require math
 //! translation strip keeps the skybox cube centred on the camera -- the skybox appears at
 //! infinity, no matter where the camera moves.
 struct Camera {
-    view : float4x4
-    proj : float4x4
+    view      : float4x4   // rotation-only view (keeps the skybox glued to the camera)
+    proj      : float4x4
+    view_full : float4x4   // full view incl. translation (the sphere + floor live in the world)
+    cam_pos   : float4     // xyz = world camera position (for the reflection view vector)
+    material  : float4     // rgb = metal tint, a = reflectivity — cycled over time for variety
 }
 var @uniform @set = 0 @binding = 0 cam : Camera
 
@@ -72,4 +75,65 @@ def skybox_fs {
     // expects; the cube face + intra-face UV are computed by the sampler from this direction.
     let col = texture(sky_tex, normalize(f_dir)).rgb
     frag_color = float4(col, 1.0)
+}
+
+// ===== reflective sphere + floor =====
+// Both live in the world (full view, not the rotation-only skybox view) and sample the SAME cubemap
+// the skybox renders. One shared vertex shader; the fragment shaders diverge (metal vs checkerboard).
+
+var @in @location = 1 a_normal : float3          // sphere/floor vertex normal (skybox ignores it)
+var @out @location = 1 v_world_pos    : float3
+var @out @location = 2 v_world_normal : float3
+
+[vulkan_vertex_shader(name="scene_vert_spv")]
+def scene_vs {
+    v_world_pos = a_pos
+    v_world_normal = a_normal
+    gl_Position = cam.proj * cam.view_full * float4(a_pos, 1.0)
+}
+
+var @in @location = 1 f_world_pos    : float3
+var @in @location = 2 f_world_normal : float3
+
+//! GLSL-style reflect(I, N) = I - 2*dot(N,I)*N, with I the incident (eye->surface) direction.
+def private reflect_dir(i, n : float3) : float3 {
+    return i - n * (2.0 * dot(n, i))
+}
+
+//! Mirror-metal sphere. Reflect the view about the surface normal, sample the cubemap, and tint by
+//! the cycled ``material`` (Schlick metal Fresnel: tinted reflectance at normal incidence ramping to
+//! white at grazing). The host morphs ``material`` chrome -> gold -> copper -> steel over time.
+[vulkan_fragment_shader(name="sphere_frag_spv")]
+def sphere_fs {
+    let n = normalize(f_world_normal)
+    let v = normalize(float3(cam.cam_pos.x - f_world_pos.x, cam.cam_pos.y - f_world_pos.y,
+                             cam.cam_pos.z - f_world_pos.z))
+    let ndotv = max(dot(n, v), 0.0)
+    let env = texture(sky_tex, reflect_dir(float3(-v.x, -v.y, -v.z), n)).rgb
+    let tint = float3(cam.material.x, cam.material.y, cam.material.z)
+    let f0 = tint * cam.material.w
+    let fres = pow(1.0 - ndotv, 5.0)
+    let reflectance = lerp(f0, float3(1.0, 1.0, 1.0), float3(fres, fres, fres))
+    let col = env * reflectance
+    frag_color = float4(col.x, col.y, col.z, 1.0)
+}
+
+//! Checkerboard floor with a faint Fresnel sky reflection so it reads as a polished surface grounding
+//! the sphere (not a flat plane floating in the sky).
+[vulkan_fragment_shader(name="floor_frag_spv")]
+def floor_fs {
+    let n = normalize(f_world_normal)
+    let gx = floor(f_world_pos.x * 0.5 + 100.0)
+    let gz = floor(f_world_pos.z * 0.5 + 100.0)
+    // true checkerboard: cell parity (gx+gz) mod 2, via floor (no mod builtin needed)
+    let cell = gx + gz
+    let parity = cell - floor(cell * 0.5) * 2.0          // 0.0 = even cell, 1.0 = odd cell
+    let checker = parity < 0.5 ? 0.85 : 0.28
+    let base = float3(checker, checker, checker) * float3(0.72, 0.74, 0.80)
+    let v = normalize(float3(cam.cam_pos.x - f_world_pos.x, cam.cam_pos.y - f_world_pos.y,
+                             cam.cam_pos.z - f_world_pos.z))
+    let env = texture(sky_tex, reflect_dir(float3(-v.x, -v.y, -v.z), n)).rgb
+    let fres = pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.4
+    let col = lerp(base, env, float3(fres, fres, fres))
+    frag_color = float4(col.x, col.y, col.z, 1.0)
 }

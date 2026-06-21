@@ -1,29 +1,28 @@
 options gen2
 options indenting = 4
 
-// Tutorial 06 pixel oracle (lavapipe in CI, real GPU locally). The skybox is a procedural sky
-// (zenith blue + warm horizon + sun glow + dark ground) sampled from a unit cubemap. At
-// (camera_t=0.5, time=0) the camera sits at (-4, 0, 0) looking back at the origin, so the
-// sun-bearing +X / +Y / +Z octant is in front. The oracle asserts a handful of structural
-// properties the render must have:
+// Tutorial 06 pixel oracle (lavapipe in CI, real GPU locally). A chrome/metal sphere sits on a
+// checkerboard floor and reflects a procedural cubemap sky (zenith blue + warm horizon + sun glow +
+// dark ground). At (camera_t=0.75, time=0) the camera is elevated at (0, 2.2, -4.5) looking at the
+// sphere, with the sun glow in the upper-left sky. The oracle asserts the scene's structure:
 //
-//   - the frame is not all-clear (the skybox rendered something);
-//   - at least one bright sun-tone pixel exists (the sun glow reached the rasteriser);
-//   - at least one blue-dominant pixel exists (zenith blue band sampled);
-//   - the bottom-centre samples the ground hemisphere (darker than the upper band).
+//   - the frame is not all-clear (something rendered);
+//   - a bright sun-glow pixel exists in the sky (the cubemap reached the rasteriser);
+//   - the reflective sphere is in the centre (its upper cap reflects the saturated blue zenith, its
+//     lower cap reflects the dark ground);
+//   - the checkerboard floor shows both light and dark tiles.
 
 require dastest/testing_boost public
 require skybox_tut
 
 let TEST_TIME : float = 0.0
-let TEST_CAM  : float = 0.75        // camera at (0, 0, -4), looking +Z -- sun (+X, +Y, +Z) octant is in front
+let TEST_CAM  : float = 0.75        // camera elevated at (0, 2.2, -4.5), looking at the sphere
 
 [test]
 def test_skybox_oracle(t : T?) {
     var pixels <- render_skybox(TEST_TIME, TEST_CAM)
 
-    // not all clear -- skybox covers the frame end-to-end since every NDC pixel maps to a sampling
-    // direction inside the cubemap, so a meaningful mean luminance must be present.
+    // 1. not all clear
     var sum_lum = 0
     let stride = 16
     for (j in range(SKY_H / stride)) {
@@ -34,50 +33,54 @@ def test_skybox_oracle(t : T?) {
     }
     let n = (SKY_W / stride) * (SKY_H / stride)
     let mean_lum = sum_lum / (n * 3)
-    t |> success(mean_lum > 50, "mean luminance > 50 (skybox is not the clear colour, got {mean_lum})")
+    t |> success(mean_lum > 50, "mean luminance > 50 (scene rendered, got {mean_lum})")
 
-    // somewhere in the frame, a warm sun-tone pixel (R high, G moderate, B lower)
-    var saw_sun_tone = false
-    for (j in range(64)) {
-        for (i in range(64)) {
-            let x = i * (SKY_W / 64)
-            let y = j * (SKY_H / 64)
-            let p = px(pixels, x, y)
-            if (p.x > 200 && p.y > 150 && p.z < p.x - 20) {
-                saw_sun_tone = true
+    // 2. bright sun-glow pixel (near-white) somewhere in the top half of the sky
+    var saw_sun = false
+    for (j in range(48)) {
+        for (i in range(96)) {
+            let p = px(pixels, i * (SKY_W / 96), j * (SKY_H / 96))
+            if (p.x + p.y + p.z > 640 && p.x > 200 && p.y > 200) {
+                saw_sun = true
             }
         }
     }
-    t |> success(saw_sun_tone, "found a warm sun-tone pixel (warm horizon / sun glow visible)")
+    t |> success(saw_sun, "found a bright sun-glow pixel in the sky")
 
-    // somewhere in the frame, a blue-dominant zenith pixel (B > R + 20 and B > G - 20)
-    var saw_zenith = false
-    for (j in range(64)) {
-        for (i in range(64)) {
-            let x = i * (SKY_W / 64)
-            let y = j * (SKY_H / 64)
-            let p = px(pixels, x, y)
-            if (p.z > p.x + 20 && p.z > 60) {
-                saw_zenith = true
-            }
+    // 3. reflective sphere in the centre: a saturated-blue pixel (upper cap reflects the zenith, more
+    //    saturated than the pale sky) AND a near-black pixel (lower cap reflects the dark ground).
+    var saw_sphere_blue = false
+    var saw_sphere_dark = false
+    let sy0 = SKY_H * 3 / 10
+    let sx0 = SKY_W * 38 / 100
+    for (jj in range(SKY_H * 3 / 10)) {            // scans rows sy0 .. sy0 + 30%H (the sphere band)
+        let j = sy0 + jj
+        for (ii in range(SKY_W * 24 / 100)) {      // cols sx0 .. sx0 + 24%W (the central column)
+            let p = px(pixels, sx0 + ii, j)
+            if (p.z > p.x + 35 && p.z > 120) { saw_sphere_blue = true }
+            if (p.x + p.y + p.z < 90) { saw_sphere_dark = true }
         }
     }
-    t |> success(saw_zenith, "found a zenith-blue pixel (zenith band sampled)")
+    t |> success(saw_sphere_blue && saw_sphere_dark,
+                 "reflective sphere present (blue zenith + dark ground reflection in centre)")
 
-    // top band (rows < 1/4) is on average brighter than bottom band (rows > 3/4) -- the bottom of
-    // the swarm samples the -Y face which is dimmer (ground).
-    var top_sum = 0
-    var bot_sum = 0
-    let band_h = SKY_H / 4
-    for (j in range(band_h / stride)) {
-        for (i in range(SKY_W / stride)) {
-            let pt = px(pixels, i * stride, j * stride)
-            top_sum += pt.x + pt.y + pt.z
-            let pb = px(pixels, i * stride, SKY_H - 1 - j * stride)
-            bot_sum += pb.x + pb.y + pb.z
+    // 4. checkerboard floor: the bottom third shows both a bright (light tile) and a dark (dark tile) pixel
+    var saw_light_tile = false
+    var saw_dark_tile = false
+    let fy0 = SKY_H * 7 / 10
+    for (jj in range((SKY_H - fy0) / 8)) {
+        let j = fy0 + jj * 8
+        for (ii in range(SKY_W / 8)) {
+            let lum = get_lum(px(pixels, ii * 8, j))
+            if (lum > 430) { saw_light_tile = true }
+            if (lum > 60 && lum < 240) { saw_dark_tile = true }
         }
     }
-    t |> success(top_sum > bot_sum, "top band brighter than bottom band ({top_sum} > {bot_sum}; ground darker than sky)")
+    t |> success(saw_light_tile && saw_dark_tile, "checkerboard floor present (light + dark tiles)")
 
     delete pixels
+}
+
+def get_lum(p : int3) : int {
+    return p.x + p.y + p.z
 }

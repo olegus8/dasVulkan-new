@@ -78,6 +78,8 @@ def shadow_vs {
 var @out @location = 0 v_world_pos     : float3
 var @out @location = 1 v_world_normal  : float3
 var @out @location = 2 v_light_space   : float4    // pre-perspective-divide
+var @out @location = 3 v_obj_pos       : float3    // object-space pos/normal for tri-planar brick
+var @out @location = 4 v_obj_normal    : float3
 
 //! Pass 2 vertex shader: pass world-space pos + normal forward to the fragment shader, plus the
 //! position projected into light space for the shadow-map lookup. The perspective divide happens
@@ -88,6 +90,8 @@ def main_vs {
     v_world_pos = float3(world4.x, world4.y, world4.z)
     let normal_world4 = op.model * float4(a_normal, 0.0)   // model has no non-uniform scale -> safe
     v_world_normal = normalize(float3(normal_world4.x, normal_world4.y, normal_world4.z))
+    v_obj_pos = a_pos
+    v_obj_normal = a_normal
     v_light_space = cam.light_vp * world4
     gl_Position = cam.proj * cam.view * world4
 }
@@ -99,9 +103,18 @@ def main_vs {
 //! returns the scalar PCF result.
 var @uniform @set = 0 @binding = 1 shadow_map : sampler2DShadow
 
+//! Brick PBR maps (ambientCG Bricks031, CC0), sampled tri-planar on the cube. Albedo is sRGB; the
+//! OpenGL-convention normal map (linear) perturbs the geometric normal for relief; the AO map (linear)
+//! darkens the mortar/pits in the ambient term for depth.
+var @uniform @set = 0 @binding = 2 brick_albedo : sampler2D
+var @uniform @set = 0 @binding = 3 brick_normal : sampler2D
+var @uniform @set = 0 @binding = 4 brick_ao     : sampler2D
+
 var @in @location = 0 f_world_pos    : float3
 var @in @location = 1 f_world_normal : float3
 var @in @location = 2 f_light_space  : float4
+var @in @location = 3 f_obj_pos      : float3
+var @in @location = 4 f_obj_normal   : float3
 var @out @location = 0 frag_color    : float4
 
 //! Pass 2 fragment shader: PCF-softened shadow + Blinn-Phong on the cube + procedural polished
@@ -138,15 +151,40 @@ def private pcf_shadow(uv : float2; ref : float) : float {
     return sum * (1.0 / 25.0)
 }
 
-//! Tri-planar projection blend weights. For a cube the world-space normal points along one axis
-//! per face, so the blend is dominated by that face's projection — but the smooth blend kills the
-//! seam on the rotated cube's edges.
-def private brushed(uv : float2) : float {
-    // fine hairline pattern + coarse cross-grain; sits in [0.86, 1.0] so albedo doesn't crash to
-    // black anywhere — purely a multiplicative micro-texture.
-    let hair = sin(uv.x * 84.0) * 0.5 + 0.5
-    let grain = sin(uv.y * 8.0 + sin(uv.x * 3.1) * 0.4) * 0.5 + 0.5
-    return 0.86 + 0.14 * (hair * 0.6 + grain * 0.4)
+// Object-space tiling for the tri-planar brick projection. The cube spans [-0.5, 0.5] in object
+// space, so scale 1.0 maps one full brick tile across each face (legible courses + mortar).
+let BRICK_SCALE = 1.0
+
+//! Tri-planar brick albedo: sample the brick color on each axis-aligned plane and blend by the
+//! normal weights `wn`. Replaces the old `sin(uv*84)` micro-texture that aliased into banding.
+def private tri_albedo(p : float3; wn : float3) : float3 {
+    let ax = texture(brick_albedo, float2(p.z, p.y) * BRICK_SCALE).rgb
+    let ay = texture(brick_albedo, float2(p.x, p.z) * BRICK_SCALE).rgb
+    let az = texture(brick_albedo, float2(p.x, p.y) * BRICK_SCALE).rgb
+    return ax * wn.x + ay * wn.y + az * wn.z
+}
+
+//! Tri-planar normal map (Golus "whiteout" blend): unpack the tangent-space brick normal on each
+//! plane, reorient it into world space using the geometric normal `n`, and blend by `wn`. Gives the
+//! bricks real relief under the moving sun without per-vertex tangents.
+def private tri_normal(p : float3; n : float3; wn : float3) : float3 {
+    let one = float3(1.0, 1.0, 1.0)
+    let tx = texture(brick_normal, float2(p.z, p.y) * BRICK_SCALE).rgb * 2.0 - one
+    let ty = texture(brick_normal, float2(p.x, p.z) * BRICK_SCALE).rgb * 2.0 - one
+    let tz = texture(brick_normal, float2(p.x, p.y) * BRICK_SCALE).rgb * 2.0 - one
+    // reorient each plane's tangent normal into world space (whiteout), then triblend
+    let cx = float3(abs(tx.z) * n.x, tx.y + n.y, tx.x + n.z)   // X plane -> .zyx
+    let cy = float3(ty.x + n.x, abs(ty.z) * n.y, ty.y + n.z)   // Y plane -> .xzy
+    let cz = float3(tz.x + n.x, tz.y + n.y, abs(tz.z) * n.z)   // Z plane -> .xyz
+    return normalize(cx * wn.x + cy * wn.y + cz * wn.z)
+}
+
+//! Tri-planar AO scalar (grayscale, sampled from .r), blended by `wn`. 1 = open, 0 = occluded crevice.
+def private tri_ao(p : float3; wn : float3) : float {
+    let ax = texture(brick_ao, float2(p.z, p.y) * BRICK_SCALE).x
+    let ay = texture(brick_ao, float2(p.x, p.z) * BRICK_SCALE).x
+    let az = texture(brick_ao, float2(p.x, p.y) * BRICK_SCALE).x
+    return ax * wn.x + ay * wn.y + az * wn.z
 }
 
 [vulkan_fragment_shader(name="main_frag_spv")]
@@ -221,27 +259,30 @@ def main_fs {
         frag_color = float4(col.x, col.y, col.z, 1.0)
     } else {
         // ===== cube =====
-        // Tri-planar brushed pattern: project the world position onto each axis-aligned plane,
-        // blend the three by abs(n). The cube is rotated 0.6 rad around Y so the world-aligned
-        // UV doesn't perfectly track face edges — reads as wood grain / brushed pattern at a
-        // slight cant, which is the desired micro-texture, not a bug.
-        let abs_n = float3(abs(n.x), abs(n.y), abs(n.z))
-        let wsum = max(abs_n.x + abs_n.y + abs_n.z, 0.001)
-        let wn = abs_n / float3(wsum, wsum, wsum)
-        let uvx = float2(f_world_pos.y, f_world_pos.z)
-        let uvy = float2(f_world_pos.x, f_world_pos.z)
-        let uvz = float2(f_world_pos.x, f_world_pos.y)
-        let tex_mix = brushed(uvx) * wn.x + brushed(uvy) * wn.y + brushed(uvz) * wn.z
+        // OBJECT-space tri-planar brick: the cube is rotated, so sampling in object space keeps the
+        // courses aligned to the faces (world-space tri-planar would swirl across the seams). The
+        // perturbed object normal is rotated into world space via the model matrix for lighting.
+        let on = normalize(f_obj_normal)
+        let abs_on = float3(abs(on.x), abs(on.y), abs(on.z))
+        let wsum = max(abs_on.x + abs_on.y + abs_on.z, 0.001)
+        let wn = abs_on / float3(wsum, wsum, wsum)
+        let cube_albedo = tri_albedo(f_obj_pos, wn)
+        let obj_bn = tri_normal(f_obj_pos, on, wn)
+        let bn4 = op.model * float4(obj_bn, 0.0)
+        let bn = normalize(float3(bn4.x, bn4.y, bn4.z))
 
-        // Blinn-Phong specular. Tight exponent + bright sun for a polished glint that the floor
-        // doesn't get; specular is gated by `lit` so the highlight vanishes inside the shadow.
+        // Diffuse + Blinn-Phong off the PERTURBED world normal (brick relief); shadow `lit` stays
+        // from the geometric depth pass. Brick is matte: wide specular lobe, low intensity.
+        let ao = tri_ao(f_obj_pos, wn)
+        let bndotl = max(dot(bn, l), 0.0)
         let h = normalize(l + view_dir)
-        let ndoth = max(dot(n, h), 0.0)
-        let spec = pow(ndoth, 96.0) * lit
-        let cube_albedo = float3(0.86, 0.66, 0.50) * tex_mix    // warm tan x brushed micro-tex
-        let diffuse = sun * ndotl * lit
-        let specular = sun * spec * 1.5
-        let col = ambient * cube_albedo + cube_albedo * diffuse + specular
+        let ndoth = max(dot(bn, h), 0.0)
+        let spec = pow(ndoth, 48.0) * lit
+        let diffuse = sun * bndotl * lit
+        let specular = sun * spec * 0.35
+        // AO darkens the ambient (indirect) term in the mortar/pits; a light cavity term on the direct
+        // diffuse keeps the recesses reading as recessed even under the sun.
+        let col = ambient * cube_albedo * ao + cube_albedo * diffuse * (0.65 + 0.35 * ao) + specular
         frag_color = float4(col.x, col.y, col.z, 1.0)
     }
 }

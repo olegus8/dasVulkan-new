@@ -35,17 +35,22 @@ let TRIS  = 98   // 2*TESS^2
 
 // ===== UBO =====
 
-//! One UBO (binding 0). The generated bind_uniform supports a single @uniform struct per shader, so
-//! the static control net and the per-frame transform share one block; the ~8 KB re-upload per frame
-//! is negligible. cp = 32 patches x 16 control points (xyz; w pad), patch p = cp[p*16 .. p*16+15],
-//! row-major 4x4. mvp = proj*view*model (positions); model = world rotation (normals + cull facing);
-//! camera.xyz = world eye, camera.w = debug-tint flag (0/1); light.xyz = world light direction.
+//! One UBO (binding 0), shared by every shader in this module (teapot task/mesh/frag, the ground
+//! floor, the env sky). generate_bind_uniform writes the WHOLE struct from any one reachable shader,
+//! so the host calls a single *_bind_uniform per frame and all stages see the same allocation. cp =
+//! 32 patches x 16 control points (xyz; w pad), patch p = cp[p*16 .. p*16+15], row-major 4x4. mvp =
+//! proj*view*model (teapot positions); model = world rotation (normals + cull facing); vp = proj*view
+//! (the world-space ground floor, which carries its own world coords); light_vp = the light's
+//! proj*view for the shadow-map pass; camera.xyz = world eye, camera.w = debug-tint flag (0/1);
+//! light.xyz = world light direction (the sun, shared by env + shadow).
 struct TeapotUBO {
-    mvp    : float4x4
-    model  : float4x4
-    camera : float4
-    light  : float4
-    cp     : float4[512]
+    mvp      : float4x4
+    model    : float4x4
+    vp       : float4x4
+    light_vp : float4x4
+    camera   : float4
+    light    : float4
+    cp       : float4[512]
 }
 var @uniform @set = 0 @binding = 0 ubo : TeapotUBO
 
@@ -185,6 +190,25 @@ var @in @location = 1 f_world_pos    : float3
 var @in @location = 2 f_patch        : float
 var @out @location = 0 frag_color    : float4
 
+//! Procedural environment sampled by a direction -- the thing the glazed teapot reflects. A warm
+//! horizon -> cool zenith gradient, a darker ground hemisphere, and a bright sun disc + glow along the
+//! light direction (so the reflected sun rides the surface as the teapot turns, and lines up with the
+//! specular highlight). No cubemap texture needed: it's evaluated analytically per fragment.
+def env_color(dir : float3) : float3 {
+    let up = clamp(dir.y, -1.0, 1.0)
+    let t = clamp(up * 0.5 + 0.5, 0.0, 1.0)
+    var c = lerp(float3(0.90, 0.80, 0.70), float3(0.32, 0.48, 0.82), float3(t, t, t))
+    if (up < 0.0) {
+        let g = clamp(-up * 1.5, 0.0, 1.0)
+        c = lerp(c, float3(0.18, 0.15, 0.13), float3(g, g, g))
+    }
+    let sun_dir = normalize(ubo.light.xyz)
+    let sd = max(dot(dir, sun_dir), 0.0)
+    c = c + float3(1.0, 0.92, 0.78) * (pow(sd, 250.0) * 3.0)   // bright sun disc
+    c = c + float3(1.0, 0.88, 0.70) * (pow(sd, 8.0) * 0.4)     // soft glow
+    return c
+}
+
 [vulkan_fragment_shader(name="teapot_frag_spv")]
 def teapot_fs {
     var n = normalize(f_world_normal)
@@ -193,15 +217,175 @@ def teapot_fs {
         n = -n
     }
     let l = normalize(ubo.light.xyz)
-    let key = max(dot(n, l), 0.0) * 0.8 + 0.2
-    let ceramic = float3(0.85, 0.55, 0.28)
-    var col = ceramic * key
-    let rim = pow(1.0 - max(dot(n, view), 0.0), 3.0) * 0.35
-    col += float3(rim, rim, rim)
+
+    // reflect the view about the surface normal and sample the procedural environment
+    let inc = float3(-view.x, -view.y, -view.z)
+    let rdir = inc - n * (2.0 * dot(n, inc))
+    let env = env_color(rdir)
+
+    // glazed ceramic: warm diffuse base, Fresnel-weighted environment reflection, tight glossy
+    // highlight. Fresnel makes the rim mirror-bright; the centre keeps a base sheen.
+    let key = max(dot(n, l), 0.0) * 0.7 + 0.3
+    let base = float3(0.82, 0.50, 0.26) * key
+    let fres = pow(1.0 - max(dot(n, view), 0.0), 4.0)
+    let reflectivity = 0.18 + 0.62 * fres
+    let half = normalize(l + view)
+    let spec = pow(max(dot(n, half), 0.0), 120.0) * 1.3
+    var col = lerp(base, env, float3(reflectivity, reflectivity, reflectivity))
+    col = col + float3(spec, spec, spec)
+
     if (ubo.camera.w > 0.5) {             // per-patch debug tint
         let h = fract(f_patch * 0.137)
         let tint = float3(fract(h + 0.0), fract(h + 0.33), fract(h + 0.66))
         col = lerp(col, tint, float3(0.55, 0.55, 0.55))   // splat t: dasSpirv FMix needs a vec t
     }
     frag_color = float4(col, 1.0)
+}
+
+// ===== SHADOW MAP SAMPLER =====
+// The depth-compare combined sampler. dasSpirv emits OpTypeImage with the Depth=1 flag (the
+// `sampler2DShadow` marker) and textureCompare lowers to OpImageSampleDrefImplicitLod -> scalar PCF
+// in [0,1] (1 = lit, 0 = shadowed). The floor reads it to receive the teapot's cast silhouette.
+var @uniform @set = 0 @binding = 1 teapot_shadow_map : sampler2DShadow
+
+let SHADOW_MAP_PX = 1024.0
+
+//! 3x3 PCF: each textureCompare is already hardware-PCF'd over its 2x2 footprint, so 9 taps give a
+//! soft, stable shadow edge cheaply.
+def private pcf_shadow(uv : float2; ref : float) : float {
+    let texel = 1.0 / SHADOW_MAP_PX
+    var sum = 0.0
+    for (j in range(-1, 2)) {
+        for (i in range(-1, 2)) {
+            let off = float2(float(i), float(j)) * texel
+            sum += textureCompare(teapot_shadow_map, uv + off, ref)
+        }
+    }
+    return sum * (1.0 / 9.0)
+}
+
+// ===== GROUND FLOOR =====
+// A world-space XZ plane the teapot sits on. Its own pipeline (regular vertex + fragment, vertex
+// buffer of world positions) drawn in the same color pass as the mesh-shader teapot. The floor reads
+// `ubo.vp` (proj*view, no model — the quad is already in world space), reflects the SAME env the
+// teapot does, and receives the teapot's shadow via the sampler2DShadow above.
+
+var @in  @location = 0 fl_pos   : float3
+var @out @location = 0 fl_world : float3
+
+[vulkan_vertex_shader(name="floor_vert_spv")]
+def floor_vs {
+    fl_world = fl_pos
+    gl_Position = ubo.vp * float4(fl_pos, 1.0)
+}
+
+var @in  @location = 0 ff_world : float3
+var @out @location = 0 floor_color : float4
+
+[vulkan_fragment_shader(name="floor_frag_spv")]
+def floor_fs {
+    let n = float3(0.0, 1.0, 0.0)
+    // checkerboard via cell parity (gx+gz) mod 2 — bigger cells (x0.6) keep far-field aliasing tame.
+    let gx = floor(ff_world.x * 0.6 + 1000.0)
+    let gz = floor(ff_world.z * 0.6 + 1000.0)
+    let cell = gx + gz
+    let parity = cell - floor(cell * 0.5) * 2.0
+    let checker = parity < 0.5 ? 0.58 : 0.20
+    let l = normalize(ubo.light.xyz)
+    let ndotl = max(dot(n, l), 0.0)
+
+    // shadow lookup: project the floor fragment into the light's clip space, remap NDC.xy [-1,1] to
+    // the [0,1] shadow-map UV (Vulkan NDC.z is already [0,1], used as the compare reference).
+    let lc = ubo.light_vp * float4(ff_world, 1.0)
+    let lw = max(lc.w, 0.0001)
+    let lndc = float3(lc.x / lw, lc.y / lw, lc.z / lw)
+    let suv = float2(lndc.x * 0.5 + 0.5, lndc.y * 0.5 + 0.5)
+    let ref = clamp(lndc.z - 0.0015, 0.0, 1.0)        // small constant receiver bias
+    var lit = pcf_shadow(suv, ref)
+    if (ndotl < 0.05) { lit = 0.0 }
+
+    // ambient + shadowed key light
+    var col = float3(checker, checker, checker) * (0.45 + ndotl * 0.7 * lit)
+    // polished sheen: Fresnel-weighted reflection of the env about the up normal
+    let view = normalize(ubo.camera.xyz - ff_world)
+    let inc = float3(-view.x, -view.y, -view.z)
+    let rdir = inc - n * (2.0 * dot(n, inc))
+    let env = env_color(rdir)
+    let fres = pow(1.0 - max(dot(n, view), 0.0), 4.0) * 0.6
+    col = lerp(col, env, float3(fres, fres, fres))
+    // dissolve the far floor into the sky so the slab has no hard edge and the checker never reaches
+    // the aliasing-prone horizon. Horizon colour = env sampled along the (flattened) view ray.
+    let horizon = env_color(normalize(float3(-view.x, 0.04, -view.z)))
+    let d = length(float2(ff_world.x, ff_world.z))
+    let fade = clamp((d - 4.5) * 0.14, 0.0, 1.0)
+    col = lerp(col, horizon, float3(fade, fade, fade))
+    floor_color = float4(col, 1.0)
+}
+
+// ===== ENV SKY =====
+// A fullscreen triangle drawn first (depth test off) so the background shows the same procedural env
+// the teapot + floor reflect — the teapot is now in a scene, not a void. The host computes the three
+// corner view-rays from the camera basis and uploads them as the triangle's per-vertex attribute; the
+// fragment normalizes the interpolated ray and evaluates env_color.
+
+var @in  @location = 0 sky_clip : float2
+var @in  @location = 1 sky_ray  : float3
+var @out @location = 0 sky_v_ray : float3
+
+[vulkan_vertex_shader(name="sky_vert_spv")]
+def sky_vs {
+    sky_v_ray = sky_ray
+    gl_Position = float4(sky_clip.x, sky_clip.y, 1.0, 1.0)   // z = w = 1 -> far plane
+}
+
+var @in  @location = 0 sky_f_ray : float3
+var @out @location = 0 sky_color : float4
+
+[vulkan_fragment_shader(name="sky_frag_spv")]
+def sky_fs {
+    sky_color = float4(env_color(normalize(sky_f_ray)), 1.0)
+}
+
+// ===== SHADOW CASTER (mesh-shader, depth-only) =====
+// The teapot casts its TRUE silhouette: the same on-GPU Bezier tessellation, rendered depth-only from
+// the light's point of view into the shadow map (pass 1). The task emits ALL patches (a shadow caster
+// must include patches that face away from the camera — they still occlude the light); the mesh writes
+// clip = light_vp * model * pos and no fragment varyings (the pipeline has no fragment stage).
+
+[vulkan_task_shader(local_size_x=1, name="teapot_shadow_task_spv")]
+def teapot_shadow_task {
+    for (p in range(PATCH_COUNT)) {
+        payload.visible[p] = uint(p)
+    }
+    payload.count = uint(PATCH_COUNT)
+    EmitMeshTasksEXT(uint(PATCH_COUNT), 1u, 1u)
+}
+
+[vulkan_mesh_shader(local_size_x=1, max_vertices=64, max_primitives=98, name="teapot_shadow_mesh_spv")]
+def teapot_shadow_mesh {
+    SetMeshOutputsEXT(uint(VERTS), uint(TRIS))
+    let patch = payload.visible[gl_WorkGroupID.x]
+    let base = int(patch) * 16
+    for (iu in range(TESS + 1)) {
+        for (iv in range(TESS + 1)) {
+            let u = float(iu) / float(TESS)
+            let v = float(iv) / float(TESS)
+            let pos = eval_patch(base, u, v)
+            let idx = iu * (TESS + 1) + iv
+            gl_MeshVerticesEXT[idx].gl_Position = ubo.light_vp * ubo.model * float4(pos, 1.0)
+        }
+    }
+    var t = 0
+    for (iu in range(TESS)) {
+        for (iv in range(TESS)) {
+            let a = iu * (TESS + 1) + iv
+            let b = a + 1
+            let c = a + (TESS + 1)
+            let d = c + 1
+            gl_PrimitiveTriangleIndicesEXT[t] = uint3(uint(a), uint(b), uint(c))
+            t ++
+            gl_PrimitiveTriangleIndicesEXT[t] = uint3(uint(b), uint(d), uint(c))
+            t ++
+        }
+    }
 }

@@ -32,44 +32,96 @@ let MSAA_DEPTH_FMT = VkFormat.D32_SFLOAT
 let MSAA_COLOR_FMT = VkFormat.R8G8B8A8_UNORM
 let TEX_DIM = 256
 
-let public N_VERTS = 24                    // 6 faces * 4 corners (per-face normals -> faceted look)
-let public N_INDICES = 36                  // 6 faces * 2 tris * 3 indices
+// ===== procedural spiky ball (the AA-test mesh) =====
+// MSAA's edge smoothing is subtle on a cube (12 edges) and dramatic on a dense thin silhouette. This
+// builds a smooth UV-sphere core studded with SPIKE_COUNT flat-shaded pyramidal spikes in Fibonacci-
+// distributed directions -- a sea-urchin whose every spike is a high-frequency silhouette edge that
+// crawls with jaggies at 1x and turns silky under 4x. Vertex format matches the pipeline:
+// pos.xyz (offset 0), uv (12), normal.xyz (20); stride 32.
 
-// ===== cube geometry (copy of tutorial 04's; this tutorial is self-contained) =====
+let SPIKE_COUNT    = 150
+let CORE_R         = 0.5f
+let SPIKE_TIP      = 0.95f    // spike tip radius (sized so the ball ~fills the cube's old frame)
+let SPIKE_BASE_AT  = 0.46f    // base ring sits just inside the core so spikes emerge seamlessly
+let SPIKE_BASE_R   = 0.05f    // base ring radius in the tangent plane (thin = sharp)
+let SPHERE_STACKS  = 18
+let SPHERE_SECTORS = 26
 
-let private cube_vertices : array<float> <- [
-    -0.5, -0.5, 0.5,  0.0, 1.0,   0.0, 0.0, 1.0,
-     0.5, -0.5, 0.5,  1.0, 1.0,   0.0, 0.0, 1.0,
-     0.5, 0.5, 0.5,  1.0, 0.0,   0.0, 0.0, 1.0,
-    -0.5, 0.5, 0.5,  0.0, 0.0,   0.0, 0.0, 1.0,
-     0.5, -0.5, -0.5,  0.0, 1.0,   0.0, 0.0, -1.0,
-    -0.5, -0.5, -0.5,  1.0, 1.0,   0.0, 0.0, -1.0,
-    -0.5, 0.5, -0.5,  1.0, 0.0,   0.0, 0.0, -1.0,
-     0.5, 0.5, -0.5,  0.0, 0.0,   0.0, 0.0, -1.0,
-     0.5, -0.5, 0.5,  0.0, 1.0,   1.0, 0.0, 0.0,
-     0.5, -0.5, -0.5,  1.0, 1.0,   1.0, 0.0, 0.0,
-     0.5, 0.5, -0.5,  1.0, 0.0,   1.0, 0.0, 0.0,
-     0.5, 0.5, 0.5,  0.0, 0.0,   1.0, 0.0, 0.0,
-    -0.5, -0.5, -0.5,  0.0, 1.0,  -1.0, 0.0, 0.0,
-    -0.5, -0.5, 0.5,  1.0, 1.0,  -1.0, 0.0, 0.0,
-    -0.5, 0.5, 0.5,  1.0, 0.0,  -1.0, 0.0, 0.0,
-    -0.5, 0.5, -0.5,  0.0, 0.0,  -1.0, 0.0, 0.0,
-    -0.5, 0.5, 0.5,  0.0, 1.0,   0.0, 1.0, 0.0,
-     0.5, 0.5, 0.5,  1.0, 1.0,   0.0, 1.0, 0.0,
-     0.5, 0.5, -0.5,  1.0, 0.0,   0.0, 1.0, 0.0,
-    -0.5, 0.5, -0.5,  0.0, 0.0,   0.0, 1.0, 0.0,
-    -0.5, -0.5, -0.5,  0.0, 1.0,   0.0, -1.0, 0.0,
-     0.5, -0.5, -0.5,  1.0, 1.0,   0.0, -1.0, 0.0,
-     0.5, -0.5, 0.5,  1.0, 0.0,   0.0, -1.0, 0.0,
-    -0.5, -0.5, 0.5,  0.0, 0.0,   0.0, -1.0, 0.0]
+def private push_vert(var verts : array<float>; p : float3; uv : float2; nrm : float3) {
+    verts |> push(p.x); verts |> push(p.y); verts |> push(p.z)
+    verts |> push(uv.x); verts |> push(uv.y)
+    verts |> push(nrm.x); verts |> push(nrm.y); verts |> push(nrm.z)
+}
 
-let private cube_indices : array<uint16> <- [
-    uint16(0), uint16(1), uint16(2),  uint16(0), uint16(2), uint16(3),
-    uint16(4), uint16(5), uint16(6),  uint16(4), uint16(6), uint16(7),
-    uint16(8), uint16(9), uint16(10), uint16(8), uint16(10), uint16(11),
-    uint16(12), uint16(13), uint16(14), uint16(12), uint16(14), uint16(15),
-    uint16(16), uint16(17), uint16(18), uint16(16), uint16(18), uint16(19),
-    uint16(20), uint16(21), uint16(22), uint16(20), uint16(22), uint16(23)]
+//! Fill `verts` (interleaved pos/uv/normal floats) + `indices` (uint16) with the spiky ball. The core
+//! sphere is smooth (per-vertex normal = direction) and indexed; the spikes are flat-shaded (per-face
+//! normal), with the winding + normal forced outward so back-face culling keeps a clean silhouette.
+def build_spiky_geometry(var verts : array<float>; var indices : array<uint16>) {
+    verts |> reserve(20000)
+    indices |> reserve(5400)
+    var nv = 0
+
+    // ---- core UV sphere (smooth, indexed) ----
+    let sector_step = 2.0f * PI / float(SPHERE_SECTORS)
+    let stack_step = PI / float(SPHERE_STACKS)
+    for (i in range(SPHERE_STACKS + 1)) {
+        let stack_a = PI * 0.5f - float(i) * stack_step
+        let xy = cos(stack_a)
+        let zz = sin(stack_a)
+        for (j in range(SPHERE_SECTORS + 1)) {
+            let sector_a = float(j) * sector_step
+            let dir = float3(xy * cos(sector_a), zz, xy * sin(sector_a))
+            let uv = float2(float(j) / float(SPHERE_SECTORS), float(i) / float(SPHERE_STACKS))
+            push_vert(verts, dir * CORE_R, uv, dir)
+            nv ++
+        }
+    }
+    for (i in range(SPHERE_STACKS)) {
+        var k1 = i * (SPHERE_SECTORS + 1)
+        var k2 = k1 + SPHERE_SECTORS + 1
+        for (_j in range(SPHERE_SECTORS)) {
+            if (i != 0) {
+                indices |> push(uint16(k1)); indices |> push(uint16(k2)); indices |> push(uint16(k1 + 1))
+            }
+            if (i != SPHERE_STACKS - 1) {
+                indices |> push(uint16(k1 + 1)); indices |> push(uint16(k2)); indices |> push(uint16(k2 + 1))
+            }
+            k1 ++
+            k2 ++
+        }
+    }
+
+    // ---- spikes (flat-shaded square pyramids in Fibonacci directions) ----
+    let golden = PI * (3.0f - sqrt(5.0f))
+    for (s in range(SPIKE_COUNT)) {
+        let yy = 1.0f - (float(s) + 0.5f) / float(SPIKE_COUNT) * 2.0f
+        let rr = sqrt(max(1.0f - yy * yy, 0.0f))
+        let theta = float(s) * golden
+        let dir = float3(rr * cos(theta), yy, rr * sin(theta))
+        let up = abs(dir.y) > 0.95f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f)
+        let tan0 = vec3_normalize(vec3_cross(up, dir))
+        let bit0 = vec3_cross(dir, tan0)
+        let tip = dir * SPIKE_TIP
+        var ring : float3[4]
+        for (k in range(4)) {
+            let a = float(k) * (PI * 0.5f)
+            ring[k] = dir * SPIKE_BASE_AT + (tan0 * cos(a) + bit0 * sin(a)) * SPIKE_BASE_R
+        }
+        for (k in range(4)) {
+            var v0 = ring[k]
+            var v1 = ring[(k + 1) % 4]
+            var fn = vec3_normalize(vec3_cross(vec3_sub(v1, v0), vec3_sub(tip, v0)))
+            if (vec3_dot(fn, dir) < 0.0f) {       // force outward normal + matching CCW winding
+                let tmp = v0; v0 = v1; v1 = tmp
+                fn = float3(-fn.x, -fn.y, -fn.z)
+            }
+            push_vert(verts, v0, float2(0.5f, 0.92f), fn); nv ++
+            push_vert(verts, v1, float2(0.5f, 0.92f), fn); nv ++
+            push_vert(verts, tip, float2(0.5f, 0.06f), fn); nv ++
+            indices |> push(uint16(nv - 3)); indices |> push(uint16(nv - 2)); indices |> push(uint16(nv - 1))
+        }
+    }
+}
 
 // ===== matrix builders (column-major, 16 floats each) =====
 
@@ -220,6 +272,7 @@ struct public MsaaResources {
     readback      : HostBuffer
     buf_size      : uint64
     push_size     : uint
+    index_count   : uint               // spiky-ball index count (geometry is generated, not fixed)
 }
 
 def public finalize(var r : MsaaResources) {
@@ -295,16 +348,16 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
-    var verts_copy : array<float>
-    verts_copy |> push_from(cube_vertices)
-    var inscope vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
-    delete verts_copy
+    var sverts : array<float>
+    var sindices : array<uint16>
+    build_spiky_geometry(sverts, sindices)
+    let spiky_index_count = uint(length(sindices))
+    var inscope vb <- create_host_buffer_from_bytes(device, phys, vb_usage, sverts)
+    delete sverts
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
-    var indices_copy : array<uint16>
-    indices_copy |> push_from(cube_indices)
-    var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
-    delete indices_copy
+    var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, sindices)
+    delete sindices
 
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
@@ -506,7 +559,7 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
         pipe_layout <- pipe_layout,
         pipeline_msaa <- pipeline_msaa, pipeline_1x <- pipeline_1x,
         readback <- readback,
-        buf_size = buf_size, push_size = push_size)
+        buf_size = buf_size, push_size = push_size, index_count = spiky_index_count)
 }
 
 //! Build the offscreen-self-contained context. The instance asks for Vulkan 1.3 API; the device
@@ -635,7 +688,7 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
         voffs |> push(0ul)
         cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
         cmd_bind_index_buffer(cmd, weak_copy(res.ib.buffer), 0ul, VkIndexType.UINT16)
-        cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
+        cmd_draw_indexed(cmd, res.index_count, 1u, 0u, 0, 0u)
     }
 
     // Mode indicator strip: a second dynamic-rendering "pass" with renderArea narrowed to the
