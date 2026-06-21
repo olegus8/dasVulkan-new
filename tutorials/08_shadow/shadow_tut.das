@@ -30,7 +30,10 @@ module shadow_tut public
 
 require vulkan/vulkan_boost public
 require vulkan/vulkan_reflect public
+require vulkan/vulkan_assets
 require daslib/defer
+require daslib/fio
+require daslib/module_path
 require shadow_tut_shaders public
 require math
 
@@ -206,6 +209,10 @@ struct public ShadowResources {
     floor_ib     : HostBuffer
     ubo          : HostBuffer
     shadow_sampler : Sampler
+    tex_sampler  : Sampler          // linear/repeat for the brick maps
+    brick_albedo : Texture          // ambientCG Bricks031 color (sRGB), tri-planar on the cube
+    brick_normal : Texture          // ambientCG Bricks031 OpenGL normal (linear)
+    brick_ao     : Texture          // ambientCG Bricks031 ambient occlusion (linear)
     set_layouts  : array<DescriptorSetLayout>
     desc_pool    : DescriptorPool
     desc_set     : VkDescriptorSet
@@ -224,6 +231,10 @@ def public finalize(var r : ShadowResources) {
         delete r.pipe_layout
         delete r.desc_pool
         delete r.set_layouts
+        delete r.brick_ao
+        delete r.brick_normal
+        delete r.brick_albedo
+        delete r.tex_sampler
         delete r.shadow_sampler
         delete r.ubo
         delete r.floor_ib
@@ -512,7 +523,27 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
 
     var inscope shadow_sampler <- create_sampler_shadow(device)
 
-    // Descriptors: set 0 binding 0 = UBO, binding 1 = sampler2DShadow. We reflect off the MAIN
+    // Brick PBR maps (ambientCG Bricks031, CC0) from tutorials/_assets/brick, tri-planar on the cube.
+    // tutorial_asset_dir resolves relative to the (absolutely-mounted) vulkan_assets module, so it
+    // works from any CWD / CI checkout.
+    let brick_dir = tutorial_asset_dir("brick")
+    var inscope brick_albedo <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_Color.jpg"), true)        // sRGB albedo
+    var inscope brick_normal <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_NormalGL.jpg"), false)    // linear normal
+    var inscope brick_ao <- load_texture_2d(device, phys, queue, pool,
+        path_join(brick_dir, "Bricks031_1K-JPG_AmbientOcclusion.jpg"), false)   // linear AO
+    var tsci : SamplerCreateInfo
+    tsci.magFilter = VkFilter.LINEAR
+    tsci.minFilter = VkFilter.LINEAR
+    tsci.mipmapMode = VkSamplerMipmapMode.LINEAR
+    tsci.addressModeU = VkSamplerAddressMode.REPEAT
+    tsci.addressModeV = VkSamplerAddressMode.REPEAT
+    tsci.addressModeW = VkSamplerAddressMode.REPEAT
+    tsci.maxLod = 16.0f                 // sample the full mip chain (kills minification moiré)
+    var inscope tex_sampler <- create_sampler(device, tsci)
+
+    // Descriptors: set 0 binding 0 = UBO, binding 1 = sampler2DShadow, binding 2/3 = brick maps. We reflect off the MAIN
     // fragment shader (the only one that sees both bindings) -- the shadow vertex doesn't see the
     // sampler, but the layout it ships with covers a strict subset.
     var reflections <- [decode_reflection(main_vert_spv_reflect), decode_reflection(main_frag_spv_reflect)]
@@ -525,7 +556,7 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     ps0.descriptorCount = 1u
     var ps1 : DescriptorPoolSize
     ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u
+    ps1.descriptorCount = 4u    // shadow_map + brick_albedo + brick_normal + brick_ao
     dpci.pPoolSizes <- [ps0, ps1]
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -562,6 +593,43 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     shadow_info.imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
     w1.pImageInfo |> push(shadow_info)
     writes |> emplace(w1)
+
+    var w2 : WriteDescriptorSet
+    w2.dstSet = vk_value_to_boost(raw_set)
+    w2.dstBinding = 2u
+    w2.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    w2.descriptorCount = 1u
+    var albedo_info : DescriptorImageInfo
+    albedo_info.sampler = weak_copy(tex_sampler)
+    albedo_info.imageView = weak_copy(brick_albedo.view)
+    albedo_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    w2.pImageInfo |> push(albedo_info)
+    writes |> emplace(w2)
+
+    var w3 : WriteDescriptorSet
+    w3.dstSet = vk_value_to_boost(raw_set)
+    w3.dstBinding = 3u
+    w3.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    w3.descriptorCount = 1u
+    var normal_info : DescriptorImageInfo
+    normal_info.sampler = weak_copy(tex_sampler)
+    normal_info.imageView = weak_copy(brick_normal.view)
+    normal_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    w3.pImageInfo |> push(normal_info)
+    writes |> emplace(w3)
+
+    var w4 : WriteDescriptorSet
+    w4.dstSet = vk_value_to_boost(raw_set)
+    w4.dstBinding = 4u
+    w4.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    w4.descriptorCount = 1u
+    var ao_info : DescriptorImageInfo
+    ao_info.sampler = weak_copy(tex_sampler)
+    ao_info.imageView = weak_copy(brick_ao.view)
+    ao_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    w4.pImageInfo |> push(ao_info)
+    writes |> emplace(w4)
+
     var no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
@@ -579,10 +647,6 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     let buf_size = uint64(SCENE_W) * uint64(SCENE_H) * 4ul
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
-    // (queue + pool are passed in so the caller can record/submit work later; not used here.)
-    let _unused_queue = queue
-    let _unused_pool = pool
-
     var r : ShadowResources
     r.color <- color
     r.depth <- depth
@@ -597,6 +661,10 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     r.floor_ib <- floor_ib
     r.ubo <- ubo
     r.shadow_sampler <- shadow_sampler
+    r.tex_sampler <- tex_sampler
+    r.brick_albedo <- brick_albedo
+    r.brick_normal <- brick_normal
+    r.brick_ao <- brick_ao
     r.set_layouts <- set_layouts
     r.desc_pool <- desc_pool
     r.desc_set = raw_set
@@ -677,6 +745,7 @@ def public record_shadow_render_pass(var res : ShadowResources; cmd : CommandBuf
         var cube_model = translate_m4(float3(0.0, 1.5, 0.0)) * rotate_y_m4(0.6)
         var vstage : VkShaderStageFlags
         vstage.vertex = true
+        vstage.fragment = true   // main_fs reads op.model to rotate the brick normal into world space
         cmd_push_constants(cmd, res.pipe_layout, vstage, 0u, cube_model)
         cmd_draw_indexed(cmd, uint(CUBE_INDEX_COUNT), 1u, 0u, 0, 0u)
 
@@ -700,6 +769,7 @@ def public record_shadow_render_pass(var res : ShadowResources; cmd : CommandBuf
         var cube_model = translate_m4(float3(0.0, 1.5, 0.0)) * rotate_y_m4(0.6)
         var vstage : VkShaderStageFlags
         vstage.vertex = true
+        vstage.fragment = true   // main_fs reads op.model to rotate the brick normal into world space
         cmd_push_constants(cmd, res.pipe_layout, vstage, 0u, cube_model)
         cmd_draw_indexed(cmd, uint(CUBE_INDEX_COUNT), 1u, 0u, 0, 0u)
 

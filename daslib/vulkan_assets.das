@@ -15,7 +15,21 @@ require vulkan public
 require vulkan/vulkan_boost public
 require stbimage/stbimage_boost
 require geometry/geom_gen
+require daslib/module_path
+require daslib/fio
 require math
+
+// ===== asset path resolution =====
+
+//! Absolute path to a subdirectory of ``tutorials/_assets``. Resolved relative to THIS module file,
+//! which the dasVulkan ``.das_module`` mounts by ABSOLUTE path (``{project_path}/daslib/...``), so
+//! ``get_this_module_dir()`` bakes an absolute path here and the result is CWD-independent — unlike
+//! calling it from a tutorial file reached via a relative ``require`` (whose baked path is relative).
+def public tutorial_asset_dir(sub : string) : string {
+    // vulkan_assets.das lives at <root>/daslib/ ; assets are at <root>/tutorials/_assets/<sub>.
+    let root = dir_name(get_this_module_dir())
+    return path_join(path_join(root, "tutorials/_assets"), sub)
+}
 
 // ===== textures =====
 
@@ -38,7 +52,7 @@ def public finalize(var t : Texture) {
 
 // Isolate the dasStbImage `Image` (clashes with vulkan's `Image` name) to this one helper: load a
 // file as 4-channel data and hand back the raw bytes + dimensions. hdr=true loads float (bpc=4).
-def private load_pixels(path : string; hdr : bool; var w, h : int; var bytes : array<uint8>) : bool {
+def private load_pixels(path : string; hdr : bool; var w, h : int&; var bytes : array<uint8>) : bool {
     var simg : stbimage_boost::Image
     let r = hdr ? simg.load_hdr(path, 4) : simg.load(path, 4)
     if (!r._0) {
@@ -50,11 +64,39 @@ def private load_pixels(path : string; hdr : bool; var w, h : int; var bytes : a
     return true
 }
 
-//! Upload already-decoded pixel `bytes` (w*h*`fmt`) as a sampled device-local image of `fmt`.
+// Per-mip-range color image barrier — transition_image only covers a single whole-image level, so
+// the mip-generation blit chain needs this range-aware form.
+def private mip_barrier(cmd : CommandBuffer; image : vulkan_handles::Image; base, count : uint;
+                        old_layout, new_layout : VkImageLayout; src_access, dst_access : VkAccessFlags;
+                        src_stage, dst_stage : VkPipelineStageFlags) {
+    var barrier : ImageMemoryBarrier
+    barrier.srcAccessMask = src_access
+    barrier.dstAccessMask = dst_access
+    barrier.oldLayout = old_layout
+    barrier.newLayout = new_layout
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+    barrier.image = weak_copy(image)
+    barrier.subresourceRange.aspectMask.color = true
+    barrier.subresourceRange.baseMipLevel = base
+    barrier.subresourceRange.levelCount = count
+    barrier.subresourceRange.layerCount = 1u
+    var no_mem : array<MemoryBarrier>
+    var no_buf : array<BufferMemoryBarrier>
+    var imgs : array<ImageMemoryBarrier>
+    imgs |> emplace(barrier)
+    var no_dep : VkDependencyFlags
+    cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
+}
+
+//! Upload already-decoded pixel `bytes` (w*h*`fmt`) as a sampled device-local image. When `gen_mips`
+//! is true a full mip chain is built on the GPU via a linear blit cascade (kills minification moiré
+//! on detailed textures); the caller's sampler should then use a high maxLod.
 def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool;
-                          w, h : int; fmt : VkFormat; var bytes : array<uint8>) : Texture {
+                          w, h : int; fmt : VkFormat; var bytes : array<uint8>; gen_mips : bool = true) : Texture {
     let dev = boost_value_to_vk(device)
-    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt, mipLevels = 1u, arrayLayers = 1u,
+    let mip_levels = gen_mips ? uint(floor(log2(float(max(w, h))))) + 1u : 1u
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt, mipLevels = mip_levels, arrayLayers = 1u,
         tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(w)
     ici.extent.height = uint(h)
@@ -62,6 +104,7 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
     ici.samples._1 = true
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
+    ici.usage.transfer_src = true       // mip 0 is the blit SOURCE for level 1, etc.
     var inscope image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), ireq)
@@ -74,7 +117,7 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
 
     var vci = ImageViewCreateInfo(image = weak_copy(image), viewType = VkImageViewType._2D, format = fmt)
     vci.subresourceRange.aspectMask.color = true
-    vci.subresourceRange.levelCount = 1u
+    vci.subresourceRange.levelCount = mip_levels
     vci.subresourceRange.layerCount = 1u
     var inscope view <- create_image_view(device, vci)
 
@@ -83,8 +126,10 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
     var inscope staging <- create_host_buffer_from_bytes(device, phys, staging_usage, bytes)
     run_cmd_sync(device, pool, queue) $(cmd) {
         let none : VkAccessFlags
-        var to_dst : VkAccessFlags
-        to_dst.transfer_write = true
+        var to_write : VkAccessFlags
+        to_write.transfer_write = true
+        var to_tread : VkAccessFlags
+        to_tread.transfer_read = true
         var to_read : VkAccessFlags
         to_read.shader_read = true
         var top : VkPipelineStageFlags
@@ -93,7 +138,10 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
         xfer.transfer = true
         var frag_stage : VkPipelineStageFlags
         frag_stage.fragment_shader = true
-        transition_image(cmd, image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL, none, to_dst, top, xfer)
+
+        // all mips UNDEFINED -> TRANSFER_DST, then fill mip 0 from the staging buffer
+        mip_barrier(cmd, image, 0u, mip_levels, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            none, to_write, top, xfer)
         var region : BufferImageCopy
         region.imageSubresource.aspectMask.color = true
         region.imageSubresource.layerCount = 1u
@@ -103,8 +151,40 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
         var regions : array<BufferImageCopy>
         regions |> emplace(region)
         cmd_copy_buffer_to_image(cmd, staging.buffer, image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, to_read, xfer, frag_stage)
+
+        // blit cascade: level i is half of level i-1; each source level ends in SHADER_READ_ONLY
+        var mw = w
+        var mh = h
+        for (i in range(1, int(mip_levels))) {
+            let nw = max(mw / 2, 1)
+            let nh = max(mh / 2, 1)
+            mip_barrier(cmd, image, uint(i - 1), 1u, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+                to_write, to_tread, xfer, xfer)
+            var blit : VkImageBlit
+            blit.srcSubresource.aspectMask.color = true
+            blit.srcSubresource.mipLevel = uint(i - 1)
+            blit.srcSubresource.layerCount = 1u
+            blit.srcOffsets[1].x = mw
+            blit.srcOffsets[1].y = mh
+            blit.srcOffsets[1].z = 1
+            blit.dstSubresource.aspectMask.color = true
+            blit.dstSubresource.mipLevel = uint(i)
+            blit.dstSubresource.layerCount = 1u
+            blit.dstOffsets[1].x = nw
+            blit.dstOffsets[1].y = nh
+            blit.dstOffsets[1].z = 1
+            unsafe {
+                vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
+                    boost_value_to_vk(image), VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, addr(blit), VkFilter.LINEAR)
+            }
+            mip_barrier(cmd, image, uint(i - 1), 1u, VkImageLayout.TRANSFER_SRC_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+                to_tread, to_read, xfer, frag_stage)
+            mw = nw
+            mh = nh
+        }
+        // the last level was never a blit source — it is still TRANSFER_DST
+        mip_barrier(cmd, image, mip_levels - 1u, 1u, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            to_write, to_read, xfer, frag_stage)
     }
     return <- Texture(image <- image, memory <- memory, view <- view, width = w, height = h)
 }
@@ -132,7 +212,7 @@ def public load_texture_hdr(device : Device; phys : VkPhysicalDevice; queue : Vk
     if (!load_pixels(path, true, w, h, bytes)) {
         panic("load_texture_hdr: cannot decode '{path}'")
     }
-    var tex <- upload_texture(device, phys, queue, pool, w, h, VkFormat.R32G32B32A32_SFLOAT, bytes)
+    var tex <- upload_texture(device, phys, queue, pool, w, h, VkFormat.R32G32B32A32_SFLOAT, bytes, false)
     delete bytes
     return <- tex
 }
