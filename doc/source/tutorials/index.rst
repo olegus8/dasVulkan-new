@@ -17,11 +17,14 @@ a cubemap, :doc:`07_particles` hands the vertex stream itself to a compute shade
 4× MSAA with auto-resolve, :doc:`10_deferred` brings everything together
 in a three-pass deferred renderer (sampled G-buffer) with SSAO + shadow + many lights,
 and :doc:`11_hdr` adds an HDR offscreen target + Karis-style five-level bloom
-pyramid + ACES tonemap composite for the post-process rail. Finally
+pyramid + ACES tonemap composite for the post-process rail.
+:doc:`12_gpu_driven` hands the draw decision to the GPU: a compute shader does
+Hi-Z occlusion culling, compacts survivors into an indirect-draw buffer with a
+GPU-written count, and ``cmd_draw_indexed_indirect_count`` draws them with bindless
+materials. Finally
 :doc:`13_mesh` and :doc:`14_teapot` drop the vertex buffer entirely for the
 GPU-driven **mesh-shader** pipeline -- cluster culling, then on-GPU Bezier
-tessellation of the Utah teapot. (Tutorial 12 is reserved for GPU-driven
-indirect + bindless rendering.)
+tessellation of the Utah teapot.
 Each tutorial's `Next` footer links to the one after.
 
 Every tutorial lives in its own self-contained directory under ``tutorials/`` in
@@ -49,5 +52,6 @@ video.
    09_msaa
    10_deferred
    11_hdr
+   12_gpu_driven
    13_mesh
    14_teapot

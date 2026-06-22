@@ -1,7 +1,7 @@
 13 - Mesh Shaders: GPU Cluster Culling
 ======================================
 
-Tutorials 1-11 fed the GPU geometry from vertex + index buffers. This one
+Tutorials 1-12 fed the GPU geometry from vertex + index buffers. This one
 removes them entirely. ``VK_EXT_mesh_shader`` replaces the whole vertex-input
 stage with a two-stage, compute-like pipeline that *amplifies* geometry on the
 GPU: a **task** shader decides what to draw, and a **mesh** shader generates the

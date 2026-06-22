@@ -136,3 +136,11 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/11_hdr/recording/record_hdr.das
+
+:doc:`12_gpu_driven` hands the draw decision to the **GPU**: a compute
+shader runs **Hi-Z occlusion culling** against a depth pyramid, compacts
+the survivors into an indirect-draw buffer with a GPU-written count, and
+``cmd_draw_indexed_indirect_count`` draws exactly that many with
+**bindless** materials -- the CPU never learns how many objects survive.
+A side-by-side god view tints the culled cubes as ghosts so the
+otherwise-invisible cull becomes visible.
