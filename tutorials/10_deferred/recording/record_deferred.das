@@ -29,13 +29,14 @@ def main {
     let dur_s = float(n_frames) / float(fps)
 
     // Captions stay canonical; voice text is respelled phonetically per skills/recording.md.
+    // Frames spaced so the last line finishes well before the 30 s video ends (no audio cut-off).
     say(30,  "dasVulkan tutorial 10 -- deferred shading",
              "das Vulkan tutorial ten. Deferred shading.")
-    say(300, "G-buffer pass. MRT writes albedo. normal. world-pos",
+    say(210, "G-buffer pass. MRT writes albedo. normal. world-pos",
              "G buffer pass. M R T writes the concrete cat's albedo. normal. and world position.")
-    say(540, "SSAO pass samples the G-buffer. real hemisphere occlusion",
+    say(420, "SSAO pass samples the G-buffer. real hemisphere occlusion",
              "S S A O pass samples the G buffer textures. real hemisphere occlusion grounds the cat.")
-    say(780, "Lighting pass. G-buffer + SSAO + shadow + HDR environment",
+    say(660, "Lighting pass. G-buffer + SSAO + shadow + HDR environment",
              "Lighting pass samples the G buffer. S S A O. the shadow map. and the H D R environment.")
 
     var inscope ctx <- build_deferred_context()

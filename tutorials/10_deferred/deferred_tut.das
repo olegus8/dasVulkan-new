@@ -171,17 +171,6 @@ def translate_m4(t : float3) : float4x4 {
     return m
 }
 
-def rotate_y_m4(angle : float) : float4x4 {
-    let c = cos(angle)
-    let s = sin(angle)
-    var m : float4x4
-    m[0] = float4(c, 0.0f, -s, 0.0f)
-    m[1] = float4(0.0f, 1.0f, 0.0f, 0.0f)
-    m[2] = float4(s, 0.0f, c, 0.0f)
-    m[3] = float4(0.0f, 0.0f, 0.0f, 1.0f)
-    return m
-}
-
 def identity_m4 : float4x4 {
     var m : float4x4
     m[0] = float4(1.0f, 0.0f, 0.0f, 0.0f)
@@ -1140,8 +1129,9 @@ def public record_deferred_render(res : DeferredResources; cmd : CommandBuffer) 
 //! Draw cube + floor with the appropriate ObjectPush per object. Used by BOTH the shadow pass and
 //! the gbuffer pass; the only difference is the bound pipeline.
 def private draw_casters(res : DeferredResources; cmd : CommandBuffer; pipe_layout : PipelineLayout) {
-    // Cat: sits on the floor (base at y=0, baked into the verts), slow spin around Y.
-    op.model = rotate_y_m4(scene.camera_pos.w * 0.3f)
+    // Cat: sits on the floor (base at y=0, baked into the verts), stationary -- only the camera orbits
+    // (a spinning cat under an orbiting camera reads as confusing double motion).
+    op.model = identity_m4()
     op.material = 0
     let cube_vbufs <- [weak_copy(res.cube_vb.buffer)]
     var cube_offs : array<uint64>
