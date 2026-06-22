@@ -59,7 +59,7 @@ def main() : int {
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
-    var mai = MemoryAllocateInfo(allocationSize = req.size,
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     bind_buffer_memory(device, buffer, memory, 0ul)
@@ -100,7 +100,7 @@ def main() : int {
     write.pBufferInfo |> push(binfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // ---- compute pipeline (boost: owning, single-object) ----

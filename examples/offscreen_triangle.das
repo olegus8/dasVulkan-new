@@ -3,7 +3,6 @@ options gen2
 require vulkan
 require triangle_example_shaders
 require daslib/fio
-require strings
 require math
 
 let WIDTH = 256
@@ -405,7 +404,7 @@ def main() : int {
 
     // ----- read back pixels -----
     var mapped : void? = null
-    var map_flags : VkMemoryMapFlags
+    let map_flags : VkMemoryMapFlags
     unsafe {
         check(vkMapMemory(device, buf_mem, 0ul, buf_size, map_flags, addr(mapped)), "map memory")
     }

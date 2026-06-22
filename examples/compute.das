@@ -157,7 +157,7 @@ def main() : int {
 
     // ---- read back + verify ----
     var mapped : void? = null
-    var mf : VkMemoryMapFlags
+    let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
     }

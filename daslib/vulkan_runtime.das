@@ -9,7 +9,6 @@ options indenting = 4
 module vulkan_runtime
 
 require vulkan public
-require strings
 
 //! Result-checking convention used by every generated creator/command.
 //! `out == null` -> assert SUCCESS (panic on any failure).
@@ -26,7 +25,7 @@ def public vk_check(r : VkResult; var out : VkResult?) {
 
 //! Typed pointer to the first element of an array (vk_view marshalling). Empty -> null.
 def public array_addr(var a : array<auto(TT)>) : TT? {
-    if (length(a) == 0) {
+    if (empty(a)) {
         return null
     }
     return unsafe(addr(a[0]))

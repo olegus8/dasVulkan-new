@@ -114,6 +114,7 @@ def private guard_open(f : FILE const?; guard, protect : string) {
     }
 }
 
+[unused_argument(protect)]
 def private guard_close(f : FILE const?; guard, protect : string) {
     return if (empty(guard))
     fprint(f, "#endif\n")
@@ -124,9 +125,7 @@ def private guard_close(f : FILE const?; guard, protect : string) {
 def private build_flags_lookup(reg : VkRegistry; var em : EmitModel) {
     // canonical bitmask typedefs first
     for (b in reg.bitmasks) {
-        continue if (!empty(b.alias))
-        continue if (!key_exists(reg.enabled_types, b.name))
-        continue if (!supported(b.protect))
+        continue if (!empty(b.alias) || !key_exists(reg.enabled_types, b.name) || !supported(b.protect))
         em.flags_lookup[b.name] = FlagsInfo(
             kind = b.is64 ? FlagsKind.flags64 : FlagsKind.flags32,
             alias_name = b.name,
@@ -156,9 +155,7 @@ def private build_flags_lookup(reg : VkRegistry; var em : EmitModel) {
 
 def private build_bitfields(reg : VkRegistry; var em : EmitModel) {
     for (b in reg.bitmasks) {
-        continue if (!empty(b.alias))
-        continue if (!key_exists(reg.enabled_types, b.name))
-        continue if (!supported(b.protect))
+        continue if (!empty(b.alias) || !key_exists(reg.enabled_types, b.name) || !supported(b.protect))
         var spec = BitfieldSpec(
             flags_name = b.name,
             bits_enum = b.bits_enum,
@@ -185,7 +182,7 @@ def private build_bitfields(reg : VkRegistry; var em : EmitModel) {
                 for (e in ed.entries) {
                     continue if (e.is_alias || e.bitpos < 0)
                     let short = enum_short_name(prefix, e.name)
-                    var bn = bit_name(short)
+                    let bn = bit_name(short)
                     if (key_exists(used, bn) || empty(bn)) {
                         continue    // first writer wins; placeholder stays
                     }
@@ -204,8 +201,7 @@ def private build_bitfields(reg : VkRegistry; var em : EmitModel) {
         em.bitfields |> emplace(spec)
     }
     for (b in reg.bitmasks) {
-        continue if (empty(b.alias))
-        continue if (!key_exists(reg.enabled_types, b.name))
+        continue if (empty(b.alias) || !key_exists(reg.enabled_types, b.name))
         for (spec in em.bitfields) {
             if (spec.flags_name == b.alias) {
                 spec.aliases |> push(b.name)
@@ -217,16 +213,9 @@ def private build_bitfields(reg : VkRegistry; var em : EmitModel) {
 
 def private member_type_known(m : VkMember; reg : VkRegistry; em : EmitModel) : string {
     let tn = m.type_name
-    return "" if (tn == "void")
-    return "" if (key_exists(SCALAR_MAP, tn))
-    return "" if (key_exists(reg.base_types, tn))
-    return "" if (key_exists(FOREIGN_MAP, tn))
-    return "" if (key_exists(reg.func_pointers, tn))
+    return "" if (tn == "void" || key_exists(SCALAR_MAP, tn) || key_exists(reg.base_types, tn) || key_exists(FOREIGN_MAP, tn) || key_exists(reg.func_pointers, tn))
     let fi = em.flags_lookup?[tn] ?? FlagsInfo()
-    return "" if (fi.kind != FlagsKind.not_flags)
-    if (key_exists(em.handle_names, tn)) {
-        return ""
-    }
+    return "" if (fi.kind != FlagsKind.not_flags || key_exists(em.handle_names, tn))
     if (key_exists(reg.enum_index, tn)) {
         // plain enum must be emitted (enabled); bitmask enums resolved via flags_lookup above
         return key_exists(em.plain_enums, tn) ? "" : "enum {tn} not emitted"
@@ -260,8 +249,7 @@ def private resolve_struct_alias(reg : VkRegistry; name : string) : string {
 def private compute_struct_set(reg : VkRegistry; var em : EmitModel) {
     // seed: every enabled, protect-supported, non-alias struct
     for (s in reg.structs) {
-        continue if (!empty(s.alias))
-        continue if (!key_exists(reg.enabled_types, s.name))
+        continue if (!empty(s.alias) || !key_exists(reg.enabled_types, s.name))
         if (!supported(s.protect)) {
             em.skipped[s.name] = "platform {s.protect}"
             continue
@@ -309,16 +297,13 @@ def private compute_struct_set(reg : VkRegistry; var em : EmitModel) {
 def public build_emit_model(reg : VkRegistry) : EmitModel {
     var em : EmitModel
     for (h in reg.handles) {
-        continue if (!empty(h.alias))
-        continue if (!key_exists(reg.enabled_types, h.name))
-        continue if (!supported(h.protect))
+        continue if (!empty(h.alias) || !key_exists(reg.enabled_types, h.name) || !supported(h.protect))
         em.handle_names |> insert(h.name)
     }
     build_flags_lookup(reg, em)
     build_bitfields(reg, em)
     for (e in reg.enums) {
-        continue if (e.is_bitmask)
-        continue if (!key_exists(reg.enabled_types, e.name))
+        continue if (e.is_bitmask || !key_exists(reg.enabled_types, e.name))
         em.plain_enums[e.name] = reg.enum_index?[e.name] ?? -1
     }
     compute_struct_set(reg, em)
@@ -359,10 +344,7 @@ def public emit_enums(reg : VkRegistry; em : EmitModel; out_dir : string; var in
     var chunk = -1
     var in_chunk = 999999
     var f : FILE const?
-    var names : array<string>
-    for (nm, _idx in keys(em.plain_enums), values(em.plain_enums)) {
-        names |> push(nm)
-    }
+    var names <- [for (nm in keys(em.plain_enums)); nm]
     names |> sort()
     for (nm in names) {
         let ei = em.plain_enums?[nm] ?? -1
@@ -444,10 +426,7 @@ def private build_enum_header(name, guard, protect : string) : string {
 }
 
 def private append_enum_registrations(reg : VkRegistry; em : EmitModel; out_dir : string; per_chunk : int) {
-    var names : array<string>
-    for (nm, _idx in keys(em.plain_enums), values(em.plain_enums)) {
-        names |> push(nm)
-    }
+    var names <- [for (nm in keys(em.plain_enums)); nm]
     names |> sort()
     var emitted : array<tuple<name : string; guard : string; protect : string>>
     for (nm in names) {
@@ -478,6 +457,7 @@ def private append_enum_registrations(reg : VkRegistry; em : EmitModel; out_dir 
 
 // ===== emission: bitfield flags =====
 
+[unused_argument(reg)]
 def public emit_flags(reg : VkRegistry; em : EmitModel; out_dir : string; var header_lines : array<string>) {
     fopen("{out_dir}/dasVULKAN.gen_flags.cpp", "wb") $(f) {
         panic("can't write gen_flags") if (f == null)
@@ -489,7 +469,7 @@ def public emit_flags(reg : VkRegistry; em : EmitModel; out_dir : string; var he
             let bft = b.is64 ? "Type::tBitfield64" : "Type::tBitfield"
             fprint(f, "    auto ft = new TypeDecl({bft});\n")
             fprint(f, "    ft->alias = \"{b.flags_name}\";\n")
-            if (length(b.bit_names) > 0) {
+            if (!empty(b.bit_names)) {
                 fprint(f, "    ft->argNames = {OB} ")
                 var first = true
                 for (bn in b.bit_names) {
@@ -560,8 +540,7 @@ def public emit_handles(reg : VkRegistry; em : EmitModel; out_dir : string; var 
         fprint(f, "#include \"dasVULKAN.h\"\n\nnamespace das {OB}\n\n")
         fprint(f, "void das_vulkan_init_handles(Module & mod, ModuleLibrary & lib) {OB}\n")
         for (h in reg.handles) {
-            continue if (!empty(h.alias))
-            continue if (!key_exists(em.handle_names, h.name))
+            continue if (!empty(h.alias) || !key_exists(em.handle_names, h.name))
             guard_open(f, h.guard, h.protect)
             fprint(f, "    mod.addAnnotation(new DummyTypeAnnotation(\"{h.name}_T\", \"{h.name}_T\", 1, 1));\n")
             fprint(f, "    {OB} auto td = makeType<{h.name}_T *>(lib); td->alias = \"{h.name}\"; mod.addAlias(td); {CB}\n")
@@ -570,9 +549,7 @@ def public emit_handles(reg : VkRegistry; em : EmitModel; out_dir : string; var 
         }
         // handle aliases
         for (h in reg.handles) {
-            continue if (empty(h.alias))
-            continue if (!key_exists(reg.enabled_types, h.name))
-            continue if (!key_exists(em.handle_names, h.alias))
+            continue if (empty(h.alias) || !key_exists(reg.enabled_types, h.name) || !key_exists(em.handle_names, h.alias))
             guard_open(f, h.guard, h.protect)
             fprint(f, "    {OB} auto td = makeType<{h.alias}_T *>(lib); td->alias = \"{h.name}\"; mod.addAlias(td); {CB}\n")
             guard_close(f, h.guard, h.protect)
@@ -624,6 +601,7 @@ def private elem_typedecl_text(reg : VkRegistry; em : EmitModel; tn : string) : 
 
 //! "" when the plain DAS_BIND_MANAGED_FIELD path applies; otherwise the explicit TypeDecl text.
 //! All pointer fields are bound const-stripped (writable) so CreateInfo structs are fillable das-side.
+[unused_argument(s)]
 def private field_override_text(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember) : string {
     let tn = m.type_name
     let np = m.num_ptrs
@@ -632,25 +610,22 @@ def private field_override_text(reg : VkRegistry; em : EmitModel; s : VkStructDe
         return "makeType<void *>(*mlib)"
     }
     // fixed arrays: nested makeFixedArrayTypeDecl, outermost first
-    if (length(m.arr_dims) > 0) {
-        var inner = elem_typedecl_text(reg, em, tn)
-        for (i in range(length(m.arr_dims))) {
-            let d = m.arr_dims[length(m.arr_dims) - 1 - i]
-            inner = "makeFixedArrayTypeDecl(int32_t({d}), {inner})"
+    if (!empty(m.arr_dims)) {
+        return build_string() $(var w) {
+            for (d in m.arr_dims) {
+                w |> write("makeFixedArrayTypeDecl(int32_t({d}), ")
+            }
+            w |> write(elem_typedecl_text(reg, em, tn))
+            for (_d in m.arr_dims) {
+                w |> write(")")
+            }
         }
-        return inner
     }
     // pointer fields -- strip const (the C decl is usually `const X*`, which decltype binds
     // as a const, non-assignable field). Bind as a writable typed pointer / string / void*.
     if (np >= 1) {
-        if (!empty(FOREIGN_MAP?[tn] ?? "")) {
-            return "makeType<void *>(*mlib)"
-        }
-        if (tn == "void") {
-            return "makeType<void *>(*mlib)"
-        }
-        if (np >= 2) {
-            // ptr-to-ptr (string arrays `const char* const*`, out-arrays): raw void*; boost types it
+        // foreign / void / ptr-to-ptr (string arrays, out-arrays): raw void*; boost types it
+        if (!empty(FOREIGN_MAP?[tn] ?? "") || tn == "void" || np >= 2) {
             return "makeType<void *>(*mlib)"
         }
         if (tn == "char") {
@@ -678,8 +653,7 @@ def public emit_structs(reg : VkRegistry; em : EmitModel; out_dir : string; var 
     let per_chunk = 50
     var emitted : array<int>
     for (s, idx in reg.structs, range(length(reg.structs))) {
-        continue if (!empty(s.alias))
-        continue if (!key_exists(em.struct_emit, s.name))
+        continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name))
         emitted |> push(idx)
     }
     var chunk = 0
@@ -766,11 +740,9 @@ def private emit_struct_aliases(reg : VkRegistry; em : EmitModel; out_dir : stri
         fprint(f, "#include \"dasVULKAN.h\"\n\nnamespace das {OB}\n\n")
         fprint(f, "void das_vulkan_init_struct_aliases(Module & mod, ModuleLibrary & lib) {OB}\n")
         for (s in reg.structs) {
-            continue if (empty(s.alias))
-            continue if (!key_exists(reg.enabled_types, s.name))
+            continue if (empty(s.alias) || !key_exists(reg.enabled_types, s.name))
             let target = resolve_struct_alias(reg, s.alias)
-            continue if (empty(target))
-            continue if (!key_exists(em.struct_emit, target))
+            continue if (empty(target) || !key_exists(em.struct_emit, target))
             guard_open(f, s.guard, s.protect)
             fprint(f, "    {OB} auto td = makeType<{target}>(lib); td->alias = \"{s.name}\"; mod.addAlias(td); {CB}\n")
             guard_close(f, s.guard, s.protect)
@@ -793,13 +765,13 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
     var r = MappedParam(ok = true, das_arg = das_safe_name(p.name))
     let tn = p.type_name
     let n = p.name
-    var np = p.num_ptrs
+    let np = p.num_ptrs
     let cst = p.is_const
     let has_len = !empty(p.len)
     let optional_true = p.optional_attr == "true"
     // C-array parameter (const Elem name[N]): pass a pointer to the element; it decays
     // to the C array param. tn is the real C type name from the header (float, an enum, ...).
-    if (length(p.arr_dims) > 0) {
+    if (!empty(p.arr_dims)) {
         r.cpp_param = cst ? "const {tn} * {n}" : "{tn} * {n}"
         r.call_arg = n
         return <- r
@@ -865,7 +837,6 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
     }
     // scalars and base types
     var sc = SCALAR_MAP?[tn] ?? ""
-    var cast_back = tn
     if (empty(sc)) {
         let bt = reg.base_types?[tn] ?? ""
         if (!empty(bt)) {
@@ -1068,7 +1039,7 @@ def public emit_funcs(reg : VkRegistry; em : EmitModel; out_dir : string; var in
                         }
                     }
                     w |> write("    addExtern<DAS_BIND_FUN(WRAP_{c.name})>(mod, lib, \"{c.name}\", SideEffects::modifyArgumentAndExternal, \"WRAP_{c.name}\")")
-                    if (length(params) > 0) {
+                    if (!empty(params)) {
                         w |> write("\n        ->args({OB}")
                         for (mp, pi in params, range(length(params))) {
                             if (pi != 0) {
@@ -1130,7 +1101,7 @@ def public emit_init(out_dir : string; ordered_calls : array<string>) {
 
 // ===== orchestrator =====
 
-def public emit_all(reg : VkRegistry; var em : EmitModel; out_dir : string) {
+def public emit_all(reg : VkRegistry; em : EmitModel; out_dir : string) {
     var header_lines : array<string>
     var enum_init_fns : array<string>
     var struct_add_fns : array<string>
@@ -1150,8 +1121,7 @@ def public emit_all(reg : VkRegistry; var em : EmitModel; out_dir : string) {
     ordered |> push("das_vulkan_init_handles")
     ordered |> push_from(struct_add_fns)
     ordered |> push("das_vulkan_init_struct_aliases")
-    ordered |> push_from(struct_fill_fns)
-    ordered |> push_from(func_init_fns)
+    ordered |> push_from(struct_fill_fns, func_init_fns)
     emit_gen_header(out_dir, header_lines, ordered)
     emit_init(out_dir, ordered)
     // report

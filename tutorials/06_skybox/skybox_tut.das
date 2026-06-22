@@ -417,15 +417,13 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
-    var verts_copy : array<float>
-    verts_copy |> push_from(cube_vertices)
+    var verts_copy := cube_vertices
     var inscope vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
     delete verts_copy
 
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
-    var indices_copy : array<uint16>
-    indices_copy |> push_from(cube_indices)
+    var indices_copy := cube_indices
     var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
     delete indices_copy
 
@@ -479,29 +477,29 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(sky_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(
+        allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope sky_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(sky_image), boost_value_to_vk(sky_memory), 0ul), null)
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(sky_image)
-    tvci.viewType = VkImageViewType.CUBE                 // <-- the cubemap rail
-    tvci.format = SKY_COLOR_FMT
+    var tvci = ImageViewCreateInfo(
+        image = weak_copy(sky_image),
+        viewType = VkImageViewType.CUBE,                 // <-- the cubemap rail
+        format = SKY_COLOR_FMT)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = uint(N_FACES)
     var inscope sky_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.maxLod = 1.0f
+    let sci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        maxLod = 1.0f)
     var inscope sky_sampler <- create_sampler(device, sci)
 
     // Include the scene shaders' reflections so binding 0 (UBO) picks up the FRAGMENT stage flag
@@ -511,16 +509,11 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
                         decode_reflection(floor_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
-    var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps1)
+    var dpci = DescriptorPoolCreateInfo(
+        maxSets = 1u,
+        pPoolSizes <- [
+            DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u),
+            DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)])
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
     var dsai = VkDescriptorSetAllocateInfo()
@@ -534,28 +527,24 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 224ul
-    w0.pBufferInfo |> push(binfo)
+    var w0 = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    w0.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 224ul))
     writes |> emplace(w0)
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sky_sampler)
-    iinfo.imageView = weak_copy(sky_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
-    w1.pImageInfo |> push(iinfo)
+    var w1 = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    w1.pImageInfo |> push(DescriptorImageInfo(
+        sampler = weak_copy(sky_sampler),
+        imageView = weak_copy(sky_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL))
     writes |> emplace(w1)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)

@@ -83,7 +83,7 @@ def public enum_short_name(prefix : string; value_name : string) : string {
         short = value_name |> trim_prefix("VK_")
     }
     if (!empty(short)) {
-        let c0 = character_at(short, 0)
+        let c0 = first_character(short)
         if (is_number(c0)) {
             short = "_{short}"
         }
@@ -106,7 +106,7 @@ def public bit_name(short : string) : string {
         }
     }
     if (!empty(name)) {
-        let c0 = character_at(name, 0)
+        let c0 = first_character(name)
         if (is_number(c0)) {
             name = "_{name}"
         }

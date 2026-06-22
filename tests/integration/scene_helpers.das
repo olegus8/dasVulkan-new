@@ -37,12 +37,9 @@ def public render_triangle() : array<uint8> {
 
     var inscope target <- build_offscreen_target(device, phys, TRI_W, TRI_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TRI_W)
-    fbci.height = uint(TRI_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TRI_W), height = uint(TRI_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     // tri_vert_spv / tri_frag_spv are emitted by dasSpirv from triangle_shaders.das (array<uint> words)
@@ -175,7 +172,7 @@ def public run_compute(n : int) : array<uint> {
         cmd_dispatch(cmd, uint(n / 64), 1u, 1u)
     }
     var mapped : void? = null
-    var mf : VkMemoryMapFlags
+    let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
         memcpy(reinterpret<void?>(addr(values[0])), mapped, n * 4)
@@ -256,27 +253,22 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(dev, boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
 
     // descriptor set layout + pool via BOOST (descriptorCount = 1, no samplers)
     var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.STORAGE_BUFFER
-    b0.descriptorCount = 1u
+    var b0 = DescriptorSetLayoutBinding(binding = 0u,
+        descriptorType = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
     b0.stageFlags.compute = true
     dslci.pBindings |> emplace(b0)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var psize : DescriptorPoolSize
-    psize.type_ = VkDescriptorType.STORAGE_BUFFER
-    psize.descriptorCount = 1u
+    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(psize)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -291,18 +283,13 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     }
 
     // bind the buffer through BOOST update_descriptor_sets (descriptorCount = 1, only pBufferInfo)
-    var write : WriteDescriptorSet
-    write.dstSet = vk_value_to_boost(raw_set)
-    write.dstBinding = 0u
-    write.descriptorType = VkDescriptorType.STORAGE_BUFFER
-    write.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(buffer)
-    binfo.range_ = buf_size
+    var write = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
+    var binfo = DescriptorBufferInfo(buffer = weak_copy(buffer), range_ = buf_size)
     write.pBufferInfo |> push(binfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // compute pipeline (raw: compute pipelines are batch-created)
@@ -332,7 +319,7 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     }
 
     var mapped : void? = null
-    var mf : VkMemoryMapFlags
+    let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, boost_value_to_vk(memory), 0ul, buf_size, mf, addr(mapped)), null)
         memcpy(reinterpret<void?>(addr(values[0])), mapped, n * 4)
@@ -385,41 +372,31 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     assert(uint64(length(src)) == byte_count, "texelfetch_copy_rgba8: src must be exactly w*h*4 bytes")
 
     // source sampled texture (SAMPLED + TRANSFER_DST), device-local + view + NEAREST sampler
-    var sici : ImageCreateInfo
-    sici.imageType = VkImageType._2D
-    sici.format = fmt
+    var sici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     sici.extent.width = uint(w)
     sici.extent.height = uint(h)
     sici.extent.depth = 1u
-    sici.mipLevels = 1u
-    sici.arrayLayers = 1u
     sici.samples._1 = true
-    sici.tiling = VkImageTiling.OPTIMAL
     sici.usage.sampled = true
     sici.usage.transfer_dst = true
-    sici.initialLayout = VkImageLayout.UNDEFINED
     var inscope src_image <- create_image(device, sici)
     var sreq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(src_image), sreq)
     var swant : VkMemoryPropertyFlags
     swant.device_local = true
-    var smai : MemoryAllocateInfo
-    smai.allocationSize = sreq.size
-    smai.memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant)
+    let smai = MemoryAllocateInfo(allocationSize = sreq.size,
+        memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant))
     var inscope src_mem <- allocate_memory(device, smai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(src_image), boost_value_to_vk(src_mem), 0ul), null)
-    var svci : ImageViewCreateInfo
-    svci.image = weak_copy(src_image)
-    svci.viewType = VkImageViewType._2D
-    svci.format = fmt
+    var svci = ImageViewCreateInfo(image = weak_copy(src_image), viewType = VkImageViewType._2D, format = fmt)
     svci.subresourceRange.aspectMask.color = true
     svci.subresourceRange.levelCount = 1u
     svci.subresourceRange.layerCount = 1u
     var inscope src_view <- create_image_view(device, svci)
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.NEAREST
-    sci.minFilter = VkFilter.NEAREST
-    sci.mipmapMode = VkSamplerMipmapMode.NEAREST
+    let sci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST)
     var inscope sampler <- create_sampler(device, sci)
 
     // staging buffer with the source bytes
@@ -429,33 +406,25 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     upload(device, staging.memory, src)
 
     // destination storage image (STORAGE + TRANSFER_SRC), device-local + view
-    var dici : ImageCreateInfo
-    dici.imageType = VkImageType._2D
-    dici.format = fmt
+    var dici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     dici.extent.width = uint(w)
     dici.extent.height = uint(h)
     dici.extent.depth = 1u
-    dici.mipLevels = 1u
-    dici.arrayLayers = 1u
     dici.samples._1 = true
-    dici.tiling = VkImageTiling.OPTIMAL
     dici.usage.storage = true
     dici.usage.transfer_src = true
-    dici.initialLayout = VkImageLayout.UNDEFINED
     var inscope dst_image <- create_image(device, dici)
     var dreq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(dst_image), dreq)
     var dwant : VkMemoryPropertyFlags
     dwant.device_local = true
-    var dmai : MemoryAllocateInfo
-    dmai.allocationSize = dreq.size
-    dmai.memoryTypeIndex = find_memory_type(phys, dreq.memoryTypeBits, dwant)
+    let dmai = MemoryAllocateInfo(allocationSize = dreq.size,
+        memoryTypeIndex = find_memory_type(phys, dreq.memoryTypeBits, dwant))
     var inscope dst_mem <- allocate_memory(device, dmai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(dst_image), boost_value_to_vk(dst_mem), 0ul), null)
-    var dvci : ImageViewCreateInfo
-    dvci.image = weak_copy(dst_image)
-    dvci.viewType = VkImageViewType._2D
-    dvci.format = fmt
+    var dvci = ImageViewCreateInfo(image = weak_copy(dst_image), viewType = VkImageViewType._2D, format = fmt)
     dvci.subresourceRange.aspectMask.color = true
     dvci.subresourceRange.levelCount = 1u
     dvci.subresourceRange.layerCount = 1u
@@ -463,29 +432,21 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
 
     // descriptor set layout: binding 0 = combined image sampler, binding 1 = storage image
     var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    b0.descriptorCount = 1u
+    var b0 = DescriptorSetLayoutBinding(binding = 0u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     b0.stageFlags.compute = true
     dslci.pBindings |> emplace(b0)
-    var b1 : DescriptorSetLayoutBinding
-    b1.binding = 1u
-    b1.descriptorType = VkDescriptorType.STORAGE_IMAGE
-    b1.descriptorCount = 1u
+    var b1 = DescriptorSetLayoutBinding(binding = 1u,
+        descriptorType = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
     b1.stageFlags.compute = true
     dslci.pBindings |> emplace(b1)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps0.descriptorCount = 1u
+    var ps0 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.STORAGE_IMAGE
-    ps1.descriptorCount = 1u
+    var ps1 = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps1)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -500,28 +461,18 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w0.descriptorCount = 1u
-    var srcinfo : DescriptorImageInfo
-    srcinfo.sampler = weak_copy(sampler)
-    srcinfo.imageView = weak_copy(src_view)
-    srcinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    var srcinfo = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(src_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w0.pImageInfo |> push(srcinfo)
     writes |> emplace(w0)
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.STORAGE_IMAGE
-    w1.descriptorCount = 1u
-    var dstinfo : DescriptorImageInfo
-    dstinfo.imageView = weak_copy(dst_view)
-    dstinfo.imageLayout = VkImageLayout.GENERAL
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
+    var dstinfo = DescriptorImageInfo(imageView = weak_copy(dst_view), imageLayout = VkImageLayout.GENERAL)
     w1.pImageInfo |> push(dstinfo)
     writes |> emplace(w1)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope shader <- create_shader_module(device, words)
@@ -534,7 +485,7 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     var inscope pool <- create_command_pool(device, pool_info(gfx))
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var to_dst : VkAccessFlags
         to_dst.transfer_write = true
         var shader_read : VkAccessFlags
@@ -605,19 +556,16 @@ def public render_sampler2darray() : array<uint8> {
 
     var inscope target <- build_offscreen_target(device, phys, TRI_W, TRI_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TRI_W)
-    fbci.height = uint(TRI_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TRI_W), height = uint(TRI_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     // a 2x2-per-layer, 4-layer array texture: layer 0 red, 1 green, 2 blue, 3 yellow (each solid)
     let lw = 2
     let lh = 2
     let layers = 4
-    var texels <- [for (i in range(lw * lh * layers * 4)); uint8(0)]
+    var texels <- [for (_i in range(lw * lh * layers * 4)); uint8(0)]
     let cols = fixed_array(
         fixed_array(255, 0, 0, 255),        // layer 0 red
         fixed_array(0, 255, 0, 255),        // layer 1 green
@@ -637,62 +585,48 @@ def public render_sampler2darray() : array<uint8> {
     upload(device, staging.memory, texels)
     delete texels
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = fmt
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = uint(layers), tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(lw)
     ici.extent.height = uint(lh)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = uint(layers)
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope tex_image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(tex_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope tex_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(tex_image), boost_value_to_vk(tex_memory), 0ul), null)
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(tex_image)
-    tvci.viewType = VkImageViewType._2D_ARRAY
-    tvci.format = fmt
+    var tvci = ImageViewCreateInfo(image = weak_copy(tex_image), viewType = VkImageViewType._2D_ARRAY, format = fmt)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = uint(layers)
     var inscope tex_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.NEAREST
-    sci.minFilter = VkFilter.NEAREST
-    sci.mipmapMode = VkSamplerMipmapMode.NEAREST
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
+    let sci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE)
     var inscope sampler <- create_sampler(device, sci)
 
     var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    b0.descriptorCount = 1u
+    var b0 = DescriptorSetLayoutBinding(binding = 0u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     b0.stageFlags.fragment = true
     dslci.pBindings |> emplace(b0)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps0.descriptorCount = 1u
+    var ps0 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps0)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -705,19 +639,14 @@ def public render_sampler2darray() : array<uint8> {
         dsai.pSetLayouts = addr(raw_set_layout)
         vk_check(vkAllocateDescriptorSets(dev, dsai, addr(raw_set)), null)
     }
-    var write : WriteDescriptorSet
-    write.dstSet = vk_value_to_boost(raw_set)
-    write.dstBinding = 0u
-    write.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    write.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sampler)
-    iinfo.imageView = weak_copy(tex_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var write = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    var iinfo = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(tex_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- create_pipeline_layout(device, PipelineLayoutCreateInfo(pSetLayouts <- [weak_copy(set_layout)]))
@@ -730,7 +659,7 @@ def public render_sampler2darray() : array<uint8> {
     var inscope pool <- create_command_pool(device, pool_info(gfx))
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var to_dst : VkAccessFlags
         to_dst.transfer_write = true
         var to_read : VkAccessFlags
@@ -792,12 +721,9 @@ def public render_separate_image_sampler() : array<uint8> {
 
     var inscope target <- build_offscreen_target(device, phys, TRI_W, TRI_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TRI_W)
-    fbci.height = uint(TRI_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TRI_W), height = uint(TRI_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     // 2x2 checkerboard: (0,0) red, (1,0) green, (0,1) blue, (1,1) yellow
@@ -812,72 +738,54 @@ def public render_separate_image_sampler() : array<uint8> {
     upload(device, staging.memory, texels)
     delete texels
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = fmt
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = 2u
     ici.extent.height = 2u
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope tex_image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(tex_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope tex_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(tex_image), boost_value_to_vk(tex_memory), 0ul), null)
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(tex_image)
-    tvci.viewType = VkImageViewType._2D
-    tvci.format = fmt
+    var tvci = ImageViewCreateInfo(image = weak_copy(tex_image), viewType = VkImageViewType._2D, format = fmt)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = 1u
     var inscope tex_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.NEAREST
-    sci.minFilter = VkFilter.NEAREST
-    sci.mipmapMode = VkSamplerMipmapMode.NEAREST
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
+    let sci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE)
     var inscope sampler <- create_sampler(device, sci)
 
     // separate descriptors: binding 0 = SAMPLED_IMAGE, binding 1 = SAMPLER
     var dslci : DescriptorSetLayoutCreateInfo
-    var bi : DescriptorSetLayoutBinding
-    bi.binding = 0u
-    bi.descriptorType = VkDescriptorType.SAMPLED_IMAGE
-    bi.descriptorCount = 1u
+    var bi = DescriptorSetLayoutBinding(binding = 0u,
+        descriptorType = VkDescriptorType.SAMPLED_IMAGE, descriptorCount = 1u)
     bi.stageFlags.fragment = true
     dslci.pBindings |> emplace(bi)
-    var bs : DescriptorSetLayoutBinding
-    bs.binding = 1u
-    bs.descriptorType = VkDescriptorType.SAMPLER
-    bs.descriptorCount = 1u
+    var bs = DescriptorSetLayoutBinding(binding = 1u,
+        descriptorType = VkDescriptorType.SAMPLER, descriptorCount = 1u)
     bs.stageFlags.fragment = true
     dslci.pBindings |> emplace(bs)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var psi : DescriptorPoolSize
-    psi.type_ = VkDescriptorType.SAMPLED_IMAGE
-    psi.descriptorCount = 1u
+    var psi = DescriptorPoolSize(type_ = VkDescriptorType.SAMPLED_IMAGE, descriptorCount = 1u)
     dpci.pPoolSizes |> push(psi)
-    var pss : DescriptorPoolSize
-    pss.type_ = VkDescriptorType.SAMPLER
-    pss.descriptorCount = 1u
+    var pss = DescriptorPoolSize(type_ = VkDescriptorType.SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(pss)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -891,26 +799,19 @@ def public render_separate_image_sampler() : array<uint8> {
         vk_check(vkAllocateDescriptorSets(dev, dsai, addr(raw_set)), null)
     }
     var writes : array<WriteDescriptorSet>
-    var wi : WriteDescriptorSet
-    wi.dstSet = vk_value_to_boost(raw_set)
-    wi.dstBinding = 0u
-    wi.descriptorType = VkDescriptorType.SAMPLED_IMAGE
-    wi.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.imageView = weak_copy(tex_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var wi = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.SAMPLED_IMAGE, descriptorCount = 1u)
+    var iinfo = DescriptorImageInfo(imageView = weak_copy(tex_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     wi.pImageInfo |> push(iinfo)
     writes |> emplace(wi)
-    var ws : WriteDescriptorSet
-    ws.dstSet = vk_value_to_boost(raw_set)
-    ws.dstBinding = 1u
-    ws.descriptorType = VkDescriptorType.SAMPLER
-    ws.descriptorCount = 1u
+    var ws = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.SAMPLER, descriptorCount = 1u)
     var sinfo : DescriptorImageInfo
     sinfo.sampler = weak_copy(sampler)
     ws.pImageInfo |> push(sinfo)
     writes |> emplace(ws)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- create_pipeline_layout(device, PipelineLayoutCreateInfo(pSetLayouts <- [weak_copy(set_layout)]))
@@ -923,7 +824,7 @@ def public render_separate_image_sampler() : array<uint8> {
     var inscope pool <- create_command_pool(device, pool_info(gfx))
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var to_dst : VkAccessFlags
         to_dst.transfer_write = true
         var to_read : VkAccessFlags
@@ -972,24 +873,20 @@ def private pool_info(queue_family : uint) : CommandPoolCreateInfo {
 // ===== Phase-4 GPU gate: UBO matrix + push constant + combined image sampler =====
 
 def private make_host_buffer(device : Device; phys : VkPhysicalDevice; size : uint64; usage : VkBufferUsageFlags) : HostBuffer {
-    var bci : BufferCreateInfo
-    bci.size = size
-    bci.usage = usage
+    var bci = BufferCreateInfo(size = size, usage = usage)
     var inscope buffer <- create_buffer(device, bci)
     var req : VkMemoryRequirements
     vkGetBufferMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(buffer), req)
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
-    var hb : HostBuffer
+    var hb = HostBuffer(size = size)
     hb.buffer <- buffer
     hb.memory <- memory
-    hb.size = size
     return <- hb
 }
 
@@ -997,7 +894,7 @@ def private upload(device : Device; memory : DeviceMemory; var data : array<auto
     if (empty(data)) return            // vkMapMemory(size=0) is invalid; nothing to copy
     let nbytes = length(data) * typeinfo sizeof(type<TT>)
     var mapped : void? = null
-    var mf : VkMemoryMapFlags
+    let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
         memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
@@ -1030,12 +927,9 @@ def public render_textured_quad() : array<uint8> {
     // offscreen color target + render pass + framebuffer (as render_triangle)
     var inscope target <- build_offscreen_target(device, phys, TRI_W, TRI_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TRI_W)
-    fbci.height = uint(TRI_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TRI_W), height = uint(TRI_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     // UBO: a single column-major MVP. Columns are contiguous; the translation (0.4, 0) is column 3.
@@ -1063,47 +957,36 @@ def public render_textured_quad() : array<uint8> {
     upload(device, staging.memory, texels)
     delete texels
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = fmt
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = 2u
     ici.extent.height = 2u
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope tex_image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(tex_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope tex_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(tex_image), boost_value_to_vk(tex_memory), 0ul), null)
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(tex_image)
-    tvci.viewType = VkImageViewType._2D
-    tvci.format = fmt
+    var tvci = ImageViewCreateInfo(image = weak_copy(tex_image), viewType = VkImageViewType._2D, format = fmt)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = 1u
     var inscope tex_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.NEAREST
-    sci.minFilter = VkFilter.NEAREST
-    sci.mipmapMode = VkSamplerMipmapMode.NEAREST
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.maxLod = 1.0f
+    let sci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE, maxLod = 1.0f)
     var inscope sampler <- create_sampler(device, sci)
 
     // Descriptor + pipeline layouts come straight from the shaders' own dasSpirv reflection (the
@@ -1115,13 +998,9 @@ def public render_textured_quad() : array<uint8> {
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
+    var ps0 = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u
+    var ps1 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps1)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -1136,28 +1015,18 @@ def public render_textured_quad() : array<uint8> {
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 64ul
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    var binfo = DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 64ul)
     w0.pBufferInfo |> push(binfo)
     writes |> emplace(w0)
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sampler)
-    iinfo.imageView = weak_copy(tex_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    var iinfo = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(tex_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w1.pImageInfo |> push(iinfo)
     writes |> emplace(w1)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // pipeline layout (descriptor set + fragment push-constant range) is built from the same reflection.
@@ -1192,7 +1061,7 @@ def public render_textured_quad() : array<uint8> {
         let raw_cmd = boost_value_to_vk(cmd)
         var to_dst : VkAccessFlags
         to_dst.transfer_write = true
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var top : VkPipelineStageFlags
         top.top_of_pipe = true
         var xfer : VkPipelineStageFlags

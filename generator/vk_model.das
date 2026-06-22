@@ -6,7 +6,6 @@ module vk_model shared
 require pugixml/PUGIXML_boost
 require strings
 require daslib/strings_boost
-require math
 
 // every string stored in the model must be cloned — pugixml accessors return pointers into the document, which dies at the open_xml block exit
 def private cs(s : string) : string {
@@ -112,20 +111,21 @@ struct public VkRegistry {
 }
 
 def private parse_decl_into(m : xml_node; var mem : VkMember) {
-    var txt = ""
-    for (ch in each_child(m)) {
-        let nm = ch.name
-        if (nm == "type") {
-            mem.type_name = cs(ch.child_value)
-            txt += ch.child_value
-        } elif (nm == "name") {
-            mem.name = cs(ch.child_value)
-        } elif (nm == "enum") {
-            mem.arr_dims |> push(cs(ch.child_value))
-        } elif (nm == "comment") {
-            pass
-        } elif (empty(nm)) {
-            txt += ch.value
+    let txt = build_string() $(var w) {
+        for (ch in each_child(m)) {
+            let nm = ch.name
+            if (nm == "type") {
+                mem.type_name = cs(ch.child_value)
+                w |> write(ch.child_value)
+            } elif (nm == "name") {
+                mem.name = cs(ch.child_value)
+            } elif (nm == "enum") {
+                mem.arr_dims |> push(cs(ch.child_value))
+            } elif (nm == "comment") {
+                pass
+            } elif (empty(nm)) {
+                w |> write(ch.value)
+            }
         }
     }
     mem.num_ptrs = txt |> count("*")
@@ -337,6 +337,7 @@ def private parse_commands(root : xml_node; var reg : VkRegistry) {
     }
 }
 
+[unused_argument(ext_number)]
 def private process_require_block(req : xml_node; guard : string; ext_number : int; var reg : VkRegistry) {
     for (item in each_child(req)) {
         let inm = item.name

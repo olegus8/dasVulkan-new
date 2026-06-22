@@ -279,7 +279,7 @@ def public finalize(var ctx : ShadowContext) {
 //! normal at +12), both float3. Shared between the shadow and main passes since the same buffers
 //! are bound to both.
 def private vertex_input() : VkPipelineVertexInputStateCreateInfo {
-    var v = VkPipelineVertexInputStateCreateInfo()
+    let v = VkPipelineVertexInputStateCreateInfo()
     // bindings + attributes filled by the caller (need stable lifetime across vkCreate*Pipeline)
     return v
 }
@@ -497,25 +497,21 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
-    var verts_copy : array<float>
-    verts_copy |> push_from(cube_vertices)
+    var verts_copy := cube_vertices
     var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
     delete verts_copy
 
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
-    var ci_copy : array<uint16>
-    ci_copy |> push_from(cube_indices)
+    var ci_copy := cube_indices
     var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, ci_copy)
     delete ci_copy
 
-    var fv_copy : array<float>
-    fv_copy |> push_from(floor_vertices)
+    var fv_copy := floor_vertices
     var inscope floor_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, fv_copy)
     delete fv_copy
 
-    var fi_copy : array<uint16>
-    fi_copy |> push_from(floor_indices)
+    var fi_copy := floor_indices
     var inscope floor_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, fi_copy)
     delete fi_copy
 
@@ -537,14 +533,14 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
         path_join(brick_dir, "Bricks031_1K-JPG_AmbientOcclusion.jpg"), false)   // linear AO
     var inscope brick_roughness <- load_texture_2d(device, phys, queue, pool,
         path_join(brick_dir, "Bricks031_1K-JPG_Roughness.jpg"), false)          // linear roughness
-    var tsci : SamplerCreateInfo
-    tsci.magFilter = VkFilter.LINEAR
-    tsci.minFilter = VkFilter.LINEAR
-    tsci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    tsci.addressModeU = VkSamplerAddressMode.REPEAT
-    tsci.addressModeV = VkSamplerAddressMode.REPEAT
-    tsci.addressModeW = VkSamplerAddressMode.REPEAT
-    tsci.maxLod = 16.0f                 // sample the full mip chain (kills minification moiré)
+    let tsci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.REPEAT,
+        addressModeW = VkSamplerAddressMode.REPEAT,
+        maxLod = 16.0f)                 // sample the full mip chain (kills minification moiré)
     var inscope tex_sampler <- create_sampler(device, tsci)
 
     // Descriptors: set 0 binding 0 = UBO, binding 1 = sampler2DShadow, binding 2/3 = brick maps. We reflect off the MAIN
@@ -555,12 +551,9 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 5u    // shadow_map + brick_albedo + brick_normal + brick_ao + brick_roughness
+    let ps0 = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    // shadow_map + brick_albedo + brick_normal + brick_ao + brick_roughness
+    let ps1 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 5u)
     dpci.pPoolSizes <- [ps0, ps1]
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -575,78 +568,48 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var ubo_info : DescriptorBufferInfo
-    ubo_info.buffer = weak_copy(ubo.buffer)
-    ubo_info.range_ = UBO_SIZE
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    let ubo_info = DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = UBO_SIZE)
     w0.pBufferInfo |> push(ubo_info)
     writes |> emplace(w0)
 
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var shadow_info : DescriptorImageInfo
-    shadow_info.sampler = weak_copy(shadow_sampler)
-    shadow_info.imageView = weak_copy(shadow_map.view)
-    shadow_info.imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let shadow_info = DescriptorImageInfo(sampler = weak_copy(shadow_sampler),
+        imageView = weak_copy(shadow_map.view), imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL)
     w1.pImageInfo |> push(shadow_info)
     writes |> emplace(w1)
 
-    var w2 : WriteDescriptorSet
-    w2.dstSet = vk_value_to_boost(raw_set)
-    w2.dstBinding = 2u
-    w2.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w2.descriptorCount = 1u
-    var albedo_info : DescriptorImageInfo
-    albedo_info.sampler = weak_copy(tex_sampler)
-    albedo_info.imageView = weak_copy(brick_albedo.view)
-    albedo_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w2 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 2u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let albedo_info = DescriptorImageInfo(sampler = weak_copy(tex_sampler),
+        imageView = weak_copy(brick_albedo.view), imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w2.pImageInfo |> push(albedo_info)
     writes |> emplace(w2)
 
-    var w3 : WriteDescriptorSet
-    w3.dstSet = vk_value_to_boost(raw_set)
-    w3.dstBinding = 3u
-    w3.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w3.descriptorCount = 1u
-    var normal_info : DescriptorImageInfo
-    normal_info.sampler = weak_copy(tex_sampler)
-    normal_info.imageView = weak_copy(brick_normal.view)
-    normal_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w3 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 3u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let normal_info = DescriptorImageInfo(sampler = weak_copy(tex_sampler),
+        imageView = weak_copy(brick_normal.view), imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w3.pImageInfo |> push(normal_info)
     writes |> emplace(w3)
 
-    var w4 : WriteDescriptorSet
-    w4.dstSet = vk_value_to_boost(raw_set)
-    w4.dstBinding = 4u
-    w4.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w4.descriptorCount = 1u
-    var ao_info : DescriptorImageInfo
-    ao_info.sampler = weak_copy(tex_sampler)
-    ao_info.imageView = weak_copy(brick_ao.view)
-    ao_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w4 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 4u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let ao_info = DescriptorImageInfo(sampler = weak_copy(tex_sampler),
+        imageView = weak_copy(brick_ao.view), imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w4.pImageInfo |> push(ao_info)
     writes |> emplace(w4)
 
-    var w5 : WriteDescriptorSet
-    w5.dstSet = vk_value_to_boost(raw_set)
-    w5.dstBinding = 5u
-    w5.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w5.descriptorCount = 1u
-    var rough_info : DescriptorImageInfo
-    rough_info.sampler = weak_copy(tex_sampler)
-    rough_info.imageView = weak_copy(brick_roughness.view)
-    rough_info.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w5 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 5u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let rough_info = DescriptorImageInfo(sampler = weak_copy(tex_sampler),
+        imageView = weak_copy(brick_roughness.view), imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w5.pImageInfo |> push(rough_info)
     writes |> emplace(w5)
 
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)
@@ -663,34 +626,33 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
     let buf_size = uint64(SCENE_W) * uint64(SCENE_H) * 4ul
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
-    var r : ShadowResources
-    r.color <- color
-    r.depth <- depth
-    r.shadow_map <- shadow_map
-    r.rp_color <- rp_color
-    r.rp_shadow <- rp_shadow
-    r.fb_color <- fb_color
-    r.fb_shadow <- fb_shadow
-    r.cube_vb <- cube_vb
-    r.cube_ib <- cube_ib
-    r.floor_vb <- floor_vb
-    r.floor_ib <- floor_ib
-    r.ubo <- ubo
-    r.shadow_sampler <- shadow_sampler
-    r.tex_sampler <- tex_sampler
-    r.brick_albedo <- brick_albedo
-    r.brick_normal <- brick_normal
-    r.brick_ao <- brick_ao
-    r.brick_roughness <- brick_roughness
-    r.set_layouts <- set_layouts
-    r.desc_pool <- desc_pool
-    r.desc_set = raw_set
-    r.pipe_layout <- pipe_layout
-    r.pipeline_shadow <- pipeline_shadow
-    r.pipeline_main <- pipeline_main
-    r.readback <- readback
-    r.buf_size = buf_size
-    return <- r
+    return <- ShadowResources(
+        color <- color,
+        depth <- depth,
+        shadow_map <- shadow_map,
+        rp_color <- rp_color,
+        rp_shadow <- rp_shadow,
+        fb_color <- fb_color,
+        fb_shadow <- fb_shadow,
+        cube_vb <- cube_vb,
+        cube_ib <- cube_ib,
+        floor_vb <- floor_vb,
+        floor_ib <- floor_ib,
+        ubo <- ubo,
+        shadow_sampler <- shadow_sampler,
+        tex_sampler <- tex_sampler,
+        brick_albedo <- brick_albedo,
+        brick_normal <- brick_normal,
+        brick_ao <- brick_ao,
+        brick_roughness <- brick_roughness,
+        set_layouts <- set_layouts,
+        desc_pool <- desc_pool,
+        desc_set = raw_set,
+        pipe_layout <- pipe_layout,
+        pipeline_shadow <- pipeline_shadow,
+        pipeline_main <- pipeline_main,
+        readback <- readback,
+        buf_size = buf_size)
 }
 
 def public build_shadow_context() : ShadowContext {
@@ -705,13 +667,12 @@ def public build_shadow_context() : ShadowContext {
     var queue = get_device_queue(device, qfam, 0u)
     var inscope pool <- create_command_pool(device, CommandPoolCreateInfo(queueFamilyIndex = qfam))
     var inscope res <- build_shadow_resources(device, phys, queue, pool)
-    var ctx : ShadowContext
-    ctx.instance <- instance
-    ctx.device <- device
-    ctx.queue = queue
-    ctx.pool <- pool
-    ctx.res <- res
-    return <- ctx
+    return <- ShadowContext(
+        instance <- instance,
+        device <- device,
+        queue = queue,
+        pool <- pool,
+        res <- res)
 }
 
 // ===== per-frame work =====
@@ -719,7 +680,7 @@ def public build_shadow_context() : ShadowContext {
 //! Compute camera + light VP from `time` + caller-tuned `camera_t` (camera orbit progress). The
 //! sun rotates around the Y axis so the cube's shadow visibly tracks it. light_dir POINTS TO the
 //! sun (the shader does `dot(n, light_dir)` for diffuse).
-def public update_shadow_uniforms(var res : ShadowResources; device : Device; time, camera_t : float) {
+def public update_shadow_uniforms(res : ShadowResources; device : Device; time, camera_t : float) {
     // Camera: orbit a bit so the cube + its shadow are both readable in the recording.
     let cam_angle = camera_t * 0.6
     let cam_eye = float3(3.4 * cos(cam_angle), 3.2, 3.4 * sin(cam_angle))
@@ -746,8 +707,8 @@ def public update_shadow_uniforms(var res : ShadowResources; device : Device; ti
 //! render pass's `finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL` hands it to pass 2 ready to
 //! sample. Pass 2 renders cube + floor into the color attachment, with the fragment shader
 //! reading the shadow map.
-def public record_shadow_render_pass(var res : ShadowResources; cmd : CommandBuffer) {
-    var sets <- [vk_value_to_boost(res.desc_set)]
+def public record_shadow_render_pass(res : ShadowResources; cmd : CommandBuffer) {
+    let sets <- [vk_value_to_boost(res.desc_set)]
     var no_dyn : array<uint>
 
     // ===== Pass 1: shadow map =====

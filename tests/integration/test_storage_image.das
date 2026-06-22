@@ -14,7 +14,7 @@ require storage_image_shaders
 [test]
 def test_storage_image_gradient(t : T?) {
     var pixels <- compute_image_rgba8(grad_spv, 64, 64)
-    assert_pixels_exact(t, pixels, 64, 64, "storage-image gradient") <| $(x, y : int) {
+    assert_pixels_exact(t, pixels, 64, 64, "storage-image gradient") $(x, y : int) {
         return int4(x, y, 0, 255)
     }
     delete pixels

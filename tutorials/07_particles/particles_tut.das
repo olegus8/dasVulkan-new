@@ -303,12 +303,9 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     var creflections <- [decode_reflection(particles_compute_spv_reflect)]
     var inscope cset_layouts <- build_descriptor_set_layouts(device, creflections)
 
-    var cdpci : DescriptorPoolCreateInfo
-    cdpci.maxSets = 1u
-    var cps : DescriptorPoolSize
-    cps.type_ = VkDescriptorType.STORAGE_BUFFER
-    cps.descriptorCount = 1u
-    cdpci.pPoolSizes |> push(cps)
+    var cdpci = DescriptorPoolCreateInfo(
+        maxSets = 1u,
+        pPoolSizes <- [DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)])
     var inscope cdesc_pool <- create_descriptor_pool(device, cdpci)
 
     var cdsai = VkDescriptorSetAllocateInfo()
@@ -322,15 +319,14 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     }
 
     var cwrites : array<WriteDescriptorSet>
-    var cw : WriteDescriptorSet
-    cw.dstSet = vk_value_to_boost(craw_set)
-    cw.dstBinding = 0u
-    cw.descriptorType = VkDescriptorType.STORAGE_BUFFER
-    cw.descriptorCount = 1u
-    var cbinfo : DescriptorBufferInfo
-    cbinfo.buffer = weak_copy(particle_buf.buffer)
-    cbinfo.range_ = uint64(N_PARTICLES * int(PARTICLE_STRIDE))
-    cw.pBufferInfo |> push(cbinfo)
+    var cw = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(craw_set),
+        dstBinding = 0u,
+        descriptorType = VkDescriptorType.STORAGE_BUFFER,
+        descriptorCount = 1u)
+    cw.pBufferInfo |> push(DescriptorBufferInfo(
+        buffer = weak_copy(particle_buf.buffer),
+        range_ = uint64(N_PARTICLES * int(PARTICLE_STRIDE))))
     cwrites |> emplace(cw)
     var no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, cwrites, no_copies)
@@ -344,12 +340,9 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     var greflections <- [decode_reflection(particles_vert_spv_reflect), decode_reflection(particles_frag_spv_reflect)]
     var inscope gset_layouts <- build_descriptor_set_layouts(device, greflections)
 
-    var gdpci : DescriptorPoolCreateInfo
-    gdpci.maxSets = 1u
-    var gps : DescriptorPoolSize
-    gps.type_ = VkDescriptorType.UNIFORM_BUFFER
-    gps.descriptorCount = 1u
-    gdpci.pPoolSizes |> push(gps)
+    var gdpci = DescriptorPoolCreateInfo(
+        maxSets = 1u,
+        pPoolSizes <- [DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)])
     var inscope gdesc_pool <- create_descriptor_pool(device, gdpci)
 
     var gdsai = VkDescriptorSetAllocateInfo()
@@ -363,15 +356,12 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     }
 
     var gwrites : array<WriteDescriptorSet>
-    var gw : WriteDescriptorSet
-    gw.dstSet = vk_value_to_boost(graw_set)
-    gw.dstBinding = 0u
-    gw.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    gw.descriptorCount = 1u
-    var gbinfo : DescriptorBufferInfo
-    gbinfo.buffer = weak_copy(ubo.buffer)
-    gbinfo.range_ = 128ul
-    gw.pBufferInfo |> push(gbinfo)
+    var gw = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(graw_set),
+        dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    gw.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 128ul))
     gwrites |> emplace(gw)
     update_descriptor_sets(device, gwrites, no_copies)
     delete no_copies
@@ -438,7 +428,7 @@ def public build_particles_context() : ParticlesContext {
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    var no_ext : array<string>
+    let no_ext : array<string>
     var features : VkPhysicalDeviceFeatures
     features.largePoints = VK_TRUE                   // gl_PointSize > 1 (POINT_LIST splat width)
     var inscope device <- create_device(phys, gfx, no_ext, features)
@@ -478,9 +468,7 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
     let csets <- [vk_value_to_boost(res.cdesc_set)]
     var no_cdyn : array<uint>
     cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.COMPUTE, res.cpipe_layout, 0u, csets, no_cdyn)
-    var cpc : ComputePush
-    cpc.time = time
-    cpc.dt = dt
+    var cpc = ComputePush(time = time, dt = dt)
     var cstage : VkShaderStageFlags
     cstage.compute = true
     cmd_push_constants(cmd, res.cpipe_layout, cstage, 0u, cpc)

@@ -83,12 +83,9 @@ def private render_draw_id() : array<uint8> {
 
     var inscope target <- build_offscreen_target(device, phys, TEX_W, TEX_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TEX_W)
-    fbci.height = uint(TEX_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TEX_W), height = uint(TEX_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     var poolci : CommandPoolCreateInfo

@@ -224,15 +224,13 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
-    var verts_copy : array<float>
-    verts_copy |> push_from(cube_vertices)
+    var verts_copy := cube_vertices
     var inscope vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
     delete verts_copy
 
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
-    var indices_copy : array<uint16>
-    indices_copy |> push_from(cube_indices)
+    var indices_copy := cube_indices
     var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
     delete indices_copy
 
@@ -249,12 +247,9 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
     var reflections <- [decode_reflection(instancing_vert_spv_reflect), decode_reflection(instancing_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
-    var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps0)
+    var dpci = DescriptorPoolCreateInfo(
+        maxSets = 1u,
+        pPoolSizes <- [DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)])
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
     var dsai = VkDescriptorSetAllocateInfo()
@@ -268,17 +263,14 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 144ul
-    w0.pBufferInfo |> push(binfo)
+    var w0 = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    w0.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 144ul))
     writes |> emplace(w0)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)
@@ -397,9 +389,7 @@ def public record_instancing_render_pass(res : InstancingResources; cmd : Comman
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
         // bind binding 0 (per-vertex) and binding 1 (per-instance) in one call
         let vbufs <- [weak_copy(res.vb.buffer), weak_copy(res.inst_buf.buffer)]
-        var voffs : array<uint64>
-        voffs |> push(0ul)
-        voffs |> push(0ul)
+        var voffs <- [0ul, 0ul]
         cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
         cmd_bind_index_buffer(cmd, weak_copy(res.ib.buffer), 0ul, VkIndexType.UINT16)
         // the instancing call: 36 indices fanned over N_INSTANCES instances

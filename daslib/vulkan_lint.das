@@ -37,10 +37,8 @@ class VulkanLintVisitor : AstVisitor {
                 || (current_function != null
                     && (current_function.flags.generated
                         || (current_function.at.fileInfo != null
-                            && expr.at.fileInfo != current_function.at.fileInfo)))) {
-            return
-        }
-        if (string(expr.func._module.name) != "vulkan") {
+                            && expr.at.fileInfo != current_function.at.fileInfo)))
+                || expr.func._module.name != "vulkan") {
             return
         }
         let fname = string(expr.func.name)

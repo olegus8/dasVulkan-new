@@ -73,8 +73,8 @@ def private run_compute_shared() : array<uint> {
     vk_check(vkBindBufferMemory(dev, buffer, memory, 0ul), null)
     // zero out the SSBO so the atomic accumulator starts at 0 (host-visible coherent memory).
     var zero : void? = null
-    var mf0 : VkMemoryMapFlags
-    var zeros : array<uint> = [for (k in range(2)); 0u]
+    let mf0 : VkMemoryMapFlags
+    var zeros : array<uint> = [for (_k in range(2)); 0u]
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf0, addr(zero)), null)
         memcpy(zero, reinterpret<void?>(addr(zeros[0])), int(buf_size))
@@ -157,7 +157,7 @@ def private run_compute_shared() : array<uint> {
     }
 
     var mapped : void? = null
-    var mf : VkMemoryMapFlags
+    let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
         memcpy(reinterpret<void?>(addr(values[0])), mapped, int(buf_size))

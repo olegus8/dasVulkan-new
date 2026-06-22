@@ -47,7 +47,7 @@ def mandelbrot {
         let nzx = x2 - y2 + cx
         zy = 2.0f * zx * zy + cy
         zx = nzx
-        n += 1
+        n++
     }
     let coord = int2(int(gid.x), int(gid.y))
     if (n == MAX_ITER) {

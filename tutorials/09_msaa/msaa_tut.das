@@ -323,7 +323,7 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     // 4x MSAA color target: rendered into, never blitted from (cannot carry transfer_src).
     var samples4 : VkSampleCountFlags
     samples4._4 = true
-    var msaa_color_extra : VkImageUsageFlags    // no extras; just color_attachment
+    let msaa_color_extra : VkImageUsageFlags    // no extras; just color_attachment
     var inscope color_msaa <- build_offscreen_target(device, phys, MSAA_W, MSAA_H, MSAA_COLOR_FMT, samples4, msaa_color_extra)
 
     // 1x resolve target: the rendering attachment resolves MSAA into this image at end-of-pass.
@@ -335,7 +335,7 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     var inscope color_resolve <- build_offscreen_target(device, phys, MSAA_W, MSAA_H, MSAA_COLOR_FMT, samples1, resolve_extra)
 
     // 4x MSAA depth: must match color sample count (VUID-VkSubpassDescription-pDepthStencilAttachment-01418).
-    var depth_extra : VkImageUsageFlags
+    let depth_extra : VkImageUsageFlags
     var inscope depth_msaa <- build_offscreen_depth(device, phys, MSAA_W, MSAA_H, MSAA_DEPTH_FMT, depth_extra, samples4)
 
     // 1x rasterization path (no MSAA): standalone color target (blittable) + matching depth.
@@ -369,9 +369,7 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     var inscope staging <- create_host_buffer_from_bytes(device, phys, staging_usage, tex_pixels)
     delete tex_pixels
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = MSAA_COLOR_FMT
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = MSAA_COLOR_FMT)
     ici.extent.width = uint(TEX_DIM)
     ici.extent.height = uint(TEX_DIM)
     ici.extent.depth = 1u
@@ -387,29 +385,26 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(tex_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope tex_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(tex_image), boost_value_to_vk(tex_memory), 0ul), null)
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(tex_image)
-    tvci.viewType = VkImageViewType._2D
-    tvci.format = MSAA_COLOR_FMT
+    var tvci = ImageViewCreateInfo(image = weak_copy(tex_image),
+        viewType = VkImageViewType._2D, format = MSAA_COLOR_FMT)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = 1u
     var inscope tex_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    sci.addressModeU = VkSamplerAddressMode.REPEAT
-    sci.addressModeV = VkSamplerAddressMode.REPEAT
-    sci.addressModeW = VkSamplerAddressMode.REPEAT
-    sci.maxLod = 1.0f
+    let sci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.REPEAT,
+        addressModeW = VkSamplerAddressMode.REPEAT,
+        maxLod = 1.0f)
     var inscope sampler <- create_sampler(device, sci)
 
     var reflections <- [decode_reflection(msaa_vert_spv_reflect), decode_reflection(msaa_frag_spv_reflect)]
@@ -417,14 +412,9 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps1)
+    let ps0 = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    let ps1 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    dpci.pPoolSizes <- [ps0, ps1]
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
     var dsai = VkDescriptorSetAllocateInfo()
@@ -438,28 +428,18 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 144ul
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    let binfo = DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 144ul)
     w0.pBufferInfo |> push(binfo)
     writes |> emplace(w0)
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sampler)
-    iinfo.imageView = weak_copy(tex_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let iinfo = DescriptorImageInfo(sampler = weak_copy(sampler),
+        imageView = weak_copy(tex_view), imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w1.pImageInfo |> push(iinfo)
     writes |> emplace(w1)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)
@@ -504,10 +484,8 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     // create_graphics_pipeline_dyn takes the format+samples that go into VkPipelineRenderingCreateInfo
     // on pNext (no VkRenderPass involved). We have to clone the bindings/attrs arrays for the
     // second build because create_graphics_pipeline_dyn takes them as `var ... array<>`.
-    var vbindings_copy : array<VkVertexInputBindingDescription>
-    vbindings_copy |> push_from(vbindings)
-    var vattrs_copy : array<VkVertexInputAttributeDescription>
-    vattrs_copy |> push_from(vattrs)
+    var vbindings_copy := vbindings
+    var vattrs_copy := vattrs
     var inscope pipeline_msaa <- create_graphics_pipeline_dyn(device,
         MSAA_COLOR_FMT, MSAA_DEPTH_FMT, samples4,
         pipe_layout, vert, frag, MSAA_W, MSAA_H, vbindings, vattrs)
@@ -632,16 +610,14 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
     var depth_tests : VkPipelineStageFlags
     depth_tests.early_fragment_tests = true
 
-    var color_att : RenderingAttachmentInfo
-    color_att.imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    color_att.loadOp = VkAttachmentLoadOp.CLEAR
+    var color_att = RenderingAttachmentInfo(imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        loadOp = VkAttachmentLoadOp.CLEAR)
     color_att.clearValue.color.float32[0] = 0.02f
     color_att.clearValue.color.float32[1] = 0.0f
     color_att.clearValue.color.float32[2] = 0.06f
     color_att.clearValue.color.float32[3] = 1.0f
-    var depth_att : RenderingAttachmentInfo
-    depth_att.loadOp = VkAttachmentLoadOp.CLEAR
-    depth_att.storeOp = VkAttachmentStoreOp.DONT_CARE
+    var depth_att = RenderingAttachmentInfo(loadOp = VkAttachmentLoadOp.CLEAR,
+        storeOp = VkAttachmentStoreOp.DONT_CARE)
     depth_att.clearValue.depthStencil.depth = 1.0f
     depth_att.imageLayout = VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL
 
@@ -695,11 +671,11 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
     // top INDICATOR_H rows of the final image, loadOp=CLEAR with a mode-coloured clear value.
     // No draw calls -- the clear at begin time IS the indicator. Vivid green = 4x MSAA, vivid
     // red = 1x. Shows up in both window and recording without a font texture.
-    var indicator_att : RenderingAttachmentInfo
-    indicator_att.imageView = use_msaa ? weak_copy(res.color_resolve.view) : weak_copy(res.color_1x.view)
-    indicator_att.imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    indicator_att.loadOp = VkAttachmentLoadOp.CLEAR
-    indicator_att.storeOp = VkAttachmentStoreOp.STORE
+    var indicator_att = RenderingAttachmentInfo(
+        imageView = use_msaa ? weak_copy(res.color_resolve.view) : weak_copy(res.color_1x.view),
+        imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        loadOp = VkAttachmentLoadOp.CLEAR,
+        storeOp = VkAttachmentStoreOp.STORE)
     indicator_att.clearValue.color.float32[0] = use_msaa ? 0.10f : 0.95f
     indicator_att.clearValue.color.float32[1] = use_msaa ? 0.85f : 0.18f
     indicator_att.clearValue.color.float32[2] = use_msaa ? 0.32f : 0.18f

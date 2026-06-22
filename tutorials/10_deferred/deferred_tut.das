@@ -357,7 +357,7 @@ def private build_df_images(var r : DeferredResources; device : Device; phys : V
     r.g_normal   <- build_offscreen_target(device, phys, DEFERRED_W, DEFERRED_H, NORMAL_FMT,   samples1, gbuf_extra)
     r.g_worldpos <- build_offscreen_target(device, phys, DEFERRED_W, DEFERRED_H, WORLDPOS_FMT, samples1, gbuf_extra)
     r.ssao_img   <- build_offscreen_target(device, phys, DEFERRED_W, DEFERRED_H, SSAO_FMT,     samples1, gbuf_extra)
-    var depth_extra : VkImageUsageFlags
+    let depth_extra : VkImageUsageFlags
     r.depth <- build_offscreen_depth(device, phys, DEFERRED_W, DEFERRED_H, DEPTH_FMT, depth_extra)
     var sm_extra : VkImageUsageFlags
     sm_extra.sampled = true
@@ -374,12 +374,12 @@ def private build_df_textures(var r : DeferredResources; device : Device; phys :
     // HDR equirect environment (Cannon, Poly Haven CC0) + a linear sampler (wrap azimuth, clamp poles)
     r.env_tex <- load_texture_hdr(device, phys, queue, pool,
         path_join(tutorial_asset_dir("hdri"), "cannon_2k.hdr"))
-    var esci : SamplerCreateInfo
-    esci.magFilter = VkFilter.LINEAR
-    esci.minFilter = VkFilter.LINEAR
-    esci.addressModeU = VkSamplerAddressMode.REPEAT
-    esci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    esci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
+    let esci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE)
     r.env_sampler <- create_sampler(device, esci)
 
     // Cat statue PBR maps (concrete_cat_statue, CC0): diff is sRGB albedo; nor_gl + arm are linear.
@@ -394,16 +394,16 @@ def private build_df_textures(var r : DeferredResources; device : Device; phys :
     // minifies hard there). Feature-gated: lavapipe (CI) reports it unsupported -> this no-ops.
     var dev_feats : VkPhysicalDeviceFeatures
     vkGetPhysicalDeviceFeatures(phys, dev_feats)
-    var csci : SamplerCreateInfo
-    csci.magFilter = VkFilter.LINEAR
-    csci.minFilter = VkFilter.LINEAR
-    csci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    csci.addressModeU = VkSamplerAddressMode.REPEAT
-    csci.addressModeV = VkSamplerAddressMode.REPEAT
-    csci.addressModeW = VkSamplerAddressMode.REPEAT
-    csci.maxLod = 16.0f
-    csci.anisotropyEnable = dev_feats.samplerAnisotropy
-    csci.maxAnisotropy = dev_feats.samplerAnisotropy != 0u ? 8.0f : 1.0f
+    let csci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.REPEAT,
+        addressModeW = VkSamplerAddressMode.REPEAT,
+        maxLod = 16.0f,
+        anisotropyEnable = dev_feats.samplerAnisotropy,
+        maxAnisotropy = dev_feats.samplerAnisotropy != 0u ? 8.0f : 1.0f)
     r.cat_sampler <- create_sampler(device, csci)
 
     // Floor brick maps (ambientCG Bricks031, CC0): Color sRGB, NormalGL + AO linear. Reuse cat_sampler.
@@ -419,12 +419,12 @@ def private build_df_textures(var r : DeferredResources; device : Device; phys :
 
     // NEAREST/clamp sampler for the deferred G-buffer reads: the ssao + lighting passes need exact
     // texels — linear filtering would smear world-pos / normals across silhouettes. No mips.
-    var gsci : SamplerCreateInfo
-    gsci.magFilter = VkFilter.NEAREST
-    gsci.minFilter = VkFilter.NEAREST
-    gsci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    gsci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    gsci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
+    let gsci = SamplerCreateInfo(
+        magFilter = VkFilter.NEAREST,
+        minFilter = VkFilter.NEAREST,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE)
     r.gbuffer_sampler <- create_sampler(device, gsci)
 }
 
@@ -435,50 +435,39 @@ def private build_df_passes_framebuffers(var r : DeferredResources; device : Dev
     r.rp_ssao     <- create_render_pass_single_color(device, SSAO_FMT, VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     r.rp_lighting <- create_render_pass_single_color(device, FINAL_FMT)   // default finalLayout = TRANSFER_SRC_OPTIMAL
 
-    var sm_attach : array<ImageView>
-    sm_attach |> push(weak_copy(r.shadow_map.view))
-    var sm_fbci : FramebufferCreateInfo
-    sm_fbci.renderPass = weak_copy(r.rp_shadow)
-    sm_fbci.pAttachments <- sm_attach
-    sm_fbci.width = uint(SHADOW_W)
-    sm_fbci.height = uint(SHADOW_H)
-    sm_fbci.layers = 1u
+    var sm_attach <- [weak_copy(r.shadow_map.view)]
+    var sm_fbci = FramebufferCreateInfo(
+        renderPass = weak_copy(r.rp_shadow),
+        pAttachments <- sm_attach,
+        width = uint(SHADOW_W), height = uint(SHADOW_H), layers = 1u)
     r.fb_shadow <- create_framebuffer(device, sm_fbci)
 
     // G-buffer framebuffer: 3 MRT color + depth.
-    var gb_attach : array<ImageView>
-    gb_attach |> push(weak_copy(r.g_albedo.view))
-    gb_attach |> push(weak_copy(r.g_normal.view))
-    gb_attach |> push(weak_copy(r.g_worldpos.view))
-    gb_attach |> push(weak_copy(r.depth.view))
-    var gb_fbci : FramebufferCreateInfo
-    gb_fbci.renderPass = weak_copy(r.rp_gbuffer)
-    gb_fbci.pAttachments <- gb_attach
-    gb_fbci.width = uint(DEFERRED_W)
-    gb_fbci.height = uint(DEFERRED_H)
-    gb_fbci.layers = 1u
+    var gb_attach <- [
+        weak_copy(r.g_albedo.view),
+        weak_copy(r.g_normal.view),
+        weak_copy(r.g_worldpos.view),
+        weak_copy(r.depth.view)]
+    var gb_fbci = FramebufferCreateInfo(
+        renderPass = weak_copy(r.rp_gbuffer),
+        pAttachments <- gb_attach,
+        width = uint(DEFERRED_W), height = uint(DEFERRED_H), layers = 1u)
     r.fb_gbuffer <- create_framebuffer(device, gb_fbci)
 
     // SSAO framebuffer: the single R8 occlusion target.
-    var ssao_attach : array<ImageView>
-    ssao_attach |> push(weak_copy(r.ssao_img.view))
-    var ssao_fbci : FramebufferCreateInfo
-    ssao_fbci.renderPass = weak_copy(r.rp_ssao)
-    ssao_fbci.pAttachments <- ssao_attach
-    ssao_fbci.width = uint(DEFERRED_W)
-    ssao_fbci.height = uint(DEFERRED_H)
-    ssao_fbci.layers = 1u
+    var ssao_attach <- [weak_copy(r.ssao_img.view)]
+    var ssao_fbci = FramebufferCreateInfo(
+        renderPass = weak_copy(r.rp_ssao),
+        pAttachments <- ssao_attach,
+        width = uint(DEFERRED_W), height = uint(DEFERRED_H), layers = 1u)
     r.fb_ssao <- create_framebuffer(device, ssao_fbci)
 
     // Lighting framebuffer: the final composited color (blitted/copied out afterwards).
-    var lit_attach : array<ImageView>
-    lit_attach |> push(weak_copy(r.final_color.view))
-    var lit_fbci : FramebufferCreateInfo
-    lit_fbci.renderPass = weak_copy(r.rp_lighting)
-    lit_fbci.pAttachments <- lit_attach
-    lit_fbci.width = uint(DEFERRED_W)
-    lit_fbci.height = uint(DEFERRED_H)
-    lit_fbci.layers = 1u
+    var lit_attach <- [weak_copy(r.final_color.view)]
+    var lit_fbci = FramebufferCreateInfo(
+        renderPass = weak_copy(r.rp_lighting),
+        pAttachments <- lit_attach,
+        width = uint(DEFERRED_W), height = uint(DEFERRED_H), layers = 1u)
     r.fb_lighting <- create_framebuffer(device, lit_fbci)
 }
 
@@ -501,12 +490,10 @@ def private build_df_geometry(var r : DeferredResources; device : Device; phys :
     r.cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, cat_i)
     delete cat_i
 
-    var floor_v_copy : array<float>
-    floor_v_copy |> push_from(floor_vertices)
+    var floor_v_copy := floor_vertices
     r.floor_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, floor_v_copy)
     delete floor_v_copy
-    var floor_i_copy : array<uint16>
-    floor_i_copy |> push_from(floor_indices)
+    var floor_i_copy := floor_indices
     r.floor_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, floor_i_copy)
     delete floor_i_copy
 
@@ -554,13 +541,11 @@ def private build_df_pipelines(var r : DeferredResources; device : Device) {
 def private build_df_descriptors(var r : DeferredResources; device : Device) {
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 5u                                              // shadow + gbuffer + ssao + lighting_set0 + lighting_set1
-    var p_ubo : DescriptorPoolSize
-    p_ubo.type_ = VkDescriptorType.UNIFORM_BUFFER
-    p_ubo.descriptorCount = 4u                                     // xform x3 (shadow/gbuffer/ssao) + scene (lighting_set1)
+    // xform x3 (shadow/gbuffer/ssao) + scene (lighting_set1)
+    let p_ubo = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 4u)
     dpci.pPoolSizes |> push(p_ubo)
-    var p_smp : DescriptorPoolSize
-    p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = 17u                                   // gbuffer 7 + ssao 2 + lighting 4 + shadow + env
+    // gbuffer 7 + ssao 2 + lighting 4 + shadow + env
+    let p_smp = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 17u)
     dpci.pPoolSizes |> push(p_smp)
     r.desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -570,30 +555,30 @@ def private build_df_descriptors(var r : DeferredResources; device : Device) {
     r.lighting_set0 = alloc_one_set(device, r.desc_pool, r.lighting_set_layouts[0])  // 4 sampled G-buffer + ssao
     r.lighting_set1 = alloc_one_set(device, r.desc_pool, r.lighting_set_layouts[1])  // shadow_map + scene UBO + env
 
-    var writes : array<WriteDescriptorSet>
-    writes |> emplace(write_ubo(r.shadow_set, 0u, r.xform_ubo.buffer, XFORM_SIZE))
-    writes |> emplace(write_ubo(r.gbuffer_set, 0u, r.xform_ubo.buffer, XFORM_SIZE))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 1u, r.cat_albedo.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 2u, r.cat_normal.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 3u, r.cat_arm.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 4u, r.floor_albedo.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 5u, r.floor_normal.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 6u, r.floor_ao.view, r.cat_sampler))
-    writes |> emplace(write_image_sampler(r.gbuffer_set, 7u, r.floor_roughness.view, r.cat_sampler))
-    // ssao set 0: xform UBO (b0) + sampled g_normal (b1) + g_worldpos (b2), NEAREST
-    writes |> emplace(write_ubo(r.ssao_set, 0u, r.xform_ubo.buffer, XFORM_SIZE))
-    writes |> emplace(write_image_sampler(r.ssao_set, 1u, r.g_normal.view, r.gbuffer_sampler))
-    writes |> emplace(write_image_sampler(r.ssao_set, 2u, r.g_worldpos.view, r.gbuffer_sampler))
-    // lighting set 0: sampled albedo (b0) / normal (b1) / world-pos (b2) / ssao (b3), NEAREST
-    writes |> emplace(write_image_sampler(r.lighting_set0, 0u, r.g_albedo.view, r.gbuffer_sampler))
-    writes |> emplace(write_image_sampler(r.lighting_set0, 1u, r.g_normal.view, r.gbuffer_sampler))
-    writes |> emplace(write_image_sampler(r.lighting_set0, 2u, r.g_worldpos.view, r.gbuffer_sampler))
-    writes |> emplace(write_image_sampler(r.lighting_set0, 3u, r.ssao_img.view, r.gbuffer_sampler))
-    writes |> emplace(write_shadow_sampler(r.lighting_set1, 0u, r.shadow_map.view, r.shadow_sampler))
-    writes |> emplace(write_ubo(r.lighting_set1, 1u, r.scene_ubo.buffer, SCENE_SIZE))
-    writes |> emplace(write_image_sampler(r.lighting_set1, 2u, r.env_tex.view, r.env_sampler))
+    var writes <- [
+        write_ubo(r.shadow_set, 0u, r.xform_ubo.buffer, XFORM_SIZE),
+        write_ubo(r.gbuffer_set, 0u, r.xform_ubo.buffer, XFORM_SIZE),
+        write_image_sampler(r.gbuffer_set, 1u, r.cat_albedo.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 2u, r.cat_normal.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 3u, r.cat_arm.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 4u, r.floor_albedo.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 5u, r.floor_normal.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 6u, r.floor_ao.view, r.cat_sampler),
+        write_image_sampler(r.gbuffer_set, 7u, r.floor_roughness.view, r.cat_sampler),
+        // ssao set 0: xform UBO (b0) + sampled g_normal (b1) + g_worldpos (b2), NEAREST
+        write_ubo(r.ssao_set, 0u, r.xform_ubo.buffer, XFORM_SIZE),
+        write_image_sampler(r.ssao_set, 1u, r.g_normal.view, r.gbuffer_sampler),
+        write_image_sampler(r.ssao_set, 2u, r.g_worldpos.view, r.gbuffer_sampler),
+        // lighting set 0: sampled albedo (b0) / normal (b1) / world-pos (b2) / ssao (b3), NEAREST
+        write_image_sampler(r.lighting_set0, 0u, r.g_albedo.view, r.gbuffer_sampler),
+        write_image_sampler(r.lighting_set0, 1u, r.g_normal.view, r.gbuffer_sampler),
+        write_image_sampler(r.lighting_set0, 2u, r.g_worldpos.view, r.gbuffer_sampler),
+        write_image_sampler(r.lighting_set0, 3u, r.ssao_img.view, r.gbuffer_sampler),
+        write_shadow_sampler(r.lighting_set1, 0u, r.shadow_map.view, r.shadow_sampler),
+        write_ubo(r.lighting_set1, 1u, r.scene_ubo.buffer, SCENE_SIZE),
+        write_image_sampler(r.lighting_set1, 2u, r.env_tex.view, r.env_sampler)]
 
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 }
 
@@ -614,43 +599,41 @@ def private alloc_one_set(device : Device; pool : DescriptorPool; layout : Descr
 }
 
 def private write_ubo(set : VkDescriptorSet; binding : uint; buf : Buffer; size : uint64) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w.descriptorCount = 1u
-    var bi : DescriptorBufferInfo
-    bi.buffer = weak_copy(buf)
-    bi.range_ = size
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(set),
+        dstBinding = binding,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    let bi = DescriptorBufferInfo(buffer = weak_copy(buf), range_ = size)
     w.pBufferInfo |> push(bi)
     return <- w
 }
 
 def private write_shadow_sampler(set : VkDescriptorSet; binding : uint; view : ImageView; sampler : Sampler) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w.descriptorCount = 1u
-    var ii : DescriptorImageInfo
-    ii.sampler = weak_copy(sampler)
-    ii.imageView = weak_copy(view)
-    ii.imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(set),
+        dstBinding = binding,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    let ii = DescriptorImageInfo(
+        sampler = weak_copy(sampler),
+        imageView = weak_copy(view),
+        imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL)
     w.pImageInfo |> push(ii)
     return <- w
 }
 
 //! A regular sampled image (SHADER_READ_ONLY layout) — for the HDR environment map.
 def private write_image_sampler(set : VkDescriptorSet; binding : uint; view : ImageView; sampler : Sampler) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w.descriptorCount = 1u
-    var ii : DescriptorImageInfo
-    ii.sampler = weak_copy(sampler)
-    ii.imageView = weak_copy(view)
-    ii.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(set),
+        dstBinding = binding,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    let ii = DescriptorImageInfo(
+        sampler = weak_copy(sampler),
+        imageView = weak_copy(view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w.pImageInfo |> push(ii)
     return <- w
 }
@@ -674,11 +657,6 @@ def private gbuf_color_attach(fmt : VkFormat) : VkAttachmentDescription {
 }
 
 def private build_gbuffer_render_pass(device : Device) : RenderPass {
-    var attaches : array<VkAttachmentDescription>
-    attaches |> push(gbuf_color_attach(ALBEDO_FMT))
-    attaches |> push(gbuf_color_attach(NORMAL_FMT))
-    attaches |> push(gbuf_color_attach(WORLDPOS_FMT))
-
     var a_depth : VkAttachmentDescription
     a_depth.format = DEPTH_FMT
     a_depth.samples._1 = true
@@ -688,13 +666,17 @@ def private build_gbuffer_render_pass(device : Device) : RenderPass {
     a_depth.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
     a_depth.initialLayout = VkImageLayout.UNDEFINED
     a_depth.finalLayout = VkImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    attaches |> push(a_depth)
+    var attaches <- [
+        gbuf_color_attach(ALBEDO_FMT),
+        gbuf_color_attach(NORMAL_FMT),
+        gbuf_color_attach(WORLDPOS_FMT),
+        a_depth]
 
     // Single subpass: write the 3 G-buffer color attachments + depth.
-    var s0_color : array<VkAttachmentReference>
-    s0_color |> push(att_ref(0u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL))
-    s0_color |> push(att_ref(1u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL))
-    s0_color |> push(att_ref(2u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL))
+    var s0_color <- [
+        att_ref(0u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL),
+        att_ref(1u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL),
+        att_ref(2u, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL)]
     var s0_depth = att_ref(3u, VkImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 
     var s0 : VkSubpassDescription
@@ -898,15 +880,12 @@ def private build_gbuffer_pipeline(device : Device; rp : RenderPass; layout : Pi
     depth.depthWriteEnable = 1u
     depth.depthCompareOp = VkCompareOp.LESS
 
-    var blend_atts : array<VkPipelineColorBlendAttachmentState>
-    for (i in range(3)) {
-        var att : VkPipelineColorBlendAttachmentState
-        att.colorWriteMask.r = true
-        att.colorWriteMask.g = true
-        att.colorWriteMask.b = true
-        att.colorWriteMask.a = true
-        blend_atts |> push(att)
-    }
+    var att : VkPipelineColorBlendAttachmentState
+    att.colorWriteMask.r = true
+    att.colorWriteMask.g = true
+    att.colorWriteMask.b = true
+    att.colorWriteMask.a = true
+    var blend_atts <- [for (_ in range(3)); att]      // 3 identical MRT blend states (write RGBA, no blend)
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 3u
 
@@ -1194,7 +1173,7 @@ def public build_deferred_context() : DeferredContext {
     vkGetPhysicalDeviceFeatures(phys, avail_feats)
     var want_feats : VkPhysicalDeviceFeatures
     want_feats.samplerAnisotropy = avail_feats.samplerAnisotropy
-    var no_ext : array<string>
+    let no_ext : array<string>
     var inscope device <- create_device(phys, gfx, no_ext, want_feats)
     volkLoadDevice(boost_value_to_vk(device))
     var queue = get_device_queue(device, gfx, 0u)

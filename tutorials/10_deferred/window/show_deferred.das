@@ -80,7 +80,7 @@ def main {
     while (glfwWindowShouldClose(window) == 0) {
         glfwPollEvents()
 
-        let m_down = glfwGetKey(window, int(GLFW_KEY_M)) == GLFW_PRESS
+        let m_down = glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS
         if (m_down && !m_was_down) {
             toggle = next_deferred_toggle(toggle)
         }

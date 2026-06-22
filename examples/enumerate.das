@@ -2,7 +2,6 @@ options gen2
 
 require vulkan
 require vulkan/vulkan_boost
-require strings
 
 def device_name(var props : VkPhysicalDeviceProperties) : string {
     unsafe {

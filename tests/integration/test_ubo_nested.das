@@ -152,12 +152,9 @@ def private render_one_id(id : int) : array<uint8> {
 
     var inscope target <- build_offscreen_target(device, phys, TEX_W, TEX_H, fmt)
     var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var fbci : FramebufferCreateInfo
-    fbci.renderPass = weak_copy(render_pass)
-    fbci.pAttachments <- [weak_copy(target.view)]
-    fbci.width = uint(TEX_W)
-    fbci.height = uint(TEX_H)
-    fbci.layers = 1u
+    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+        pAttachments <- [weak_copy(target.view)],
+        width = uint(TEX_W), height = uint(TEX_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
     // UBO buffer (144 bytes of std140-laid-out bytes uploaded directly)
@@ -173,9 +170,7 @@ def private render_one_id(id : int) : array<uint8> {
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps : DescriptorPoolSize
-    ps.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps.descriptorCount = 1u
+    var ps = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -190,17 +185,12 @@ def private render_one_id(id : int) : array<uint8> {
     }
 
     var writes : array<WriteDescriptorSet>
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(raw_set)
-    w.dstBinding = 0u
-    w.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 144ul
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    var binfo = DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 144ul)
     w.pBufferInfo |> push(binfo)
     writes |> emplace(w)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)

@@ -287,14 +287,12 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
-    var verts_copy : array<float>
-    verts_copy |> push_from(cube_vertices)
+    var verts_copy := cube_vertices
     var inscope vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
     delete verts_copy
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
-    var indices_copy : array<uint16>
-    indices_copy |> push_from(cube_indices)
+    var indices_copy := cube_indices
     var inscope ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
     delete indices_copy
 
@@ -309,62 +307,57 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
     var inscope staging <- create_host_buffer_from_bytes(device, phys, staging_usage, tex_pixels)
     delete tex_pixels
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = CUBE_COLOR_FMT
+    var ici = ImageCreateInfo(
+        imageType = VkImageType._2D,
+        format = CUBE_COLOR_FMT,
+        mipLevels = 1u,
+        arrayLayers = 1u,
+        tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(TEX_DIM)
     ici.extent.height = uint(TEX_DIM)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope tex_image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(tex_image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(
+        allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope tex_memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(tex_image), boost_value_to_vk(tex_memory), 0ul), null)
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(tex_image)
-    tvci.viewType = VkImageViewType._2D
-    tvci.format = CUBE_COLOR_FMT
+    var tvci = ImageViewCreateInfo(
+        image = weak_copy(tex_image),
+        viewType = VkImageViewType._2D,
+        format = CUBE_COLOR_FMT)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = 1u
     var inscope tex_view <- create_image_view(device, tvci)
 
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    sci.addressModeU = VkSamplerAddressMode.REPEAT
-    sci.addressModeV = VkSamplerAddressMode.REPEAT
-    sci.addressModeW = VkSamplerAddressMode.REPEAT
-    sci.maxLod = 1.0f
+    let sci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.REPEAT,
+        addressModeW = VkSamplerAddressMode.REPEAT,
+        maxLod = 1.0f)
     var inscope sampler <- create_sampler(device, sci)
 
     var reflections <- [decode_reflection(cube_vert_spv_reflect), decode_reflection(cube_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
-    var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u
-    dpci.pPoolSizes |> push(ps1)
+    var dpci = DescriptorPoolCreateInfo(
+        maxSets = 1u,
+        pPoolSizes <- [
+            DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u),
+            DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)])
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
     var dsai = VkDescriptorSetAllocateInfo()
@@ -378,28 +371,24 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo.buffer)
-    binfo.range_ = 144ul
-    w0.pBufferInfo |> push(binfo)
+    var w0 = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    w0.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 144ul))
     writes |> emplace(w0)
-    var w1 : WriteDescriptorSet
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.sampler = weak_copy(sampler)
-    iinfo.imageView = weak_copy(tex_view)
-    iinfo.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
-    w1.pImageInfo |> push(iinfo)
+    var w1 = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    w1.pImageInfo |> push(DescriptorImageInfo(
+        sampler = weak_copy(sampler),
+        imageView = weak_copy(tex_view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL))
     writes |> emplace(w1)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)

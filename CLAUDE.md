@@ -137,11 +137,19 @@ third windowed compute tutorial appears.
   `pAttachments`, `queueFamilyIndex` (camelCase + Hungarian `p`), NOT
   `render_pass`/`attachments`. `pNext` → `next : void?` (raw escape hatch).
   Stripping the `p` and typed pNext chains are deferred (see `ROADMAP.md`).
-- **Filling a CreateInfo view:** the named-argument constructor works for every
-  field kind — `Foo(scalar = x, handle = weak_copy(h), arr <- [..])`. Handle
-  fields take a `weak_copy` (a non-owning alias; the `create_*` keeps
-  ownership); non-copyable array fields are move-initialized with `<-`.
-  Field-by-field assignment also works but trips STYLE013 — prefer the ctor.
+- **Filling a CreateInfo view:** use the named-argument constructor —
+  `Foo(scalar = x, handle = weak_copy(h), arr <- [..])`. Handle fields take a
+  `weak_copy` (a non-owning alias; the `create_*` keeps ownership); non-copyable
+  array fields are move-initialized with `<-`. **Two field kinds cannot go in the
+  ctor** and stay as field-assigns *after* it: (1) **nested raw `Vk*` struct
+  fields** — `extent`, `subresourceRange`, `imageSubresource` are the native
+  `VkExtent3D`/`VkImageSubresourceRange`/… not boost wrappers, so a nested
+  `Extent3D(..)` ctor fails `error[30915]`; write `ci.extent.width = ..` after;
+  (2) **bitfield fields** — `usage.transfer_dst = true`, `samples._1 = true`,
+  `aspectMask.color = true` (bitfields have no named-arg ctor). A non-empty ctor
+  init silences STYLE013 for those residual assigns, so the lint stays clean.
+  Field-by-field-only (empty/default init) trips STYLE013 — the linter is a CI
+  gate now (see below), so always lead with the ctor.
 - **Count fields are mostly auto-derived** from array length. The exceptions
   (optional / `noautovalidity` arrays, e.g. `descriptorCount` without samplers)
   are settable boost fields under the independent-count model: the view sets
@@ -169,7 +177,22 @@ third windowed compute tutorial appears.
 The whole initial build (raw binding → boost → examples → tests → Linux CI →
 array-of-struct → resizable swapchain → independent-count model → docs) was
 committed **direct to master**. That phase is over: **new work goes through PRs**.
-Lint is mandatory (a pre-push hook mirrors the CI lint).
+
+**Lint is mandatory and gated.** `.github/workflows/tests.yml` runs daslang's
+`utils/lint/main.das` (paranoid + perf + style) over the whole tree on every PR;
+any warning or compile error fails CI. The whole tree is lint-clean — keep it
+that way. Mirror the gate locally before pushing:
+
+```
+git config core.hooksPath utils/git-hooks   # one-time
+DASLANG=<daslang binary> DASLANG_ROOT=<daslang checkout> git push
+```
+
+(`utils/git-hooks/pre-push` runs the same lint; a full dev build also covers the
+`window/` + `recording/` drivers, which the headless CI build skips.) To lint by
+hand: `daslang -load_module <repo> <daslang>/utils/lint/main.das -- <repo> -q`.
+The **generated** `daslib/vulkan_*.das` files are lint-clean *by construction* —
+fix the emitter in `generator/vk_emit_boost.das` and regenerate, never hand-edit.
 
 - `ROADMAP.md` — postponed work, with enough context to pick each up cold.
 - `ORIGINAL_PLAN.md` — the original boost-layer design plan, preserved verbatim

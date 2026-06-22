@@ -280,12 +280,13 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var hdr_extra : VkImageUsageFlags
     hdr_extra.sampled = true                            // HDR scene is sampled by bright + composite
     var inscope hdr_color <- build_offscreen_target(device, phys, HDR_W, HDR_H, HDR_FMT, samples1, hdr_extra)
-    var depth_extra : VkImageUsageFlags
+    let depth_extra : VkImageUsageFlags
     var inscope hdr_depth <- build_offscreen_depth(device, phys, HDR_W, HDR_H, DEPTH_FMT, depth_extra)
 
     var bloom_extra : VkImageUsageFlags
     bloom_extra.sampled = true                          // bloom mips are sampled by down + up + composite
     var inscope bloom : array<OffscreenTarget>
+    bloom |> reserve(BLOOM_LEVELS)
     for (i in range(BLOOM_LEVELS)) {
         var inscope mip <- build_offscreen_target(device, phys, BLOOM_W[i], BLOOM_H[i], HDR_FMT, samples1, bloom_extra)
         bloom |> emplace(mip)
@@ -310,9 +311,7 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var inscope rp_composite  <- build_composite_render_pass(device)                              // final blit target (TRANSFER_SRC)
 
     // ----- framebuffers -----
-    var scene_attach : array<ImageView>
-    scene_attach |> push(weak_copy(hdr_color.view))
-    scene_attach |> push(weak_copy(hdr_depth.view))
+    var scene_attach <- [weak_copy(hdr_color.view), weak_copy(hdr_depth.view)]
     var inscope fb_scene <- create_framebuffer(device, FramebufferCreateInfo(
         renderPass = weak_copy(rp_scene),
         pAttachments <- scene_attach,
@@ -320,17 +319,17 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
 
     var inscope fb_post_clear : array<Framebuffer>
     var inscope fb_post_load  : array<Framebuffer>
+    fb_post_clear |> reserve(BLOOM_LEVELS)
+    fb_post_load  |> reserve(BLOOM_LEVELS)
     for (i in range(BLOOM_LEVELS)) {
-        var ac : array<ImageView>
-        ac |> push(weak_copy(bloom[i].view))
+        var ac <- [weak_copy(bloom[i].view)]
         var inscope fbc <- create_framebuffer(device, FramebufferCreateInfo(
             renderPass = weak_copy(rp_post_clear),
             pAttachments <- ac,
             width = uint(BLOOM_W[i]), height = uint(BLOOM_H[i]), layers = 1u))
         fb_post_clear |> emplace(fbc)
 
-        var al : array<ImageView>
-        al |> push(weak_copy(bloom[i].view))
+        var al <- [weak_copy(bloom[i].view)]
         var inscope fbl <- create_framebuffer(device, FramebufferCreateInfo(
             renderPass = weak_copy(rp_post_load),
             pAttachments <- al,
@@ -346,14 +345,15 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
         width = uint(HDR_W), height = uint(HDR_H), layers = 1u))
 
     // ----- sampler -----
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR    // was NEAREST -- broke linear filtering in practice
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
-    sci.maxLod = 1.0f                              // covers the single mip level the bloom images carry
+    // mipmapMode LINEAR (NEAREST broke linear filtering in practice); maxLod 1.0 covers the single mip
+    let sci = SamplerCreateInfo(
+        magFilter = VkFilter.LINEAR,
+        minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR,
+        addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        maxLod = 1.0f)
     var inscope sampler_linear_clamp <- create_sampler(device, sci)
 
     // ----- geometry + UBOs -----
@@ -364,12 +364,10 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
 
-    var cv_copy : array<float>
-    cv_copy |> push_from(cube_vertices)
+    var cv_copy := cube_vertices
     var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, cv_copy)
     delete cv_copy
-    var ci_copy : array<uint16>
-    ci_copy |> push_from(cube_indices)
+    var ci_copy := cube_indices
     var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, ci_copy)
     delete ci_copy
 
@@ -397,14 +395,11 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     // ----- descriptor pool sized for all sets -----
     let n_post_samples = uint(1 + 2 * (BLOOM_LEVELS - 1))     // bright + down(4) + up(4) = 9
     var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = uint(1 + n_post_samples + 1)               // scene + post + composite
-    var p_ubo : DescriptorPoolSize
-    p_ubo.type_ = VkDescriptorType.UNIFORM_BUFFER
-    p_ubo.descriptorCount = 1u
+    dpci.maxSets = 1u + n_post_samples + 1u                   // scene + post + composite
+    let p_ubo = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(p_ubo)
-    var p_smp : DescriptorPoolSize
-    p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = n_post_samples + 2u               // post-sets each have one sampler + composite has two
+    // post-sets each have one sampler + composite has two
+    let p_smp = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = n_post_samples + 2u)
     dpci.pPoolSizes |> push(p_smp)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -412,15 +407,12 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var scene_set     = alloc_one_set(device, desc_pool, scene_set_layouts[0])
     var bright_set    = alloc_one_set(device, desc_pool, post_set_layouts[1])      // post-sampler is set 1
     var composite_set = alloc_one_set(device, desc_pool, composite_set_layouts[1]) // composite samplers in set 1
-    var down_set : array<VkDescriptorSet>
-    var up_set   : array<VkDescriptorSet>
-    for (i in range(BLOOM_LEVELS - 1)) {
-        down_set |> push(alloc_one_set(device, desc_pool, post_set_layouts[1]))
-        up_set   |> push(alloc_one_set(device, desc_pool, post_set_layouts[1]))
-    }
+    var down_set <- [for (_ in range(BLOOM_LEVELS - 1)); alloc_one_set(device, desc_pool, post_set_layouts[1])]
+    var up_set   <- [for (_ in range(BLOOM_LEVELS - 1)); alloc_one_set(device, desc_pool, post_set_layouts[1])]
 
     // ----- writes -----
     var writes : array<WriteDescriptorSet>
+    writes |> reserve(4 + 2 * (BLOOM_LEVELS - 1))     // ubo + bright + composite(2) + down/up per mip
     writes |> emplace(write_ubo(scene_set, 0u, ubo.buffer, 144ul))
     writes |> emplace(write_sampler(bright_set, 0u, hdr_color.view, sampler_linear_clamp))
     for (i in range(BLOOM_LEVELS - 1)) {
@@ -429,7 +421,7 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     }
     writes |> emplace(write_sampler(composite_set, 0u, hdr_color.view, sampler_linear_clamp))
     writes |> emplace(write_sampler(composite_set, 1u, bloom[0].view,  sampler_linear_clamp))
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // ----- shaders + pipelines -----
@@ -441,16 +433,16 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var inscope sh_up      <- create_shader_module(device, hdr_up_frag_spv)
     var inscope sh_comp    <- create_shader_module(device, hdr_composite_frag_spv)
 
-    var vbindings : array<VkVertexInputBindingDescription>
-    vbindings |> push(VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX))
-    vbindings |> push(VkVertexInputBindingDescription(binding = 1u, stride = INST_STRIDE, inputRate = VkVertexInputRate.INSTANCE))
-    var vattrs : array<VkVertexInputAttributeDescription>
-    vattrs |> push(VkVertexInputAttributeDescription(location = 0u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u))
-    vattrs |> push(VkVertexInputAttributeDescription(location = 1u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 12u))
-    vattrs |> push(VkVertexInputAttributeDescription(location = 2u, binding = 1u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u))
-    vattrs |> push(VkVertexInputAttributeDescription(location = 3u, binding = 1u, format = VkFormat.R32G32B32_SFLOAT, offset = 12u))
-    vattrs |> push(VkVertexInputAttributeDescription(location = 4u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 24u))
-    vattrs |> push(VkVertexInputAttributeDescription(location = 5u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 28u))
+    var vbindings <- [
+        VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX),
+        VkVertexInputBindingDescription(binding = 1u, stride = INST_STRIDE, inputRate = VkVertexInputRate.INSTANCE)]
+    var vattrs <- [
+        VkVertexInputAttributeDescription(location = 0u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u),
+        VkVertexInputAttributeDescription(location = 1u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 12u),
+        VkVertexInputAttributeDescription(location = 2u, binding = 1u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u),
+        VkVertexInputAttributeDescription(location = 3u, binding = 1u, format = VkFormat.R32G32B32_SFLOAT, offset = 12u),
+        VkVertexInputAttributeDescription(location = 4u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 24u),
+        VkVertexInputAttributeDescription(location = 5u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 28u)]
 
     var inscope scene_pipeline <- create_graphics_pipeline_v3d(device, rp_scene, scene_pipe_layout, sh_scene_v, sh_scene_f,
         HDR_W, HDR_H, vbindings, vattrs)
@@ -470,45 +462,44 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     let buf_size = uint64(HDR_W * HDR_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
-    var r : HdrResources
-    r.hdr_color <- hdr_color
-    r.hdr_depth <- hdr_depth
-    r.bloom <- bloom
-    r.ldr_color <- ldr_color
-    r.readback_8bit <- readback_8bit
-    r.rp_scene <- rp_scene
-    r.rp_post_clear <- rp_post_clear
-    r.rp_post_load <- rp_post_load
-    r.rp_composite <- rp_composite
-    r.fb_scene <- fb_scene
-    r.fb_post_clear <- fb_post_clear
-    r.fb_post_load <- fb_post_load
-    r.fb_composite <- fb_composite
-    r.sampler_linear_clamp <- sampler_linear_clamp
-    r.cube_vb <- cube_vb
-    r.cube_ib <- cube_ib
-    r.inst_buf <- inst_buf
-    r.ubo <- ubo
-    r.scene_set_layouts <- scene_set_layouts
-    r.scene_pipe_layout <- scene_pipe_layout
-    r.scene_pipeline <- scene_pipeline
-    r.scene_set = scene_set
-    r.post_set_layouts <- post_set_layouts
-    r.post_pipe_layout <- post_pipe_layout
-    r.bright_pipeline <- bright_pipeline
-    r.down_pipeline <- down_pipeline
-    r.up_pipeline <- up_pipeline
-    r.bright_set = bright_set
-    r.down_set <- down_set
-    r.up_set <- up_set
-    r.composite_set_layouts <- composite_set_layouts
-    r.composite_pipe_layout <- composite_pipe_layout
-    r.composite_pipeline <- composite_pipeline
-    r.composite_set = composite_set
-    r.desc_pool <- desc_pool
-    r.readback <- readback
-    r.buf_size = buf_size
-    return <- r
+    return <- HdrResources(
+        hdr_color <- hdr_color,
+        hdr_depth <- hdr_depth,
+        bloom <- bloom,
+        ldr_color <- ldr_color,
+        readback_8bit <- readback_8bit,
+        rp_scene <- rp_scene,
+        rp_post_clear <- rp_post_clear,
+        rp_post_load <- rp_post_load,
+        rp_composite <- rp_composite,
+        fb_scene <- fb_scene,
+        fb_post_clear <- fb_post_clear,
+        fb_post_load <- fb_post_load,
+        fb_composite <- fb_composite,
+        sampler_linear_clamp <- sampler_linear_clamp,
+        cube_vb <- cube_vb,
+        cube_ib <- cube_ib,
+        inst_buf <- inst_buf,
+        ubo <- ubo,
+        scene_set_layouts <- scene_set_layouts,
+        scene_pipe_layout <- scene_pipe_layout,
+        scene_pipeline <- scene_pipeline,
+        scene_set = scene_set,
+        post_set_layouts <- post_set_layouts,
+        post_pipe_layout <- post_pipe_layout,
+        bright_pipeline <- bright_pipeline,
+        down_pipeline <- down_pipeline,
+        up_pipeline <- up_pipeline,
+        bright_set = bright_set,
+        down_set <- down_set,
+        up_set <- up_set,
+        composite_set_layouts <- composite_set_layouts,
+        composite_pipe_layout <- composite_pipe_layout,
+        composite_pipeline <- composite_pipeline,
+        composite_set = composite_set,
+        desc_pool <- desc_pool,
+        readback <- readback,
+        buf_size = buf_size)
 }
 
 // ===== helpers =====
@@ -528,28 +519,26 @@ def private alloc_one_set(device : Device; pool : DescriptorPool; layout : Descr
 }
 
 def private write_ubo(set : VkDescriptorSet; binding : uint; buf : Buffer; size : uint64) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w.descriptorCount = 1u
-    var bi : DescriptorBufferInfo
-    bi.buffer = weak_copy(buf)
-    bi.range_ = size
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(set),
+        dstBinding = binding,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER,
+        descriptorCount = 1u)
+    let bi = DescriptorBufferInfo(buffer = weak_copy(buf), range_ = size)
     w.pBufferInfo |> push(bi)
     return <- w
 }
 
 def private write_sampler(set : VkDescriptorSet; binding : uint; view : ImageView; sampler : Sampler) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w.descriptorCount = 1u
-    var ii : DescriptorImageInfo
-    ii.sampler = weak_copy(sampler)
-    ii.imageView = weak_copy(view)
-    ii.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(set),
+        dstBinding = binding,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    let ii = DescriptorImageInfo(
+        sampler = weak_copy(sampler),
+        imageView = weak_copy(view),
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
     w.pImageInfo |> push(ii)
     return <- w
 }
@@ -561,42 +550,38 @@ def private write_sampler(set : VkDescriptorSet; binding : uint; view : ImageVie
 //! would fail `vkCreateImage`. Build it ourselves with exactly the bits we use.
 def private build_readback_image(device : Device; phys : VkPhysicalDevice;
                                  width, height : int; format : VkFormat) : OffscreenTarget {
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = format
+    var ici = ImageCreateInfo(
+        imageType = VkImageType._2D,
+        format = format,
+        mipLevels = 1u,
+        arrayLayers = 1u,
+        tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(width)
     ici.extent.height = uint(height)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.transfer_dst = true                   // receives the linear->sRGB blit
     ici.usage.transfer_src = true                   // then is copied to the host readback buffer
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope image <- create_image(device, ici)
     var req : VkMemoryRequirements
     vkGetImageMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(image), req)
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(
+        allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindImageMemory(boost_value_to_vk(device), boost_value_to_vk(image), boost_value_to_vk(memory), 0ul), null)
-    var vci : ImageViewCreateInfo
-    vci.image = weak_copy(image)
-    vci.viewType = VkImageViewType._2D
-    vci.format = format
+    var vci = ImageViewCreateInfo(
+        image = weak_copy(image),
+        viewType = VkImageViewType._2D,
+        format = format)
     vci.subresourceRange.aspectMask.color = true
     vci.subresourceRange.levelCount = 1u
     vci.subresourceRange.layerCount = 1u
     var inscope view <- create_image_view(device, vci)
-    var t : OffscreenTarget
-    t.image <- image
-    t.memory <- memory
-    t.view <- view
-    return <- t
+    return <- OffscreenTarget(image <- image, memory <- memory, view <- view)
 }
 
 // ===== render passes / pipelines =====
@@ -887,9 +872,7 @@ def private build_additive_pipeline(device : Device; rp : RenderPass; layout : P
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
 
-    var dyn_states : array<VkDynamicState>
-    dyn_states |> push(VkDynamicState.VIEWPORT)
-    dyn_states |> push(VkDynamicState.SCISSOR)
+    var dyn_states <- [VkDynamicState.VIEWPORT, VkDynamicState.SCISSOR]
     var dynstate = VkPipelineDynamicStateCreateInfo()
     dynstate.dynamicStateCount = uint(length(dyn_states))
 
@@ -1001,9 +984,7 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {
         var no_dyn : array<uint>
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.scene_pipe_layout, 0u, sets, no_dyn)
         let vbufs <- [weak_copy(res.cube_vb.buffer), weak_copy(res.inst_buf.buffer)]
-        var voffs : array<uint64>
-        voffs |> push(0ul)
-        voffs |> push(0ul)
+        var voffs <- [0ul, 0ul]
         cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
         cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT16)
         cmd_draw_indexed(cmd, uint(N_INDICES), uint(N_INSTANCES), 0u, 0, 0u)

@@ -33,9 +33,7 @@ def private emit_ctors(reg : VkRegistry; em : EmitModel; out_dir : string) {
         fprint(f, GEN_HEADER)
         fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_ctors\n\nrequire vulkan public\n\n")
         for (s in reg.structs) {
-            continue if (!empty(s.alias))
-            continue if (!key_exists(em.struct_emit, s.name))
-            continue if (!empty(s.protect))
+            continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect))
             // find the sType member (always named "sType" with a values= attribute)
             var stype_const = ""
             for (m in s.members) {
@@ -89,9 +87,7 @@ def private is_boost_handle(em : EmitModel; tn : string) : bool {
 def private find_destroyers(reg : VkRegistry; em : EmitModel) : table<string; int> {
     var result : table<string; int>    // handle name -> command index
     for (c, idx in reg.commands, range(length(reg.commands))) {
-        continue if (!empty(c.alias))
-        continue if (!key_exists(reg.enabled_commands, c.name))
-        continue if (!empty(c.protect))
+        continue if (!empty(c.alias) || !key_exists(reg.enabled_commands, c.name) || !empty(c.protect))
         let is_destroy = c.name |> starts_with("vkDestroy")
         let is_free = c.name |> starts_with("vkFree")
         continue if (!is_destroy && !is_free)
@@ -109,9 +105,7 @@ def public derive_owners(reg : VkRegistry; em : EmitModel) : array<OwnerInfo> {
     let destroyers = find_destroyers(reg, em)
     var owners : array<OwnerInfo>
     for (h in reg.handles) {
-        continue if (!empty(h.alias))
-        continue if (!is_boost_handle(em, h.name))
-        continue if (!empty(h.protect))
+        continue if (!empty(h.alias) || !is_boost_handle(em, h.name) || !empty(h.protect))
         var oi = OwnerInfo(handle = h.name, boost = boost_name(h.name))
         let didx = destroyers?[h.name] ?? -1
         if (didx >= 0) {
@@ -138,6 +132,7 @@ def public derive_owners(reg : VkRegistry; em : EmitModel) : array<OwnerInfo> {
     return <- owners
 }
 
+[unused_argument(reg, em)]
 def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : string; owners : array<OwnerInfo>) {
     fopen("{out_dir}/vulkan_handles.das", "wb") $(f) {
         panic("can't write vulkan_handles.das") if (f == null)
@@ -236,6 +231,7 @@ def private arr_scalar_elem(reg : VkRegistry; tn : string) : string {
 
 //! map a struct member to a boost field; FieldKind.hard signals "skip the whole struct".
 //! `mappable` is the set of struct names known to have a boost vk_view (for array-of-struct).
+[unused_argument(s)]
 def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember; counts : table<string>; mappable : table<string>) : BoostField {
     var bf = BoostField(name = das_safe_name(m.name), raw_name = m.name)
     let tn = m.type_name
@@ -264,7 +260,7 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         bf.kind = FieldKind.hard
         return <- bf
     }
-    if (length(m.arr_dims) > 0) {
+    if (!empty(m.arr_dims)) {
         bf.kind = FieldKind.hard      // inline fixed-array members: defer
         return <- bf
     }
@@ -363,7 +359,7 @@ struct ViewStruct {
 def private all_fields_mappable(reg : VkRegistry; em : EmitModel; s : VkStructDef; mappable : table<string>) : bool {
     let counts = count_members_of(s)
     for (m in s.members) {
-        var bf <- classify_field(reg, em, s, m, counts, mappable)
+        let bf <- classify_field(reg, em, s, m, counts, mappable)
         return false if (bf.kind == FieldKind.hard)
     }
     return true
@@ -372,7 +368,7 @@ def private all_fields_mappable(reg : VkRegistry; em : EmitModel; s : VkStructDe
 def private first_hard_reason(reg : VkRegistry; em : EmitModel; s : VkStructDef; mappable : table<string>) : string {
     let counts = count_members_of(s)
     for (m in s.members) {
-        var bf <- classify_field(reg, em, s, m, counts, mappable)
+        let bf <- classify_field(reg, em, s, m, counts, mappable)
         if (bf.kind == FieldKind.hard) {
             return "{s.name}: member {m.name} ({m.type_name} x{m.num_ptrs}) not mappable"
         }
@@ -386,10 +382,7 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
     // be mappable) until stable -- handles nested views (e.g. RenderPassCreateInfo).
     var mappable : table<string>
     for (s in reg.structs) {
-        continue if (!empty(s.alias))
-        continue if (!key_exists(em.struct_emit, s.name))
-        continue if (!empty(s.protect))
-        continue if (s.is_union)
+        continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect) || s.is_union)
         mappable |> insert(s.name)
     }
     var changed = true
@@ -409,6 +402,7 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
         continue if (!key_exists(mappable, s.name))
         let counts = count_members_of(s)
         var vs = ViewStruct(s_index = idx, boost = boost_name(s.name))
+        vs.fields |> reserve(length(s.members))
         for (m in s.members) {
             var bf <- classify_field(reg, em, s, m, counts, mappable)
             vs.fields |> emplace(bf)
@@ -418,11 +412,7 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
     }
     // log the structs that didn't make it (with the first offending field)
     for (s in reg.structs) {
-        continue if (!empty(s.alias))
-        continue if (!key_exists(em.struct_emit, s.name))
-        continue if (!empty(s.protect))
-        continue if (s.is_union)
-        continue if (key_exists(mappable, s.name))
+        continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect) || s.is_union || key_exists(mappable, s.name))
         skip_log |> push(first_hard_reason(reg, em, s, mappable))
     }
     return <- views
@@ -430,6 +420,15 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
 
 def private is_array_kind(k : FieldKind) : bool {
     return k == FieldKind.arr_scalar || k == FieldKind.arr_handle || k == FieldKind.arr_struct
+}
+
+//! vk_view_create_unsafe writes `b` (its scratch fields) only for array / opt-struct-ptr fields;
+//! a struct with none is read-only, so the create param drops `var` and the destroy is a no-op.
+def private view_has_scratch(vs : ViewStruct) : bool {
+    for (bf in vs.fields) {
+        return true if (is_array_kind(bf.kind) || bf.kind == FieldKind.opt_struct_ptr)
+    }
+    return false
 }
 
 //! Promote count members whose referencing arrays are ALL optional to settable boost
@@ -456,12 +455,7 @@ def private promote_independent_counts(var vs : ViewStruct) {
 
 //! das-safe boost field names of the array fields counted by `raw_count`
 def private count_referencing_arrays(vs : ViewStruct; raw_count : string) : array<string> {
-    var out : array<string>
-    for (af in vs.fields) {
-        if (is_array_kind(af.kind) && af.count_member == raw_count) {
-            out |> push(af.name)
-        }
-    }
+    var out <- [for (af in vs.fields); af.name; where is_array_kind(af.kind) && af.count_member == raw_count]
     return <- out
 }
 
@@ -483,13 +477,19 @@ def private count_authoritative_array(vs : ViewStruct; raw_count : string) : str
 //! uint expression for the largest length among `arrs` (fallback for an independent count)
 def private len_max_expr(arrs : array<string>) : string {
     return "0u" if (empty(arrs))
-    var e = "uint(length(b.{arrs[0]}))"
-    for (i in range(1, length(arrs))) {
-        e = "max({e}, uint(length(b.{arrs[i]})))"
+    let extra = length(arrs) - 1
+    return build_string() $(var w) {
+        for (_i in range(extra)) {
+            w |> write("max(")
+        }
+        w |> write("uint(length(b.{arrs[0]}))")
+        for (i in range(1, length(arrs))) {
+            w |> write(", uint(length(b.{arrs[i]})))")
+        }
     }
-    return e
 }
 
+[unused_argument(em)]
 def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : string; views : array<ViewStruct>) {
     fopen("{out_dir}/vulkan_structs.das", "wb") $(f) {
         panic("can't write vulkan_structs.das") if (f == null)
@@ -530,7 +530,10 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             // vk_view_create_unsafe. Raw struct das field names are das_safe_name'd (same
             // as the boost field name). Array pointers are set here (null when empty); counts
             // are set afterwards so a shared/independent count sees every array's length.
-            fprint(f, "def vk_view_create_unsafe(var b : {vs.boost}) : {s.name} \{\n")
+            // `b` is only mutated (its scratch fields) when the struct has array/opt-ptr fields;
+            // a read-only view drops `var` so the generated code is LINT014-clean.
+            let b_create = view_has_scratch(vs) ? "var b" : "b"
+            fprint(f, "def vk_view_create_unsafe({b_create} : {vs.boost}) : {s.name} \{\n")
             fprint(f, "    var vk = {s.name}()\n")
             for (bf in vs.fields) {
                 if (bf.kind == FieldKind.scalar || bf.kind == FieldKind.str) {
@@ -583,8 +586,10 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             }
             fprint(f, "    return <- vk\n")
             fprint(f, "\}\n")
-            // vk_view_destroy: free the scratch arrays
-            fprint(f, "def vk_view_destroy(var b : {vs.boost}) \{\n")
+            // vk_view_destroy: free the scratch arrays. A scratch-free view has nothing to tear
+            // down, so its `b` is unused -> `_b` (LINT012-clean) and the body is a bare `pass`.
+            let b_destroy = view_has_scratch(vs) ? "var b" : "_b"
+            fprint(f, "def vk_view_destroy({b_destroy} : {vs.boost}) \{\n")
             var any_scratch = false
             for (bf in vs.fields) {
                 if (bf.kind == FieldKind.arr_handle) {
@@ -656,20 +661,15 @@ def private camel_to_snake(s : string) : string {
 
 def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<OwnerInfo>; views : array<ViewStruct>) : array<CreatorInfo> {
     // index owners by handle name, and the set of emitted view struct (vk) names
-    var owner_of : table<string; int>
-    for (oi, i in owners, range(length(owners))) {
-        owner_of[oi.handle] = i
-    }
+    let owner_of <- {for (oi, i in owners, range(length(owners))); oi.handle => i}
     var view_set : table<string>
     for (vs in views) {
         view_set |> insert(reg.structs[vs.s_index].name)
     }
     var creators : array<CreatorInfo>
     for (c in reg.commands) {
-        continue if (!empty(c.alias))
-        continue if (!key_exists(reg.enabled_commands, c.name))
-        continue if (!empty(c.protect))
-        continue if (!(c.name |> starts_with("vkCreate")) && !(c.name |> starts_with("vkAllocate")))
+        continue if (!empty(c.alias) || !key_exists(reg.enabled_commands, c.name) || !empty(c.protect) ||
+            (!(c.name |> starts_with("vkCreate")) && !(c.name |> starts_with("vkAllocate"))))
         // single out-handle (no len -> not a batch), a create-info struct, leading handle parents
         var out_handle = ""
         var batch = false
@@ -713,7 +713,8 @@ def private param_name_of(field : string) : string {
     return field
 }
 
-def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; creators : array<CreatorInfo>) {
+[unused_argument(reg, em)]
+def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; creators : array<CreatorInfo>; scratch_types : table<string>) {
     fopen("{out_dir}/vulkan_commands.das", "wb") $(f) {
         panic("can't write vulkan_commands.das") if (f == null)
         fprint(f, GEN_HEADER)
@@ -725,8 +726,9 @@ def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : stri
             for (pf in ci.creator_params) {
                 fprint(f, "{param_name_of(pf.field)} : {boost_name(pf.vktype)}; ")
             }
-            fprint(f, "var create_info : {ci.create_info_boost}; var result : VkResult? = null) : {ci.boost} \{\n")
-            fprint(f, "    var vci = vk_view_create_unsafe(create_info)\n")
+            let ci_var = key_exists(scratch_types, ci.create_info_boost) ? "var " : ""
+            fprint(f, "{ci_var}create_info : {ci.create_info_boost}; var result : VkResult? = null) : {ci.boost} \{\n")
+            fprint(f, "    let vci = vk_view_create_unsafe(create_info)\n")
             fprint(f, "    defer() \{ vk_view_destroy(create_info) \}\n")
             fprint(f, "    var h : {ci.handle}\n")
             fprint(f, "    vk_check({ci.command}(")
@@ -811,17 +813,9 @@ def private boost_is_flags(em : EmitModel; tn : string) : bool {
 //! can we declare `var x : <mapped>` and return/pass it by value? scalar / handle /
 //! emitted-struct / plain-enum. Excludes flags (raw uint* pointer), void, foreign, PFN.
 def private mappable_value_type(reg : VkRegistry; em : EmitModel; tn : string) : bool {
-    if (!empty(DAS_SCALAR_MAP?[tn] ?? "")) {
-        return true
-    }
     let bt = reg.base_types?[tn] ?? ""
-    if (!empty(DAS_SCALAR_MAP?[bt] ?? "")) {
-        return true
-    }
-    if (key_exists(em.handle_names, tn) || key_exists(em.struct_emit, tn) || key_exists(em.plain_enums, tn)) {
-        return true
-    }
-    return false
+    return (!empty(DAS_SCALAR_MAP?[tn] ?? "") || !empty(DAS_SCALAR_MAP?[bt] ?? "") ||
+        key_exists(em.handle_names, tn) || key_exists(em.struct_emit, tn) || key_exists(em.plain_enums, tn))
 }
 
 //! the das type for a by-value/out scalar/enum/flags/handle/struct type name
@@ -901,7 +895,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             continue
         }
         // function pointer / fixed-array / multi-ptr -> hard
-        if (key_exists(reg.func_pointers, p.type_name) || length(p.arr_dims) > 0 || p.num_ptrs >= 2) {
+        if (key_exists(reg.func_pointers, p.type_name) || !empty(p.arr_dims) || p.num_ptrs >= 2) {
             plan.emittable = false
             plan.skip = "{c.name}: param {p.name} ({p.type_name} x{p.num_ptrs}) not mappable"
             return <- plan
@@ -1035,13 +1029,11 @@ def public derive_commands(reg : VkRegistry; em : EmitModel; views : array<ViewS
     }
     var plans : array<CmdPlan>
     for (c in reg.commands) {
-        continue if (!empty(c.alias))
-        continue if (!key_exists(reg.enabled_commands, c.name))
-        continue if (!empty(c.protect))
         // creators (vkCreate*/vkAllocate*) and destroyers (vkDestroy*/vkFree*) are
         // handled elsewhere (RAII creators / finalize)
-        continue if (c.name |> starts_with("vkCreate") || c.name |> starts_with("vkAllocate"))
-        continue if (c.name |> starts_with("vkDestroy") || c.name |> starts_with("vkFree"))
+        continue if (!empty(c.alias) || !key_exists(reg.enabled_commands, c.name) || !empty(c.protect) ||
+            c.name |> starts_with("vkCreate") || c.name |> starts_with("vkAllocate") ||
+            c.name |> starts_with("vkDestroy") || c.name |> starts_with("vkFree"))
         var plan <- plan_command(reg, em, c, view_set)
         continue if (key_exists(HAND_WRITTEN_COMMANDS, plan.fn_name))
         if (!plan.emittable) {
@@ -1075,7 +1067,7 @@ def private call_arg(a : CmdArg) : string {
     return "null"   // out_array first-call placeholder is handled specially
 }
 
-def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; plans : array<CmdPlan>) {
+def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; plans : array<CmdPlan>; scratch_types : table<string>) {
     fopen("{out_dir}/vulkan_cmds.das", "wb") $(f) {
         panic("can't write vulkan_cmds.das") if (f == null)
         fprint(f, GEN_HEADER)
@@ -1095,9 +1087,14 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "; ")
                 }
                 first = false
-                // views and arrays need var (vk_view mutates scratch / array_addr needs var)
-                let needs_var = (a.kind == CmdArgKind.in_view || a.kind == CmdArgKind.in_array_scalar ||
-                    a.kind == CmdArgKind.in_array_struct)
+                // in_array_scalar always needs var (array_addr); a view / struct-array needs var only
+                // when its vk_view mutates `b` (scratch fields) -- scratch-free views forward read-only.
+                var needs_var = a.kind == CmdArgKind.in_array_scalar
+                if (a.kind == CmdArgKind.in_view) {
+                    needs_var = key_exists(scratch_types, a.boost_type)
+                } elif (a.kind == CmdArgKind.in_array_struct) {
+                    needs_var = key_exists(scratch_types, a.elem_boost)
+                }
                 fprint(f, "{needs_var ? "var " : ""}{a.pname} : {a.boost_type}")
             }
             if (plan.is_result) {
@@ -1130,7 +1127,6 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 }
             }
             // --- the call(s) ---
-            let need_unsafe = plan.has_out_array
             if (plan.has_out_array) {
                 // two-call enumerate. Both calls return VkResult when is_result: wrap
                 // each in vk_check so OOM / VK_INCOMPLETE surfaces through `result` and
@@ -1217,7 +1213,7 @@ def private emit_scratch_cleanup(f : file; plan : CmdPlan) {
         if (a.kind == CmdArgKind.in_array_handle) {
             fprint(f, "    unsafe {OB} delete vkraw_{a.pname} {CB}\n")
         } elif (a.kind == CmdArgKind.in_array_struct) {
-            fprint(f, "    for (vki in range(length({a.pname}))) {OB} vk_view_destroy({a.pname}[vki]) {CB}\n")
+            fprint(f, "    for (vkv in {a.pname}) {OB} vk_view_destroy(vkv) {CB}\n")
             fprint(f, "    delete vkraw_{a.pname}\n")
         }
     }
@@ -1277,18 +1273,24 @@ def private emit_lint_data(creators : array<CreatorInfo>; plans : array<CmdPlan>
     to_log(LOG_INFO, "boost: vulkan_lint_data with {length(pairs)} wrapped calls\n")
 }
 
-def public emit_boost(reg : VkRegistry; var em : EmitModel; out_dir : string) {
+def public emit_boost(reg : VkRegistry; em : EmitModel; out_dir : string) {
     var skip_log : array<string>
     emit_ctors(reg, em, out_dir)
     let owners <- derive_owners(reg, em)
     emit_handles_boost(reg, em, out_dir, owners)
     let views <- derive_views(reg, em, skip_log)
     emit_structs_boost(reg, em, out_dir, views)
+    // boost type names whose vk_view_create_unsafe/destroy mutate `b` (scratch fields). Callers
+    // that merely forward such a view keep `var`; forwarders of scratch-free views drop it (LINT014).
+    var scratch_types : table<string>
+    for (vs in views) {
+        scratch_types |> insert(vs.boost) if (view_has_scratch(vs))
+    }
     let creators <- derive_creators(reg, em, owners, views)
-    emit_commands_boost(reg, em, out_dir, creators)
+    emit_commands_boost(reg, em, out_dir, creators, scratch_types)
     var cmd_skip : array<string>
     let plans <- derive_commands(reg, em, views, cmd_skip)
-    emit_plain_commands_boost(reg, em, out_dir, plans)
+    emit_plain_commands_boost(reg, em, out_dir, plans, scratch_types)
     emit_lint_data(creators, plans, out_dir)
     to_log(LOG_INFO, "boost: {length(skip_log)} structs + {length(cmd_skip)} commands skipped (unmappable)\n")
 }

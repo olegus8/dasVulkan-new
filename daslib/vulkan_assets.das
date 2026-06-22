@@ -70,23 +70,18 @@ def private load_pixels(path : string; hdr : bool; var w, h : int&; var bytes : 
 def private mip_barrier(cmd : CommandBuffer; image : vulkan_handles::Image; base, count : uint;
                         old_layout, new_layout : VkImageLayout; src_access, dst_access : VkAccessFlags;
                         src_stage, dst_stage : VkPipelineStageFlags) {
-    var barrier : ImageMemoryBarrier
-    barrier.srcAccessMask = src_access
-    barrier.dstAccessMask = dst_access
-    barrier.oldLayout = old_layout
-    barrier.newLayout = new_layout
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.image = weak_copy(image)
+    var barrier = ImageMemoryBarrier(srcAccessMask = src_access, dstAccessMask = dst_access,
+        oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, image = weak_copy(image))
     barrier.subresourceRange.aspectMask.color = true
     barrier.subresourceRange.baseMipLevel = base
     barrier.subresourceRange.levelCount = count
     barrier.subresourceRange.layerCount = 1u
-    var no_mem : array<MemoryBarrier>
-    var no_buf : array<BufferMemoryBarrier>
+    let no_mem : array<MemoryBarrier>
+    let no_buf : array<BufferMemoryBarrier>
     var imgs : array<ImageMemoryBarrier>
     imgs |> emplace(barrier)
-    var no_dep : VkDependencyFlags
+    let no_dep : VkDependencyFlags
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
@@ -111,7 +106,7 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai = MemoryAllocateInfo(allocationSize = ireq.size,
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
         memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope memory <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(image), boost_value_to_vk(memory), 0ul), null)

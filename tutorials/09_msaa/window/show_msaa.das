@@ -82,7 +82,7 @@ def main {
 
         // M-key edge-detect cycles the toggle. GLFW returns the current state every poll, so we
         // remember the prior state and only fire on the down-edge.
-        let m_down = glfwGetKey(window, int(GLFW_KEY_M)) == GLFW_PRESS
+        let m_down = glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS
         if (m_down && !m_was_down) {
             toggle = next_msaa_toggle(toggle)
         }

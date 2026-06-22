@@ -439,7 +439,7 @@ def public create_shader_module(device : Device; var code : array<uint>) : Shade
 }
 
 def public create_pipeline_layout(device : Device) : PipelineLayout {
-    var ci = VkPipelineLayoutCreateInfo()
+    let ci = VkPipelineLayoutCreateInfo()
     var h : VkPipelineLayout
     vk_check(vkCreatePipelineLayout(boost_value_to_vk(device), ci, null, h), null)
     var b = vk_value_to_boost(h)
@@ -1013,22 +1013,17 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
 //! for storage-image / transfer layout moves; used by compute_to_storage_image below.
 def public transition_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
                             src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
-    var barrier : ImageMemoryBarrier
-    barrier.srcAccessMask = src_access
-    barrier.dstAccessMask = dst_access
-    barrier.oldLayout = old_layout
-    barrier.newLayout = new_layout
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.image = weak_copy(image)
+    var barrier = ImageMemoryBarrier(srcAccessMask = src_access, dstAccessMask = dst_access,
+        oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, image = weak_copy(image))
     barrier.subresourceRange.aspectMask.color = true
     barrier.subresourceRange.levelCount = 1u
     barrier.subresourceRange.layerCount = 1u
-    var no_mem : array<MemoryBarrier>
-    var no_buf : array<BufferMemoryBarrier>
+    let no_mem : array<MemoryBarrier>
+    let no_buf : array<BufferMemoryBarrier>
     var imgs : array<ImageMemoryBarrier>
     imgs |> emplace(barrier)
-    var no_dep : VkDependencyFlags
+    let no_dep : VkDependencyFlags
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
@@ -1051,22 +1046,17 @@ def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout
 def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
                                    src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags;
                                    aspect : VkImageAspectFlags) {
-    var barrier : ImageMemoryBarrier
-    barrier.srcAccessMask = src_access
-    barrier.dstAccessMask = dst_access
-    barrier.oldLayout = old_layout
-    barrier.newLayout = new_layout
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    barrier.image = weak_copy(image)
+    var barrier = ImageMemoryBarrier(srcAccessMask = src_access, dstAccessMask = dst_access,
+        oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, image = weak_copy(image))
     barrier.subresourceRange.aspectMask = aspect
     barrier.subresourceRange.levelCount = 1u
     barrier.subresourceRange.layerCount = 1u
-    var no_mem : array<MemoryBarrier>
-    var no_buf : array<BufferMemoryBarrier>
+    let no_mem : array<MemoryBarrier>
+    let no_buf : array<BufferMemoryBarrier>
     var imgs : array<ImageMemoryBarrier>
     imgs |> emplace(barrier)
-    var no_dep : VkDependencyFlags
+    let no_dep : VkDependencyFlags
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
@@ -1098,33 +1088,24 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     let fmt = VkFormat.R8G8B8A8_UNORM
 
     // the storage image (STORAGE for the compute write + TRANSFER_SRC for the readback), device-local + view
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = fmt
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt, mipLevels = 1u, arrayLayers = 1u,
+        tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(w)
     ici.extent.height = uint(h)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.storage = true
     ici.usage.transfer_src = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope image <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope imem <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(image), boost_value_to_vk(imem), 0ul), null)
-    var vci : ImageViewCreateInfo
-    vci.image = weak_copy(image)
-    vci.viewType = VkImageViewType._2D
-    vci.format = fmt
+    var vci = ImageViewCreateInfo(image = weak_copy(image), viewType = VkImageViewType._2D, format = fmt)
     vci.subresourceRange.aspectMask.color = true
     vci.subresourceRange.levelCount = 1u
     vci.subresourceRange.layerCount = 1u
@@ -1137,46 +1118,35 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     var inscope srgb_image : Image
     var inscope srgb_mem : DeviceMemory
     if (srgb_encode) {
-        var sici : ImageCreateInfo
-        sici.imageType = VkImageType._2D
-        sici.format = srgb_fmt
+        var sici = ImageCreateInfo(imageType = VkImageType._2D, format = srgb_fmt, mipLevels = 1u, arrayLayers = 1u,
+            tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
         sici.extent.width = uint(w)
         sici.extent.height = uint(h)
         sici.extent.depth = 1u
-        sici.mipLevels = 1u
-        sici.arrayLayers = 1u
         sici.samples._1 = true
-        sici.tiling = VkImageTiling.OPTIMAL
         sici.usage.transfer_dst = true
         sici.usage.transfer_src = true
-        sici.initialLayout = VkImageLayout.UNDEFINED
         srgb_image <- create_image(device, sici)
         var sreq : VkMemoryRequirements
         vkGetImageMemoryRequirements(dev, boost_value_to_vk(srgb_image), sreq)
         var swant : VkMemoryPropertyFlags
         swant.device_local = true
-        var smai : MemoryAllocateInfo
-        smai.allocationSize = sreq.size
-        smai.memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant)
+        let smai = MemoryAllocateInfo(allocationSize = sreq.size,
+            memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant))
         srgb_mem <- allocate_memory(device, smai)
         vk_check(vkBindImageMemory(dev, boost_value_to_vk(srgb_image), boost_value_to_vk(srgb_mem), 0ul), null)
     }
 
     // descriptor set layout + pool: binding 0 = STORAGE_IMAGE, compute
     var dslci : DescriptorSetLayoutCreateInfo
-    var b0 : DescriptorSetLayoutBinding
-    b0.binding = 0u
-    b0.descriptorType = VkDescriptorType.STORAGE_IMAGE
-    b0.descriptorCount = 1u
+    var b0 = DescriptorSetLayoutBinding(binding = 0u, descriptorType = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
     b0.stageFlags.compute = true
     dslci.pBindings |> emplace(b0)
     var inscope set_layout <- create_descriptor_set_layout(device, dslci)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var psize : DescriptorPoolSize
-    psize.type_ = VkDescriptorType.STORAGE_IMAGE
-    psize.descriptorCount = 1u
+    let psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
     dpci.pPoolSizes |> push(psize)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -1191,18 +1161,13 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     }
 
     // bind the storage image view (layout GENERAL, no sampler)
-    var write : WriteDescriptorSet
-    write.dstSet = vk_value_to_boost(raw_set)
-    write.dstBinding = 0u
-    write.descriptorType = VkDescriptorType.STORAGE_IMAGE
-    write.descriptorCount = 1u
-    var iinfo : DescriptorImageInfo
-    iinfo.imageView = weak_copy(view)
-    iinfo.imageLayout = VkImageLayout.GENERAL
+    var write = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
+    let iinfo = DescriptorImageInfo(imageView = weak_copy(view), imageLayout = VkImageLayout.GENERAL)
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // compute pipeline from the emitted blob
@@ -1218,7 +1183,7 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     var inscope pool <- create_command_pool(device, poolci)
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var shader_write : VkAccessFlags
         shader_write.shader_write = true
         var to_read : VkAccessFlags
@@ -1309,44 +1274,31 @@ def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; widt
 def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; width, height : int;
                                   format : VkFormat; samples : VkSampleCountFlags;
                                   extra_usage : VkImageUsageFlags) : OffscreenTarget {
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = format
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = format, mipLevels = 1u, arrayLayers = 1u,
+        samples = samples, tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(width)
     ici.extent.height = uint(height)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
-    ici.samples = samples
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage = extra_usage
     ici.usage.color_attachment = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope image <- create_image(device, ici)
 
     var req : VkMemoryRequirements
     vkGetImageMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(image), req)
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindImageMemory(boost_value_to_vk(device), boost_value_to_vk(image), boost_value_to_vk(memory), 0ul), null)
 
-    var vci : ImageViewCreateInfo
-    vci.image = weak_copy(image)
-    vci.viewType = VkImageViewType._2D
-    vci.format = format
+    var vci = ImageViewCreateInfo(image = weak_copy(image), viewType = VkImageViewType._2D, format = format)
     vci.subresourceRange.aspectMask.color = true
     vci.subresourceRange.levelCount = 1u
     vci.subresourceRange.layerCount = 1u
     var inscope view <- create_image_view(device, vci)
 
-    var t : OffscreenTarget
-    t.image <- image
-    t.memory <- memory
-    t.view <- view
+    var t = OffscreenTarget(image <- image, memory <- memory, view <- view)
     return <- t
 }
 
@@ -1368,7 +1320,7 @@ def public finalize(var d : OffscreenDepth) {
 
 def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
                                  format : VkFormat = VkFormat.D32_SFLOAT) : OffscreenDepth {
-    var extra : VkImageUsageFlags  // default: empty
+    let extra : VkImageUsageFlags  // default: empty
     return <- build_offscreen_depth(device, phys, width, height, format, extra)
 }
 
@@ -1390,35 +1342,25 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
 def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
                                  format : VkFormat; extra_usage : VkImageUsageFlags;
                                  samples : VkSampleCountFlags) : OffscreenDepth {
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = format
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = format, mipLevels = 1u, arrayLayers = 1u,
+        samples = samples, tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(width)
     ici.extent.height = uint(height)
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
-    ici.samples = samples
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage = extra_usage
     ici.usage.depth_stencil_attachment = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var inscope image <- create_image(device, ici)
 
     var req : VkMemoryRequirements
     vkGetImageMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(image), req)
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindImageMemory(boost_value_to_vk(device), boost_value_to_vk(image), boost_value_to_vk(memory), 0ul), null)
 
-    var vci : ImageViewCreateInfo
-    vci.image = weak_copy(image)
-    vci.viewType = VkImageViewType._2D
-    vci.format = format
+    var vci = ImageViewCreateInfo(image = weak_copy(image), viewType = VkImageViewType._2D, format = format)
     vci.subresourceRange.aspectMask.depth = true
     // include the stencil aspect for combined depth+stencil formats -- omitting it on those leaves
     // the view invalid (VUID-VkImageViewCreateInfo-subresourceRange-01018).
@@ -1431,10 +1373,7 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
     vci.subresourceRange.layerCount = 1u
     var inscope view <- create_image_view(device, vci)
 
-    var d : OffscreenDepth
-    d.image <- image
-    d.memory <- memory
-    d.view <- view
+    var d = OffscreenDepth(image <- image, memory <- memory, view <- view)
     return <- d
 }
 
@@ -1460,15 +1399,11 @@ def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : u
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
-    var hb : HostBuffer
-    hb.buffer <- buffer
-    hb.memory <- memory
-    hb.size = size
+    var hb = HostBuffer(buffer <- buffer, memory <- memory, size = size)
     return <- hb
 }
 
@@ -1477,24 +1412,18 @@ def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : u
 //! this overload is the path tutorials reach for when they want a host-visible buffer with
 //! arbitrary usage. Memory is still HOST_VISIBLE | HOST_COHERENT.
 def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : uint64; usage : VkBufferUsageFlags) : HostBuffer {
-    var bci : BufferCreateInfo
-    bci.size = size
-    bci.usage = usage
+    var bci = BufferCreateInfo(size = size, usage = usage)
     var inscope buffer <- create_buffer(device, bci)
     var req : VkMemoryRequirements
     vkGetBufferMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(buffer), req)
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
-    var hb : HostBuffer
-    hb.buffer <- buffer
-    hb.memory <- memory
-    hb.size = size
+    var hb = HostBuffer(buffer <- buffer, memory <- memory, size = size)
     return <- hb
 }
 
@@ -1605,11 +1534,8 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
                             var color_attachments : array<RenderingAttachmentInfo>;
                             var depth_attachment : RenderingAttachmentInfo;
                             blk : block<() : void>) {
-    var info : RenderingInfo
-    info.renderArea = area
-    info.layerCount = layer_count
-    info.viewMask = 0u
-    info.pColorAttachments <- color_attachments
+    var info = RenderingInfo(renderArea = area, layerCount = layer_count, viewMask = 0u,
+        pColorAttachments <- color_attachments)
     unsafe {
         info.pDepthAttachment = addr(depth_attachment)
     }
@@ -1623,11 +1549,8 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
 def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : uint;
                             var color_attachments : array<RenderingAttachmentInfo>;
                             blk : block<() : void>) {
-    var info : RenderingInfo
-    info.renderArea = area
-    info.layerCount = layer_count
-    info.viewMask = 0u
-    info.pColorAttachments <- color_attachments
+    var info = RenderingInfo(renderArea = area, layerCount = layer_count, viewMask = 0u,
+        pColorAttachments <- color_attachments)
     cmd_begin_rendering(cmd, info)
     invoke(blk)
     cmd_end_rendering(cmd)
@@ -1643,7 +1566,7 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
 //! tutorials are safe; if you allocate non-coherent memory yourself, wrap the writes accordingly.
 def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : block<(ptr : void?) : void>) {
     var mapped : void? = null
-    var flags : VkMemoryMapFlags
+    let flags : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, VK_WHOLE_SIZE, flags, addr(mapped)), null)
     }
@@ -1665,7 +1588,7 @@ def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
 //! map a device-memory range, expose it as an array<uint8>, unmap after the block
 def public map_memory_to_array(device : Device; memory : DeviceMemory; size : uint64; blk : block<(data : array<uint8>) : void>) {
     var mapped : void? = null
-    var flags : VkMemoryMapFlags
+    let flags : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, addr(mapped)), null)
     }
@@ -1732,16 +1655,10 @@ def public clear_depth(depth : float = 1.0f; stencil : uint = 0u) : VkClearValue
 //! border so off-shadow-map fragments default to lit, the convention every shadow-map tutorial
 //! relies on. Consumed by `sampler2DShadow` + `textureCompare(...)` in the shader.
 def public create_sampler_shadow(device : Device; compare_op : VkCompareOp = VkCompareOp.LESS) : Sampler {
-    var sci : SamplerCreateInfo
-    sci.magFilter = VkFilter.LINEAR
-    sci.minFilter = VkFilter.LINEAR
-    sci.mipmapMode = VkSamplerMipmapMode.LINEAR
-    sci.addressModeU = VkSamplerAddressMode.CLAMP_TO_BORDER
-    sci.addressModeV = VkSamplerAddressMode.CLAMP_TO_BORDER
-    sci.addressModeW = VkSamplerAddressMode.CLAMP_TO_BORDER
-    sci.borderColor = VkBorderColor.FLOAT_OPAQUE_WHITE
-    sci.compareEnable = VK_TRUE
-    sci.compareOp = compare_op
+    let sci = SamplerCreateInfo(magFilter = VkFilter.LINEAR, minFilter = VkFilter.LINEAR,
+        mipmapMode = VkSamplerMipmapMode.LINEAR, addressModeU = VkSamplerAddressMode.CLAMP_TO_BORDER,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_BORDER, addressModeW = VkSamplerAddressMode.CLAMP_TO_BORDER,
+        borderColor = VkBorderColor.FLOAT_OPAQUE_WHITE, compareEnable = VK_TRUE, compareOp = compare_op)
     return <- create_sampler(device, sci)
 }
 

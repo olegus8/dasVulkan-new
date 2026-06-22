@@ -87,7 +87,7 @@ def public build_sdf_renderer() : SdfRenderer {
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai = MemoryAllocateInfo(allocationSize = ireq.size,
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
         memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope imem <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(image), boost_value_to_vk(imem), 0ul), null)
@@ -114,7 +114,7 @@ def public build_sdf_renderer() : SdfRenderer {
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(srgb_image), sreq)
     var swant : VkMemoryPropertyFlags
     swant.device_local = true
-    var smai = MemoryAllocateInfo(allocationSize = sreq.size,
+    let smai = MemoryAllocateInfo(allocationSize = sreq.size,
         memoryTypeIndex = find_memory_type(phys, sreq.memoryTypeBits, swant))
     var inscope smem <- allocate_memory(device, smai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(srgb_image), boost_value_to_vk(smem), 0ul), null)
@@ -162,7 +162,7 @@ def public build_sdf_renderer() : SdfRenderer {
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // compute pipeline + a 4-byte (one float) compute push constant for time

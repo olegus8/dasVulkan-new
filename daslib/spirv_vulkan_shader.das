@@ -117,7 +117,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     // them all into the same allocation would corrupt the upload. Fail-closed at >1 until the
     // macro grows per-binding bind functions.
     var ubo_globals : array<Variable?>
-    collect_dependencies(fnMain) $(vfun, vvar) {
+    collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
             // Only struct-typed @uniform globals with at least one field (the std140 interface-block
             // case). Sampler / image markers (sampler2D, sampler2DShadow, image2D, subpassInput …)
@@ -229,7 +229,7 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
     // emitting two pushes at offset=0 would overlap and corrupt. Fail-closed at >1 until per-range
     // pushing (offset + size per block) is wired up.
     var pc_globals : array<Variable?>
-    collect_dependencies(fnMain) $(vfun, vvar) {
+    collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
             // Same shape filter as the @uniform walk above (struct-typed with at least one field).
             // The empty() check is defence-in-depth — sampler / image markers can't be @push_constant

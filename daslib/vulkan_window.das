@@ -92,9 +92,9 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
     var caps : VkSurfaceCapabilitiesKHR
     vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys, boost_value_to_vk(surface), caps), null)
 
-    var sc : Swapchain
-    sc.color_space = VkColorSpaceKHR.SRGB_NONLINEAR_KHR
-    sc.format = choose_surface_format(phys, surface, sc.color_space)
+    var color_space = VkColorSpaceKHR.SRGB_NONLINEAR_KHR
+    let format = choose_surface_format(phys, surface, color_space)
+    var sc = Swapchain(color_space = color_space, format = format)
 
     var extent : VkExtent2D
     if (caps.currentExtent.width != 0xFFFFFFFFu) {
@@ -111,13 +111,8 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
         image_count = caps.maxImageCount
     }
 
-    var ci : SwapchainCreateInfoKHR
-    ci.surface = weak_copy(surface)
-    ci.minImageCount = image_count
-    ci.imageFormat = sc.format
-    ci.imageColorSpace = sc.color_space
-    ci.imageExtent = extent
-    ci.imageArrayLayers = 1u
+    var ci = SwapchainCreateInfoKHR(surface = weak_copy(surface), minImageCount = image_count,
+        imageFormat = sc.format, imageColorSpace = sc.color_space, imageExtent = extent, imageArrayLayers = 1u)
     ci.imageUsage.color_attachment = true
     ci.imageUsage.transfer_dst = true   // the blit-present path (present_frame + vkCmdBlitImage) writes the swapchain image as a transfer dst
     ci.imageSharingMode = VkSharingMode.EXCLUSIVE
@@ -138,10 +133,7 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
     // one image view per image
     sc.views |> reserve(length(sc.images))
     for (img in sc.images) {
-        var vci : ImageViewCreateInfo
-        vci.image = vk_value_to_boost(img)
-        vci.viewType = VkImageViewType._2D
-        vci.format = sc.format
+        var vci = ImageViewCreateInfo(image = vk_value_to_boost(img), viewType = VkImageViewType._2D, format = sc.format)
         vci.subresourceRange.aspectMask.color = true
         vci.subresourceRange.levelCount = 1u
         vci.subresourceRange.layerCount = 1u
@@ -165,12 +157,8 @@ def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhys
 def public build_swapchain_framebuffers(device : Device; var sc : Swapchain; render_pass : RenderPass) {
     sc.framebuffers |> reserve(length(sc.views))
     for (i in range(length(sc.views))) {
-        var fbci : FramebufferCreateInfo
-        fbci.renderPass = weak_copy(render_pass)
-        fbci.pAttachments <- [weak_copy(sc.views[i])]
-        fbci.width = uint(sc.width)
-        fbci.height = uint(sc.height)
-        fbci.layers = 1u
+        var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
+            pAttachments <- [weak_copy(sc.views[i])], width = uint(sc.width), height = uint(sc.height), layers = 1u)
         sc.framebuffers |> emplace(create_framebuffer(device, fbci))
     }
 }
@@ -188,9 +176,8 @@ def public finalize(var f : FrameSync) {
 }
 
 def public create_frame_sync(device : Device) : FrameSync {
-    var f : FrameSync
-    f.image_available <- create_semaphore(device, SemaphoreCreateInfo())
-    f.render_finished <- create_semaphore(device, SemaphoreCreateInfo())
+    var f = FrameSync(image_available <- create_semaphore(device, SemaphoreCreateInfo()),
+        render_finished <- create_semaphore(device, SemaphoreCreateInfo()))
     return <- f
 }
 
@@ -198,10 +185,7 @@ def public create_frame_sync(device : Device) : FrameSync {
 
 //! set a full-extent viewport + scissor on a pipeline built with dynamic viewport state
 def private set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
-    var vp : Viewport
-    vp.width = float(width)
-    vp.height = float(height)
-    vp.maxDepth = 1.0f
+    var vp = Viewport(width = float(width), height = float(height), maxDepth = 1.0f)
     var vps : array<Viewport>
     vps |> push(vp)
     cmd_set_viewport(cmd, 0u, vps)

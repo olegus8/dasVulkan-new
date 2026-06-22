@@ -119,6 +119,21 @@ jobs:
           sccache --show-stats
           ls -la "${GITHUB_WORKSPACE}/dasVulkan"/*.shared_module
 
+      - name: "Lint: every committed .das must be clean (paranoid + perf + style)"
+        # The unified linter (daslang's utils/lint/main.das) runs all three passes over the whole
+        # tree, loading the dasVulkan module so the boost/tutorial/test files actually compile.
+        # Exit 0 = clean, 2 = warnings, 1 = compile error -- `set -e` fails the job on any non-zero.
+        # window/ (needs glfw) and recording/ (needs audio) files SKIP here because this CI daslang
+        # is built without those modules; the local pre-push hook (utils/git-hooks/pre-push) covers
+        # them on a full dev build. This is platform-independent, so it runs on the Linux lane only.
+        working-directory: ${{ github.workspace }}/dasVulkan
+        run: |
+          set -eux
+          "${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
+            -load_module "${GITHUB_WORKSPACE}/dasVulkan" \
+            "${GITHUB_WORKSPACE}/daslang-src/utils/lint/main.das" -- \
+            "${GITHUB_WORKSPACE}/dasVulkan" -q -j 0
+
       - name: "Verify lavapipe is visible to the loader"
         # VK_DRIVER_FILES comes from the discovery step (GITHUB_ENV); if it was not
         # found this still runs default discovery. No `|| true` -- a missing driver

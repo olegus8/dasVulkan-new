@@ -27,7 +27,7 @@ def test_texelfetch_copy(t : T?) {
         }
     }
     var pixels <- texelfetch_copy_rgba8(fetch_copy_spv, src, w, h)
-    assert_pixels_exact(t, pixels, w, h, "texelFetch copy") <| $(x, y : int) {
+    assert_pixels_exact(t, pixels, w, h, "texelFetch copy") $(x, y : int) {
         return int4(x, y, 0, 255)
     }
     delete pixels

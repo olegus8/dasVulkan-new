@@ -3,7 +3,6 @@ options indenting = 4
 
 require dastest/testing_boost public
 require scene_helpers
-require math
 
 [test]
 def test_triangle(t : T?) {

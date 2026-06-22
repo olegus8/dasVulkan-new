@@ -11,8 +11,8 @@ require vulkan/vulkan_structs public
 require vulkan/vulkan_runtime public
 require daslib/defer
 
-def allocate_memory(device : Device; var create_info : MemoryAllocateInfo; var result : VkResult? = null) : DeviceMemory {
-    var vci = vk_view_create_unsafe(create_info)
+def allocate_memory(device : Device; create_info : MemoryAllocateInfo; var result : VkResult? = null) : DeviceMemory {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDeviceMemory
     vk_check(vkAllocateMemory(boost_value_to_vk(device), vci, null, h), result)
@@ -22,8 +22,8 @@ def allocate_memory(device : Device; var create_info : MemoryAllocateInfo; var r
     return <- b
 }
 
-def create_fence(device : Device; var create_info : FenceCreateInfo; var result : VkResult? = null) : Fence {
-    var vci = vk_view_create_unsafe(create_info)
+def create_fence(device : Device; create_info : FenceCreateInfo; var result : VkResult? = null) : Fence {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkFence
     vk_check(vkCreateFence(boost_value_to_vk(device), vci, null, h), result)
@@ -33,8 +33,8 @@ def create_fence(device : Device; var create_info : FenceCreateInfo; var result 
     return <- b
 }
 
-def create_semaphore(device : Device; var create_info : SemaphoreCreateInfo; var result : VkResult? = null) : Semaphore {
-    var vci = vk_view_create_unsafe(create_info)
+def create_semaphore(device : Device; create_info : SemaphoreCreateInfo; var result : VkResult? = null) : Semaphore {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSemaphore
     vk_check(vkCreateSemaphore(boost_value_to_vk(device), vci, null, h), result)
@@ -44,8 +44,8 @@ def create_semaphore(device : Device; var create_info : SemaphoreCreateInfo; var
     return <- b
 }
 
-def create_event(device : Device; var create_info : EventCreateInfo; var result : VkResult? = null) : Event {
-    var vci = vk_view_create_unsafe(create_info)
+def create_event(device : Device; create_info : EventCreateInfo; var result : VkResult? = null) : Event {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkEvent
     vk_check(vkCreateEvent(boost_value_to_vk(device), vci, null, h), result)
@@ -55,8 +55,8 @@ def create_event(device : Device; var create_info : EventCreateInfo; var result 
     return <- b
 }
 
-def create_query_pool(device : Device; var create_info : QueryPoolCreateInfo; var result : VkResult? = null) : QueryPool {
-    var vci = vk_view_create_unsafe(create_info)
+def create_query_pool(device : Device; create_info : QueryPoolCreateInfo; var result : VkResult? = null) : QueryPool {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkQueryPool
     vk_check(vkCreateQueryPool(boost_value_to_vk(device), vci, null, h), result)
@@ -67,7 +67,7 @@ def create_query_pool(device : Device; var create_info : QueryPoolCreateInfo; va
 }
 
 def create_buffer(device : Device; var create_info : BufferCreateInfo; var result : VkResult? = null) : Buffer {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkBuffer
     vk_check(vkCreateBuffer(boost_value_to_vk(device), vci, null, h), result)
@@ -77,8 +77,8 @@ def create_buffer(device : Device; var create_info : BufferCreateInfo; var resul
     return <- b
 }
 
-def create_buffer_view(device : Device; var create_info : BufferViewCreateInfo; var result : VkResult? = null) : BufferView {
-    var vci = vk_view_create_unsafe(create_info)
+def create_buffer_view(device : Device; create_info : BufferViewCreateInfo; var result : VkResult? = null) : BufferView {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkBufferView
     vk_check(vkCreateBufferView(boost_value_to_vk(device), vci, null, h), result)
@@ -89,7 +89,7 @@ def create_buffer_view(device : Device; var create_info : BufferViewCreateInfo; 
 }
 
 def create_image(device : Device; var create_info : ImageCreateInfo; var result : VkResult? = null) : Image {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkImage
     vk_check(vkCreateImage(boost_value_to_vk(device), vci, null, h), result)
@@ -99,8 +99,8 @@ def create_image(device : Device; var create_info : ImageCreateInfo; var result 
     return <- b
 }
 
-def create_image_view(device : Device; var create_info : ImageViewCreateInfo; var result : VkResult? = null) : ImageView {
-    var vci = vk_view_create_unsafe(create_info)
+def create_image_view(device : Device; create_info : ImageViewCreateInfo; var result : VkResult? = null) : ImageView {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkImageView
     vk_check(vkCreateImageView(boost_value_to_vk(device), vci, null, h), result)
@@ -111,7 +111,7 @@ def create_image_view(device : Device; var create_info : ImageViewCreateInfo; va
 }
 
 def create_pipeline_layout(device : Device; var create_info : PipelineLayoutCreateInfo; var result : VkResult? = null) : PipelineLayout {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkPipelineLayout
     vk_check(vkCreatePipelineLayout(boost_value_to_vk(device), vci, null, h), result)
@@ -121,8 +121,8 @@ def create_pipeline_layout(device : Device; var create_info : PipelineLayoutCrea
     return <- b
 }
 
-def create_sampler(device : Device; var create_info : SamplerCreateInfo; var result : VkResult? = null) : Sampler {
-    var vci = vk_view_create_unsafe(create_info)
+def create_sampler(device : Device; create_info : SamplerCreateInfo; var result : VkResult? = null) : Sampler {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSampler
     vk_check(vkCreateSampler(boost_value_to_vk(device), vci, null, h), result)
@@ -133,7 +133,7 @@ def create_sampler(device : Device; var create_info : SamplerCreateInfo; var res
 }
 
 def create_descriptor_set_layout(device : Device; var create_info : DescriptorSetLayoutCreateInfo; var result : VkResult? = null) : DescriptorSetLayout {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDescriptorSetLayout
     vk_check(vkCreateDescriptorSetLayout(boost_value_to_vk(device), vci, null, h), result)
@@ -144,7 +144,7 @@ def create_descriptor_set_layout(device : Device; var create_info : DescriptorSe
 }
 
 def create_descriptor_pool(device : Device; var create_info : DescriptorPoolCreateInfo; var result : VkResult? = null) : DescriptorPool {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDescriptorPool
     vk_check(vkCreateDescriptorPool(boost_value_to_vk(device), vci, null, h), result)
@@ -155,7 +155,7 @@ def create_descriptor_pool(device : Device; var create_info : DescriptorPoolCrea
 }
 
 def create_framebuffer(device : Device; var create_info : FramebufferCreateInfo; var result : VkResult? = null) : Framebuffer {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkFramebuffer
     vk_check(vkCreateFramebuffer(boost_value_to_vk(device), vci, null, h), result)
@@ -166,7 +166,7 @@ def create_framebuffer(device : Device; var create_info : FramebufferCreateInfo;
 }
 
 def create_render_pass(device : Device; var create_info : RenderPassCreateInfo; var result : VkResult? = null) : RenderPass {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkRenderPass
     vk_check(vkCreateRenderPass(boost_value_to_vk(device), vci, null, h), result)
@@ -176,8 +176,8 @@ def create_render_pass(device : Device; var create_info : RenderPassCreateInfo; 
     return <- b
 }
 
-def create_command_pool(device : Device; var create_info : CommandPoolCreateInfo; var result : VkResult? = null) : CommandPool {
-    var vci = vk_view_create_unsafe(create_info)
+def create_command_pool(device : Device; create_info : CommandPoolCreateInfo; var result : VkResult? = null) : CommandPool {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkCommandPool
     vk_check(vkCreateCommandPool(boost_value_to_vk(device), vci, null, h), result)
@@ -187,8 +187,8 @@ def create_command_pool(device : Device; var create_info : CommandPoolCreateInfo
     return <- b
 }
 
-def create_display_mode_k_h_r(physicalDevice : PhysicalDevice; display : DisplayKHR; var create_info : DisplayModeCreateInfoKHR; var result : VkResult? = null) : DisplayModeKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_display_mode_k_h_r(physicalDevice : PhysicalDevice; display : DisplayKHR; create_info : DisplayModeCreateInfoKHR; var result : VkResult? = null) : DisplayModeKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDisplayModeKHR
     vk_check(vkCreateDisplayModeKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vci, null, h), result)
@@ -197,8 +197,8 @@ def create_display_mode_k_h_r(physicalDevice : PhysicalDevice; display : Display
     return <- b
 }
 
-def create_display_plane_surface_k_h_r(instance : Instance; var create_info : DisplaySurfaceCreateInfoKHR; var result : VkResult? = null) : SurfaceKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_display_plane_surface_k_h_r(instance : Instance; create_info : DisplaySurfaceCreateInfoKHR; var result : VkResult? = null) : SurfaceKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSurfaceKHR
     vk_check(vkCreateDisplayPlaneSurfaceKHR(boost_value_to_vk(instance), vci, null, h), result)
@@ -209,7 +209,7 @@ def create_display_plane_surface_k_h_r(instance : Instance; var create_info : Di
 }
 
 def create_swapchain_k_h_r(device : Device; var create_info : SwapchainCreateInfoKHR; var result : VkResult? = null) : SwapchainKHR {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSwapchainKHR
     vk_check(vkCreateSwapchainKHR(boost_value_to_vk(device), vci, null, h), result)
@@ -220,7 +220,7 @@ def create_swapchain_k_h_r(device : Device; var create_info : SwapchainCreateInf
 }
 
 def create_indirect_commands_layout_e_x_t(device : Device; var create_info : IndirectCommandsLayoutCreateInfoEXT; var result : VkResult? = null) : IndirectCommandsLayoutEXT {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkIndirectCommandsLayoutEXT
     vk_check(vkCreateIndirectCommandsLayoutEXT(boost_value_to_vk(device), vci, null, h), result)
@@ -230,8 +230,8 @@ def create_indirect_commands_layout_e_x_t(device : Device; var create_info : Ind
     return <- b
 }
 
-def create_indirect_execution_set_e_x_t(device : Device; var create_info : IndirectExecutionSetCreateInfoEXT; var result : VkResult? = null) : IndirectExecutionSetEXT {
-    var vci = vk_view_create_unsafe(create_info)
+def create_indirect_execution_set_e_x_t(device : Device; create_info : IndirectExecutionSetCreateInfoEXT; var result : VkResult? = null) : IndirectExecutionSetEXT {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkIndirectExecutionSetEXT
     vk_check(vkCreateIndirectExecutionSetEXT(boost_value_to_vk(device), vci, null, h), result)
@@ -242,7 +242,7 @@ def create_indirect_execution_set_e_x_t(device : Device; var create_info : Indir
 }
 
 def create_descriptor_update_template(device : Device; var create_info : DescriptorUpdateTemplateCreateInfo; var result : VkResult? = null) : DescriptorUpdateTemplate {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDescriptorUpdateTemplate
     vk_check(vkCreateDescriptorUpdateTemplate(boost_value_to_vk(device), vci, null, h), result)
@@ -252,8 +252,8 @@ def create_descriptor_update_template(device : Device; var create_info : Descrip
     return <- b
 }
 
-def create_sampler_ycbcr_conversion(device : Device; var create_info : SamplerYcbcrConversionCreateInfo; var result : VkResult? = null) : SamplerYcbcrConversion {
-    var vci = vk_view_create_unsafe(create_info)
+def create_sampler_ycbcr_conversion(device : Device; create_info : SamplerYcbcrConversionCreateInfo; var result : VkResult? = null) : SamplerYcbcrConversion {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSamplerYcbcrConversion
     vk_check(vkCreateSamplerYcbcrConversion(boost_value_to_vk(device), vci, null, h), result)
@@ -264,7 +264,7 @@ def create_sampler_ycbcr_conversion(device : Device; var create_info : SamplerYc
 }
 
 def create_render_pass2(device : Device; var create_info : RenderPassCreateInfo2; var result : VkResult? = null) : RenderPass {
-    var vci = vk_view_create_unsafe(create_info)
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkRenderPass
     vk_check(vkCreateRenderPass2(boost_value_to_vk(device), vci, null, h), result)
@@ -274,8 +274,8 @@ def create_render_pass2(device : Device; var create_info : RenderPassCreateInfo2
     return <- b
 }
 
-def create_headless_surface_e_x_t(instance : Instance; var create_info : HeadlessSurfaceCreateInfoEXT; var result : VkResult? = null) : SurfaceKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_headless_surface_e_x_t(instance : Instance; create_info : HeadlessSurfaceCreateInfoEXT; var result : VkResult? = null) : SurfaceKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkSurfaceKHR
     vk_check(vkCreateHeadlessSurfaceEXT(boost_value_to_vk(instance), vci, null, h), result)
@@ -285,8 +285,8 @@ def create_headless_surface_e_x_t(instance : Instance; var create_info : Headles
     return <- b
 }
 
-def create_acceleration_structure_k_h_r(device : Device; var create_info : AccelerationStructureCreateInfoKHR; var result : VkResult? = null) : AccelerationStructureKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_acceleration_structure_k_h_r(device : Device; create_info : AccelerationStructureCreateInfoKHR; var result : VkResult? = null) : AccelerationStructureKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkAccelerationStructureKHR
     vk_check(vkCreateAccelerationStructureKHR(boost_value_to_vk(device), vci, null, h), result)
@@ -296,8 +296,8 @@ def create_acceleration_structure_k_h_r(device : Device; var create_info : Accel
     return <- b
 }
 
-def create_private_data_slot(device : Device; var create_info : PrivateDataSlotCreateInfo; var result : VkResult? = null) : PrivateDataSlot {
-    var vci = vk_view_create_unsafe(create_info)
+def create_private_data_slot(device : Device; create_info : PrivateDataSlotCreateInfo; var result : VkResult? = null) : PrivateDataSlot {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkPrivateDataSlot
     vk_check(vkCreatePrivateDataSlot(boost_value_to_vk(device), vci, null, h), result)
@@ -307,8 +307,8 @@ def create_private_data_slot(device : Device; var create_info : PrivateDataSlotC
     return <- b
 }
 
-def create_video_session_parameters_k_h_r(device : Device; var create_info : VideoSessionParametersCreateInfoKHR; var result : VkResult? = null) : VideoSessionParametersKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_video_session_parameters_k_h_r(device : Device; create_info : VideoSessionParametersCreateInfoKHR; var result : VkResult? = null) : VideoSessionParametersKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkVideoSessionParametersKHR
     vk_check(vkCreateVideoSessionParametersKHR(boost_value_to_vk(device), vci, null, h), result)
@@ -318,8 +318,8 @@ def create_video_session_parameters_k_h_r(device : Device; var create_info : Vid
     return <- b
 }
 
-def create_cu_function_n_v_x(device : Device; var create_info : CuFunctionCreateInfoNVX; var result : VkResult? = null) : CuFunctionNVX {
-    var vci = vk_view_create_unsafe(create_info)
+def create_cu_function_n_v_x(device : Device; create_info : CuFunctionCreateInfoNVX; var result : VkResult? = null) : CuFunctionNVX {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkCuFunctionNVX
     vk_check(vkCreateCuFunctionNVX(boost_value_to_vk(device), vci, null, h), result)
@@ -329,8 +329,8 @@ def create_cu_function_n_v_x(device : Device; var create_info : CuFunctionCreate
     return <- b
 }
 
-def create_micromap_e_x_t(device : Device; var create_info : MicromapCreateInfoEXT; var result : VkResult? = null) : MicromapEXT {
-    var vci = vk_view_create_unsafe(create_info)
+def create_micromap_e_x_t(device : Device; create_info : MicromapCreateInfoEXT; var result : VkResult? = null) : MicromapEXT {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkMicromapEXT
     vk_check(vkCreateMicromapEXT(boost_value_to_vk(device), vci, null, h), result)
@@ -340,8 +340,8 @@ def create_micromap_e_x_t(device : Device; var create_info : MicromapCreateInfoE
     return <- b
 }
 
-def create_optical_flow_session_n_v(device : Device; var create_info : OpticalFlowSessionCreateInfoNV; var result : VkResult? = null) : OpticalFlowSessionNV {
-    var vci = vk_view_create_unsafe(create_info)
+def create_optical_flow_session_n_v(device : Device; create_info : OpticalFlowSessionCreateInfoNV; var result : VkResult? = null) : OpticalFlowSessionNV {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkOpticalFlowSessionNV
     vk_check(vkCreateOpticalFlowSessionNV(boost_value_to_vk(device), vci, null, h), result)
@@ -351,8 +351,8 @@ def create_optical_flow_session_n_v(device : Device; var create_info : OpticalFl
     return <- b
 }
 
-def create_external_compute_queue_n_v(device : Device; var create_info : ExternalComputeQueueCreateInfoNV; var result : VkResult? = null) : ExternalComputeQueueNV {
-    var vci = vk_view_create_unsafe(create_info)
+def create_external_compute_queue_n_v(device : Device; create_info : ExternalComputeQueueCreateInfoNV; var result : VkResult? = null) : ExternalComputeQueueNV {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkExternalComputeQueueNV
     vk_check(vkCreateExternalComputeQueueNV(boost_value_to_vk(device), vci, null, h), result)
@@ -362,8 +362,8 @@ def create_external_compute_queue_n_v(device : Device; var create_info : Externa
     return <- b
 }
 
-def create_shader_instrumentation_a_r_m(device : Device; var create_info : ShaderInstrumentationCreateInfoARM; var result : VkResult? = null) : ShaderInstrumentationARM {
-    var vci = vk_view_create_unsafe(create_info)
+def create_shader_instrumentation_a_r_m(device : Device; create_info : ShaderInstrumentationCreateInfoARM; var result : VkResult? = null) : ShaderInstrumentationARM {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkShaderInstrumentationARM
     vk_check(vkCreateShaderInstrumentationARM(boost_value_to_vk(device), vci, null, h), result)
@@ -373,8 +373,8 @@ def create_shader_instrumentation_a_r_m(device : Device; var create_info : Shade
     return <- b
 }
 
-def create_tensor_view_a_r_m(device : Device; var create_info : TensorViewCreateInfoARM; var result : VkResult? = null) : TensorViewARM {
-    var vci = vk_view_create_unsafe(create_info)
+def create_tensor_view_a_r_m(device : Device; create_info : TensorViewCreateInfoARM; var result : VkResult? = null) : TensorViewARM {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkTensorViewARM
     vk_check(vkCreateTensorViewARM(boost_value_to_vk(device), vci, null, h), result)
@@ -384,8 +384,8 @@ def create_tensor_view_a_r_m(device : Device; var create_info : TensorViewCreate
     return <- b
 }
 
-def create_data_graph_pipeline_session_a_r_m(device : Device; var create_info : DataGraphPipelineSessionCreateInfoARM; var result : VkResult? = null) : DataGraphPipelineSessionARM {
-    var vci = vk_view_create_unsafe(create_info)
+def create_data_graph_pipeline_session_a_r_m(device : Device; create_info : DataGraphPipelineSessionCreateInfoARM; var result : VkResult? = null) : DataGraphPipelineSessionARM {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkDataGraphPipelineSessionARM
     vk_check(vkCreateDataGraphPipelineSessionARM(boost_value_to_vk(device), vci, null, h), result)
@@ -395,8 +395,8 @@ def create_data_graph_pipeline_session_a_r_m(device : Device; var create_info : 
     return <- b
 }
 
-def create_acceleration_structure2_k_h_r(device : Device; var create_info : AccelerationStructureCreateInfo2KHR; var result : VkResult? = null) : AccelerationStructureKHR {
-    var vci = vk_view_create_unsafe(create_info)
+def create_acceleration_structure2_k_h_r(device : Device; create_info : AccelerationStructureCreateInfo2KHR; var result : VkResult? = null) : AccelerationStructureKHR {
+    let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
     var h : VkAccelerationStructureKHR
     vk_check(vkCreateAccelerationStructure2KHR(boost_value_to_vk(device), vci, null, h), result)

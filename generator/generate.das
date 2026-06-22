@@ -73,20 +73,20 @@ def main() : int {
         print_help(get_command_info(type<Config>), "generate")
         return 1
     }
-    var cfg <- r |> move_unwrap()
+    let cfg <- r |> move_unwrap()
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "generate")
         return 0
     }
     let xml_path = empty(cfg.xml) ? "vendor/Vulkan-Headers/registry/vk.xml" : cfg.xml
-    var reg <- parse_vk_xml(xml_path)
+    let reg <- parse_vk_xml(xml_path)
     dump_stats(reg)
     if (cfg.stats) {
         return 0
     }
     let out_dir = empty(cfg.out) ? "src" : cfg.out
     let boost_dir = empty(cfg.boost_out) ? "daslib" : cfg.boost_out
-    var em <- build_emit_model(reg)
+    let em <- build_emit_model(reg)
     if (!cfg.no_cpp) {
         emit_all(reg, em, out_dir)
     }

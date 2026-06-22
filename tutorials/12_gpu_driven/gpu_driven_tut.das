@@ -314,32 +314,27 @@ def private create_material(device : Device; phys : VkPhysicalDevice; queue : Vk
     var inscope staging <- create_host_buffer(device, phys, uint64(length(bytes)), staging_usage)
     upload_bytes(staging, device, bytes)
 
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = fmt
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = 8u
     ici.extent.height = 8u
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.sampled = true
     ici.usage.transfer_dst = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var img <- create_image(device, ici)
     var ireq : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(img), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai : MemoryAllocateInfo
-    imai.allocationSize = ireq.size
-    imai.memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant)
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
+        memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var mem <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(img), boost_value_to_vk(mem), 0ul), null)
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var none : VkAccessFlags
+        let none : VkAccessFlags
         var to_dst : VkAccessFlags
         to_dst.transfer_write = true
         var to_read : VkAccessFlags
@@ -366,10 +361,7 @@ def private create_material(device : Device; phys : VkPhysicalDevice; queue : Vk
     }
     delete bytes
 
-    var tvci : ImageViewCreateInfo
-    tvci.image = weak_copy(img)
-    tvci.viewType = VkImageViewType._2D
-    tvci.format = fmt
+    var tvci = ImageViewCreateInfo(image = weak_copy(img), viewType = VkImageViewType._2D, format = fmt)
     tvci.subresourceRange.aspectMask.color = true
     tvci.subresourceRange.levelCount = 1u
     tvci.subresourceRange.layerCount = 1u
@@ -395,45 +387,35 @@ def private finalize(var h : Hzb) {
 
 def private build_hzb(device : Device; phys : VkPhysicalDevice) : Hzb {
     let dev = boost_value_to_vk(device)
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = HZB_FMT
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = HZB_FMT,
+        mipLevels = uint(MIP_COUNT), arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = uint(HZB_BASE)
     ici.extent.height = uint(HZB_BASE)
     ici.extent.depth = 1u
-    ici.mipLevels = uint(MIP_COUNT)
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.storage = true
     ici.usage.sampled = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     var img <- create_image(device, ici)
     var req : VkMemoryRequirements
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(img), req)
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    var mai : MemoryAllocateInfo
-    mai.allocationSize = req.size
-    mai.memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want)
+    let mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     var mem <- allocate_memory(device, mai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(img), boost_value_to_vk(mem), 0ul), null)
 
-    var svci : ImageViewCreateInfo
-    svci.image = weak_copy(img)
-    svci.viewType = VkImageViewType._2D
-    svci.format = HZB_FMT
+    var svci = ImageViewCreateInfo(image = weak_copy(img), viewType = VkImageViewType._2D, format = HZB_FMT)
     svci.subresourceRange.aspectMask.color = true
     svci.subresourceRange.levelCount = uint(MIP_COUNT)
     svci.subresourceRange.layerCount = 1u
     var sampled <- create_image_view(device, svci)
 
     var mip_views : array<ImageView>
+    mip_views |> reserve(MIP_COUNT)
     for (l in range(MIP_COUNT)) {
-        var mvci : ImageViewCreateInfo
-        mvci.image = weak_copy(img)
-        mvci.viewType = VkImageViewType._2D
-        mvci.format = HZB_FMT
+        var mvci = ImageViewCreateInfo(image = weak_copy(img), viewType = VkImageViewType._2D, format = HZB_FMT)
         mvci.subresourceRange.aspectMask.color = true
         mvci.subresourceRange.baseMipLevel = uint(l)
         mvci.subresourceRange.levelCount = 1u
@@ -461,55 +443,34 @@ def private alloc_one_set(device : Device; pool : DescriptorPool; layout : Descr
 }
 
 def private write_ubo(set : VkDescriptorSet; binding : uint; buf : Buffer; size : uint64) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w.descriptorCount = 1u
-    var bi : DescriptorBufferInfo
-    bi.buffer = weak_copy(buf)
-    bi.range_ = size
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set), dstBinding = binding,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    let bi = DescriptorBufferInfo(buffer = weak_copy(buf), range_ = size)
     w.pBufferInfo |> push(bi)
     return <- w
 }
 
 def private write_ssbo(set : VkDescriptorSet; binding : uint; buf : Buffer; size : uint64) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.STORAGE_BUFFER
-    w.descriptorCount = 1u
-    var bi : DescriptorBufferInfo
-    bi.buffer = weak_copy(buf)
-    bi.range_ = size
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set), dstBinding = binding,
+        descriptorType = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
+    let bi = DescriptorBufferInfo(buffer = weak_copy(buf), range_ = size)
     w.pBufferInfo |> push(bi)
     return <- w
 }
 
 def private write_sampler(set : VkDescriptorSet; binding : uint; view : ImageView; sampler : Sampler;
                           layout : VkImageLayout) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w.descriptorCount = 1u
-    var ii : DescriptorImageInfo
-    ii.sampler = weak_copy(sampler)
-    ii.imageView = weak_copy(view)
-    ii.imageLayout = layout
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set), dstBinding = binding,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let ii = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(view), imageLayout = layout)
     w.pImageInfo |> push(ii)
     return <- w
 }
 
 def private write_storage_image(set : VkDescriptorSet; binding : uint; view : ImageView) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.STORAGE_IMAGE
-    w.descriptorCount = 1u
-    var ii : DescriptorImageInfo
-    ii.imageView = weak_copy(view)
-    ii.imageLayout = VkImageLayout.GENERAL
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set), dstBinding = binding,
+        descriptorType = VkDescriptorType.STORAGE_IMAGE, descriptorCount = 1u)
+    let ii = DescriptorImageInfo(imageView = weak_copy(view), imageLayout = VkImageLayout.GENERAL)
     w.pImageInfo |> push(ii)
     return <- w
 }
@@ -518,16 +479,12 @@ def private write_storage_image(set : VkDescriptorSet; binding : uint; view : Im
 //! one sampler (the canonical bindless-array write -- cf. tests/integration/test_bindless_*.das).
 def private write_sampler_array(set : VkDescriptorSet; binding : uint; var views : array<ImageView>;
                                 sampler : Sampler) : WriteDescriptorSet {
-    var w : WriteDescriptorSet
-    w.dstSet = vk_value_to_boost(set)
-    w.dstBinding = binding
-    w.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w.descriptorCount = uint(length(views))
+    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set), dstBinding = binding,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = uint(length(views)))
+    w.pImageInfo |> reserve(length(views))
     for (v in views) {
-        var ii : DescriptorImageInfo
-        ii.sampler = weak_copy(sampler)
-        ii.imageView = weak_copy(v)
-        ii.imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+        let ii = DescriptorImageInfo(sampler = weak_copy(sampler), imageView = weak_copy(v),
+            imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
         w.pImageInfo |> push(ii)
     }
     return <- w
@@ -652,9 +609,7 @@ def private build_color_pipeline(device : Device; rp : RenderPass; layout : Pipe
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
 
-    var dyn_states : array<VkDynamicState>
-    dyn_states |> push(VkDynamicState.VIEWPORT)
-    dyn_states |> push(VkDynamicState.SCISSOR)
+    var dyn_states <- [VkDynamicState.VIEWPORT, VkDynamicState.SCISSOR]
     var dynstate = VkPipelineDynamicStateCreateInfo()
     dynstate.dynamicStateCount = 2u
 
@@ -839,7 +794,7 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     var color_extra : VkImageUsageFlags
     color_extra.transfer_src = true
     var inscope out_color <- build_offscreen_target(device, phys, OUT_W, OUT_H, OUT_FMT, samples1, color_extra)
-    var depth_extra : VkImageUsageFlags
+    let depth_extra : VkImageUsageFlags
     var inscope out_depth <- build_offscreen_depth(device, phys, OUT_W, OUT_H, DEPTH_FMT, depth_extra)
     var occ_extra : VkImageUsageFlags
     occ_extra.sampled = true                         // HZB mip0 samples the occluder depth
@@ -856,33 +811,24 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     var inscope fb_depth <- create_framebuffer(device, FramebufferCreateInfo(
         renderPass = weak_copy(rp_depth), pAttachments <- depth_attach,
         width = uint(HZB_BASE), height = uint(HZB_BASE), layers = 1u))
-    var color_attach : array<ImageView>
-    color_attach |> push(weak_copy(out_color.view))
-    color_attach |> push(weak_copy(out_depth.view))
+    var color_attach <- [weak_copy(out_color.view), weak_copy(out_depth.view)]
     var inscope fb_color <- create_framebuffer(device, FramebufferCreateInfo(
         renderPass = weak_copy(rp_color), pAttachments <- color_attach,
         width = uint(OUT_W), height = uint(OUT_H), layers = 1u))
 
     // ----- samplers -----
-    var dsci : SamplerCreateInfo
-    dsci.magFilter = VkFilter.NEAREST
-    dsci.minFilter = VkFilter.NEAREST
-    dsci.mipmapMode = VkSamplerMipmapMode.NEAREST
-    dsci.addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE
-    dsci.addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE
-    dsci.addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE
-    dsci.maxLod = float(MIP_COUNT)
+    let dsci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST, addressModeU = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        addressModeV = VkSamplerAddressMode.CLAMP_TO_EDGE, addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE,
+        maxLod = float(MIP_COUNT))
     var inscope depth_sampler <- create_sampler(device, dsci)
-    var msci : SamplerCreateInfo
-    msci.magFilter = VkFilter.NEAREST
-    msci.minFilter = VkFilter.NEAREST
-    msci.mipmapMode = VkSamplerMipmapMode.NEAREST
-    msci.addressModeU = VkSamplerAddressMode.REPEAT
-    msci.addressModeV = VkSamplerAddressMode.REPEAT
-    msci.maxLod = 1.0f
+    let msci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
+        mipmapMode = VkSamplerMipmapMode.NEAREST, addressModeU = VkSamplerAddressMode.REPEAT,
+        addressModeV = VkSamplerAddressMode.REPEAT, maxLod = 1.0f)
     var inscope mat_sampler <- create_sampler(device, msci)
 
     var inscope materials : array<Tex>
+    materials |> reserve(N_MAT)
     for (m in range(N_MAT)) {
         var inscope tex <- create_material(device, phys, queue, pool, m)
         materials |> emplace(tex)
@@ -905,12 +851,10 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     count_usage.indirect_buffer = true
     count_usage.transfer_dst = true
 
-    var cv_copy : array<float>
-    cv_copy |> push_from(cube_vertices)
+    var cv_copy := cube_vertices
     var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, cv_copy)
     delete cv_copy
-    var ci_copy : array<uint16>
-    ci_copy |> push_from(cube_indices)
+    var ci_copy := cube_indices
     var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, ci_copy)
     delete ci_copy
     var inscope ubo <- create_host_buffer(device, phys, SCENE_BYTES, ubo_usage)
@@ -947,21 +891,16 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     // ----- descriptor pool -----
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = uint(3 + MIP_COUNT)
-    var p_ubo : DescriptorPoolSize
-    p_ubo.type_ = VkDescriptorType.UNIFORM_BUFFER
-    p_ubo.descriptorCount = 3u                                     // cull + main + god
+    // cull + main + god
+    let p_ubo = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 3u)
     dpci.pPoolSizes |> push(p_ubo)
-    var p_ssbo : DescriptorPoolSize
-    p_ssbo.type_ = VkDescriptorType.STORAGE_BUFFER
-    p_ssbo.descriptorCount = uint(5 + 2 + 2)                        // cull(5) + main(2) + god(2)
+    // cull(5) + main(2) + god(2)
+    let p_ssbo = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(5 + 2 + 2))
     dpci.pPoolSizes |> push(p_ssbo)
-    var p_smp : DescriptorPoolSize
-    p_smp.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    p_smp.descriptorCount = uint(1 + N_MAT + N_MAT + MIP_COUNT)     // cull hzb(1) + main(N) + god(N) + hzb_src(MIP)
+    // cull hzb(1) + main(N) + god(N) + hzb_src(MIP)
+    let p_smp = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = uint(1 + N_MAT + N_MAT + MIP_COUNT))
     dpci.pPoolSizes |> push(p_smp)
-    var p_simg : DescriptorPoolSize
-    p_simg.type_ = VkDescriptorType.STORAGE_IMAGE
-    p_simg.descriptorCount = uint(MIP_COUNT)
+    let p_simg = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_IMAGE, descriptorCount = uint(MIP_COUNT))
     dpci.pPoolSizes |> push(p_simg)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -969,44 +908,37 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     var cull_set = alloc_one_set(device, desc_pool, cull_layouts[0])
     var main_set = alloc_one_set(device, desc_pool, main_layouts[0])
     var god_set  = alloc_one_set(device, desc_pool, god_layouts[0])
-    var hzb_sets : array<VkDescriptorSet>
-    for (l in range(MIP_COUNT)) {
-        hzb_sets |> push(alloc_one_set(device, desc_pool, hzb_layouts[0]))
-    }
+    var hzb_sets <- [for (_l in range(MIP_COUNT)); alloc_one_set(device, desc_pool, hzb_layouts[0])]
+    var mat_views <- [for (mt in materials); weak_copy(mt.view)]
 
-    var mat_views : array<ImageView>
-    for (m in range(N_MAT)) {
-        mat_views |> push(weak_copy(materials[m].view))
-    }
-
-    var writes : array<WriteDescriptorSet>
-    // cull set: scene UBO + 5 SSBOs + HZB sampler
-    writes |> emplace(write_ubo(cull_set, 0u, ubo.buffer, SCENE_BYTES))
-    writes |> emplace(write_ssbo(cull_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)))
-    writes |> emplace(write_ssbo(cull_set, 2u, draw_cmds.buffer, uint64(N_INSTANCES) * uint64(DRAWCMD_STRIDE)))
-    writes |> emplace(write_ssbo(cull_set, 3u, draw_count.buffer, 4ul))
-    writes |> emplace(write_ssbo(cull_set, 4u, draw_inst.buffer, uint64(N_INSTANCES) * 4ul))
-    writes |> emplace(write_ssbo(cull_set, 5u, cull_reason.buffer, uint64(N_INSTANCES) * 4ul))
-    writes |> emplace(write_sampler(cull_set, 6u, hzb.sampled, depth_sampler, VkImageLayout.GENERAL))
-    // main set: scene(0) + instances(1) + draw_inst(4) + bindless samplers(7)
-    writes |> emplace(write_ubo(main_set, 0u, ubo.buffer, SCENE_BYTES))
-    writes |> emplace(write_ssbo(main_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)))
-    writes |> emplace(write_ssbo(main_set, 4u, draw_inst.buffer, uint64(N_INSTANCES) * 4ul))
-    writes |> emplace(write_sampler_array(main_set, 7u, mat_views, mat_sampler))
-    // god set: scene(0) + instances(1) + cull_reason(5) + bindless samplers(7)
-    writes |> emplace(write_ubo(god_set, 0u, ubo.buffer, SCENE_BYTES))
-    writes |> emplace(write_ssbo(god_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)))
-    writes |> emplace(write_ssbo(god_set, 5u, cull_reason.buffer, uint64(N_INSTANCES) * 4ul))
-    writes |> emplace(write_sampler_array(god_set, 7u, mat_views, mat_sampler))
+    // cull set: scene UBO + 5 SSBOs + HZB sampler; main/god sets: scene + instances + bindless samplers
+    var writes <- [
+        write_ubo(cull_set, 0u, ubo.buffer, SCENE_BYTES),
+        write_ssbo(cull_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)),
+        write_ssbo(cull_set, 2u, draw_cmds.buffer, uint64(N_INSTANCES) * uint64(DRAWCMD_STRIDE)),
+        write_ssbo(cull_set, 3u, draw_count.buffer, 4ul),
+        write_ssbo(cull_set, 4u, draw_inst.buffer, uint64(N_INSTANCES) * 4ul),
+        write_ssbo(cull_set, 5u, cull_reason.buffer, uint64(N_INSTANCES) * 4ul),
+        write_sampler(cull_set, 6u, hzb.sampled, depth_sampler, VkImageLayout.GENERAL),
+        write_ubo(main_set, 0u, ubo.buffer, SCENE_BYTES),
+        write_ssbo(main_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)),
+        write_ssbo(main_set, 4u, draw_inst.buffer, uint64(N_INSTANCES) * 4ul),
+        write_sampler_array(main_set, 7u, mat_views, mat_sampler),
+        write_ubo(god_set, 0u, ubo.buffer, SCENE_BYTES),
+        write_ssbo(god_set, 1u, instances.buffer, uint64(N_INSTANCES) * uint64(INST_STRIDE)),
+        write_ssbo(god_set, 5u, cull_reason.buffer, uint64(N_INSTANCES) * 4ul),
+        write_sampler_array(god_set, 7u, mat_views, mat_sampler)
+    ]
     // hzb sets: binding 0 = src sampler, binding 1 = dst storage view (per mip)
     //   mip 0 reads the occluder depth; mips 1..MIP-1 read the HZB itself (full-chain sampled view).
+    writes |> reserve(length(writes) + 2 * MIP_COUNT)
     for (l in range(MIP_COUNT)) {
         let src_view = l == 0 ? weak_copy(occ_depth.view) : weak_copy(hzb.sampled)
         let src_layout = l == 0 ? VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL : VkImageLayout.GENERAL
         writes |> emplace(write_sampler(hzb_sets[l], 0u, src_view, depth_sampler, src_layout))
         writes |> emplace(write_storage_image(hzb_sets[l], 1u, hzb.mip_views[l]))
     }
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
     delete mat_views
 
@@ -1051,52 +983,19 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     let buf_size = uint64(OUT_W * OUT_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
-    var r : GpuDrivenResources
-    r.out_color <- out_color
-    r.out_depth <- out_depth
-    r.occ_depth <- occ_depth
-    r.hzb <- hzb
-    r.rp_depth <- rp_depth
-    r.rp_color <- rp_color
-    r.fb_depth <- fb_depth
-    r.fb_color <- fb_color
-    r.depth_sampler <- depth_sampler
-    r.mat_sampler <- mat_sampler
-    r.materials <- materials
-    r.cube_vb <- cube_vb
-    r.cube_ib <- cube_ib
-    r.ubo <- ubo
-    r.instances <- instances
-    r.draw_cmds <- draw_cmds
-    r.draw_count <- draw_count
-    r.draw_inst <- draw_inst
-    r.cull_reason <- cull_reason
-    r.cull_layouts <- cull_layouts
-    r.cull_pl <- cull_pl
-    r.cull_pipe <- cull_pipe
-    r.cull_set = cull_set
-    r.hzb_layouts <- hzb_layouts
-    r.hzb_pl <- hzb_pl
-    r.mip0_pipe <- mip0_pipe
-    r.down_pipe <- down_pipe
-    r.hzb_sets <- hzb_sets
-    r.occ_layouts <- occ_layouts
-    r.occ_pl <- occ_pl
-    r.depth_pipe <- depth_pipe
-    r.occ_solid_pipe <- occ_solid_pipe
-    r.occ_ghost_pipe <- occ_ghost_pipe
-    r.main_layouts <- main_layouts
-    r.main_pl <- main_pl
-    r.main_pipe <- main_pipe
-    r.main_set = main_set
-    r.god_layouts <- god_layouts
-    r.god_pl <- god_pl
-    r.god_pipe <- god_pipe
-    r.god_set = god_set
-    r.desc_pool <- desc_pool
-    r.readback <- readback
-    r.buf_size = buf_size
-    return <- r
+    return <- GpuDrivenResources(
+        out_color <- out_color, out_depth <- out_depth, occ_depth <- occ_depth, hzb <- hzb,
+        rp_depth <- rp_depth, rp_color <- rp_color, fb_depth <- fb_depth, fb_color <- fb_color,
+        depth_sampler <- depth_sampler, mat_sampler <- mat_sampler, materials <- materials,
+        cube_vb <- cube_vb, cube_ib <- cube_ib, ubo <- ubo, instances <- instances,
+        draw_cmds <- draw_cmds, draw_count <- draw_count, draw_inst <- draw_inst, cull_reason <- cull_reason,
+        cull_layouts <- cull_layouts, cull_pl <- cull_pl, cull_pipe <- cull_pipe, cull_set = cull_set,
+        hzb_layouts <- hzb_layouts, hzb_pl <- hzb_pl, mip0_pipe <- mip0_pipe, down_pipe <- down_pipe,
+        hzb_sets <- hzb_sets, occ_layouts <- occ_layouts, occ_pl <- occ_pl, depth_pipe <- depth_pipe,
+        occ_solid_pipe <- occ_solid_pipe, occ_ghost_pipe <- occ_ghost_pipe,
+        main_layouts <- main_layouts, main_pl <- main_pl, main_pipe <- main_pipe, main_set = main_set,
+        god_layouts <- god_layouts, god_pl <- god_pl, god_pipe <- god_pipe, god_set = god_set,
+        desc_pool <- desc_pool, readback <- readback, buf_size = buf_size)
 }
 
 def public build_gpu_driven_context() : GpuDrivenContext {
@@ -1151,8 +1050,8 @@ def private compute_barrier(cmd : CommandBuffer) {
     mb.dstAccessMask.shader_read = true
     var mems : array<MemoryBarrier>
     mems |> emplace(mb)
-    var no_buf : array<BufferMemoryBarrier>
-    var no_img : array<ImageMemoryBarrier>
+    let no_buf : array<BufferMemoryBarrier>
+    let no_img : array<ImageMemoryBarrier>
     var src : VkPipelineStageFlags
     src.compute_shader = true
     var dst : VkPipelineStageFlags
@@ -1193,8 +1092,8 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         ib.subresourceRange.layerCount = 1u
         var imgs : array<ImageMemoryBarrier>
         imgs |> emplace(ib)
-        var no_mem : array<MemoryBarrier>
-        var no_buf : array<BufferMemoryBarrier>
+        let no_mem : array<MemoryBarrier>
+        let no_buf : array<BufferMemoryBarrier>
         var src : VkPipelineStageFlags
         src.early_fragment_tests = true       // the depth-only occluder pipeline has no fragment
         src.late_fragment_tests = true        // shader, so its depth write lands in EARLY tests; cover both
@@ -1219,8 +1118,8 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         ib.subresourceRange.layerCount = 1u
         var imgs : array<ImageMemoryBarrier>
         imgs |> emplace(ib)
-        var no_mem : array<MemoryBarrier>
-        var no_buf : array<BufferMemoryBarrier>
+        let no_mem : array<MemoryBarrier>
+        let no_buf : array<BufferMemoryBarrier>
         var src : VkPipelineStageFlags
         src.top_of_pipe = true
         var dst : VkPipelineStageFlags
@@ -1262,8 +1161,8 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         bb.size = 4ul
         var bufs : array<BufferMemoryBarrier>
         bufs |> emplace(bb)
-        var no_mem : array<MemoryBarrier>
-        var no_img : array<ImageMemoryBarrier>
+        let no_mem : array<MemoryBarrier>
+        let no_img : array<ImageMemoryBarrier>
         var src : VkPipelineStageFlags
         src.transfer = true
         var dst : VkPipelineStageFlags
@@ -1305,13 +1204,9 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         bb_rsn.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
         bb_rsn.buffer = weak_copy(res.cull_reason.buffer)
         bb_rsn.size = VK_WHOLE_SIZE
-        var bufs : array<BufferMemoryBarrier>
-        bufs |> emplace(bb_ind)
-        bufs |> emplace(bb_cnt)
-        bufs |> emplace(bb_vtx)
-        bufs |> emplace(bb_rsn)
-        var no_mem : array<MemoryBarrier>
-        var no_img : array<ImageMemoryBarrier>
+        let bufs <- [<-bb_ind, <-bb_cnt, <-bb_vtx, <-bb_rsn]
+        let no_mem : array<MemoryBarrier>
+        let no_img : array<ImageMemoryBarrier>
         var src : VkPipelineStageFlags
         src.compute_shader = true
         var dst : VkPipelineStageFlags

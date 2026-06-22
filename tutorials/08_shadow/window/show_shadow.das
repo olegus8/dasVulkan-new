@@ -84,7 +84,7 @@ def main {
         let t = float(glfwGetTime())
         // 24-second camera orbit; sun rotates at its own rate inside update_shadow_uniforms.
         let raw_cam = t * 0.042f
-        let camera_t = (raw_cam - floor(raw_cam)) * 2.0f * float(PI)
+        let camera_t = (raw_cam - floor(raw_cam)) * 2.0f * PI
         update_shadow_uniforms(res, device, t, camera_t)
 
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {

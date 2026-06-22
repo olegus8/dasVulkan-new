@@ -360,13 +360,10 @@ def public build_teapot_resources(device : Device; phys : VkPhysicalDevice) : Te
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps0 : DescriptorPoolSize
-    ps0.type_ = VkDescriptorType.UNIFORM_BUFFER
-    ps0.descriptorCount = 1u
+    let ps0 = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps0)
-    var ps1 : DescriptorPoolSize
-    ps1.type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    ps1.descriptorCount = 1u                  // the shadow-map sampler2DShadow
+    // binding 1 = the shadow-map sampler2DShadow
+    let ps1 = DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     dpci.pPoolSizes |> push(ps1)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -381,30 +378,21 @@ def public build_teapot_resources(device : Device; phys : VkPhysicalDevice) : Te
     }
 
     var writes : array<WriteDescriptorSet>
-    var w0 : WriteDescriptorSet
-    w0.dstSet = vk_value_to_boost(raw_set)
-    w0.dstBinding = 0u
-    w0.descriptorType = VkDescriptorType.UNIFORM_BUFFER
-    w0.descriptorCount = 1u
-    var binfo : DescriptorBufferInfo
-    binfo.buffer = weak_copy(ubo_buf.buffer)
-    binfo.range_ = TEAPOT_UBO_SIZE
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    let binfo = DescriptorBufferInfo(buffer = weak_copy(ubo_buf.buffer), range_ = TEAPOT_UBO_SIZE)
     w0.pBufferInfo |> push(binfo)
     writes |> emplace(w0)
 
-    var w1 : WriteDescriptorSet                // binding 1 = sampler2DShadow (the shadow map)
-    w1.dstSet = vk_value_to_boost(raw_set)
-    w1.dstBinding = 1u
-    w1.descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
-    w1.descriptorCount = 1u
-    var shadow_info : DescriptorImageInfo
-    shadow_info.sampler = weak_copy(shadow_sampler)
-    shadow_info.imageView = weak_copy(shadow_map.view)
-    shadow_info.imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    // binding 1 = sampler2DShadow (the shadow map)
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
+    let shadow_info = DescriptorImageInfo(sampler = weak_copy(shadow_sampler),
+        imageView = weak_copy(shadow_map.view), imageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL)
     w1.pImageInfo |> push(shadow_info)
     writes |> emplace(w1)
 
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)

@@ -64,7 +64,7 @@ def public build_mandel_compute(device : Device; phys : VkPhysicalDevice; var wo
     vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), ireq)
     var iwant : VkMemoryPropertyFlags
     iwant.device_local = true
-    var imai = MemoryAllocateInfo(allocationSize = ireq.size,
+    let imai = MemoryAllocateInfo(allocationSize = ireq.size,
         memoryTypeIndex = find_memory_type(phys, ireq.memoryTypeBits, iwant))
     var inscope imem <- allocate_memory(device, imai)
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(image), boost_value_to_vk(imem), 0ul), null)
@@ -103,7 +103,7 @@ def public build_mandel_compute(device : Device; phys : VkPhysicalDevice; var wo
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // compute pipeline from the blob; the layout declares a 4-byte (one float) compute push constant

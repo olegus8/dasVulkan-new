@@ -16,18 +16,14 @@ def test_handles(t : T?) {
     volkLoadDevice(boost_value_to_vk(device))
 
     // create an owning image; weak_copy must be non-owning and must not disturb the owner
-    var ici : ImageCreateInfo
-    ici.imageType = VkImageType._2D
-    ici.format = VkFormat.R8G8B8A8_UNORM
+    var ici = ImageCreateInfo(imageType = VkImageType._2D, format = VkFormat.R8G8B8A8_UNORM,
+        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        initialLayout = VkImageLayout.UNDEFINED)
     ici.extent.width = 32u
     ici.extent.height = 32u
     ici.extent.depth = 1u
-    ici.mipLevels = 1u
-    ici.arrayLayers = 1u
     ici.samples._1 = true
-    ici.tiling = VkImageTiling.OPTIMAL
     ici.usage.color_attachment = true
-    ici.initialLayout = VkImageLayout.UNDEFINED
     {
         var inscope img <- create_image(device, ici)
         t |> success(img._needs_delete, "created image owns its handle")

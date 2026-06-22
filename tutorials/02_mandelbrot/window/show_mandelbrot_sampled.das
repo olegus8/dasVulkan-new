@@ -79,7 +79,7 @@ def main {
     var inscope pool <- create_command_pool(device, poolci)
 
     // a sampler to read the fractal with (linear so window scaling is smooth)
-    var sci = SamplerCreateInfo(magFilter = VkFilter.LINEAR, minFilter = VkFilter.LINEAR, mipmapMode = VkSamplerMipmapMode.LINEAR)
+    let sci = SamplerCreateInfo(magFilter = VkFilter.LINEAR, minFilter = VkFilter.LINEAR, mipmapMode = VkSamplerMipmapMode.LINEAR)
     var inscope sampler <- create_sampler(device, sci)
 
     // graphics descriptor set: binding 0 = combined image sampler (the compute image view), fragment stage
@@ -112,7 +112,7 @@ def main {
     write.pImageInfo |> push(iinfo)
     var writes : array<WriteDescriptorSet>
     writes |> emplace(write)
-    var no_copies : array<CopyDescriptorSet>
+    let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     // graphics pipeline: full-screen triangle vert + texture-sampling frag, the descriptor set in the layout
