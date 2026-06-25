@@ -21,6 +21,7 @@ module spirv_vulkan_shader shared public
 // Same trick dasOpenGL's glsl_opengl uses for glUniformAny without requiring opengl_boost.
 require spirv/spirv_shader public
 require spirv/spirv_emit
+require daslib/shader_block_layout   // std140_block_writes / Std140Write / compute_block_layout (explicit, not via spirv_emit's re-export)
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
@@ -175,17 +176,20 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             unsafe { delete ubo_globals; }
             return
         }
-        for (f in fields) {
+        // Decompose the block into leaf writes via the shared std140 walk (shader_block_layout) — the
+        // SAME walk the OpenGL binder drives, so both rails pack byte-identically. This is what gives
+        // float3x3 / float3x4 their per-column std140 padding and arrays / nested structs their correct
+        // strides; a flat write_field per top-level field (the old loop) mis-packed those shapes.
+        var writes : array<Std140Write>
+        std140_block_writes(st, new ExprVar(at = vv.at, name := vv.name), 0, writes)
+        for (w in writes) {
             var cll = new ExprCall(at = vv.at, name := "write_field")
             cll.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "ptr")
-            cll.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(f.offset))
-            var fld_access = new ExprField(at = vv.at,
-                value <- new ExprVar(at = vv.at, name := vv.name),
-                name := f.name
-            )
-            cll.arguments |> emplace(fld_access)
+            cll.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(w.offset))
+            cll.arguments |> emplace(w.access)
             inner.list |> emplace(cll)
         }
+        unsafe { delete writes; }
         delete fields
         delete layout_errors
     }
