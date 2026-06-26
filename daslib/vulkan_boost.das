@@ -1574,6 +1574,26 @@ def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : bloc
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
 }
 
+// Reusable CPU scratch for push-constant staging. Grows to the largest block seen and is never freed —
+// a small per-program scratch reused every push, so no per-frame allocation in the record loop. Single-
+// threaded command recording + the block below never re-enters, so a module global is safe.
+var private g_push_staging : array<uint8>
+
+//! Block-form std140 staging for push constants. Sizes a CPU scratch buffer to `size` bytes, hands the
+//! block a raw pointer into it, and frees nothing (the scratch is reused). The push_constants_<shader>
+//! macro drives this: the block writes each field at its std140 offset via `write_field` and then calls
+//! vkCmdPushConstants with the same pointer, so the GPU receives std140-packed bytes rather than the raw
+//! daslang struct image (which can diverge — e.g. a float3 immediately before a scalar packs differently).
+def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
+    return if (size == 0u)
+    if (int(size) > length(g_push_staging)) {
+        g_push_staging |> resize(int(size))
+    }
+    unsafe {
+        invoke(blk, reinterpret<void?>(addr(g_push_staging[0])))
+    }
+}
+
 //! Write a single typed value at a byte offset into mapped device memory (one memcpy of sizeof<TT>
 //! bytes). Designed for std140 field writes: the bind_uniform macro emits one call per @uniform-block
 //! field at its compile-time-computed offset. TT = any 32-bit scalar / vec / float4x4 / float3x4 with

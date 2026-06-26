@@ -248,7 +248,7 @@ def private generate_push_constants_dummy(fnMain : FunctionPtr) {
 [macro_function]
 def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; stage : ShaderStage) {
     let stage_uint = stage_to_uint(stage)
-    var stmt_list : array<Expression?>
+    var body = new ExprBlock(at = fn.at)
     // First pass: collect reachable @push_constant struct globals. Vulkan allows at most ONE
     // push-constant block per stage, and the current macro hard-codes offset=0 for all writes --
     // emitting two pushes at offset=0 would overlap and corrupt. Fail-closed at >1 until per-range
@@ -273,12 +273,10 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
         return
     }
     for (vv in pc_globals) {
-        // size = std140 layout size of the push block. The user's daslang struct should match
-        // this byte-for-byte (no float3-followed-by-scalar surprises) -- the bytes are uploaded
-        // direct from addr(pc_var); if the layouts diverge the shader reads garbage.
+        let st = vv._type.structType
         var errs : array<string>
         var fields : array<BlockField>
-        let layout_info = compute_block_layout(string(vv.name), vv._type.structType, fields, errs)
+        let layout_info = compute_block_layout(string(vv.name), st, fields, errs)
         if (!layout_info.ok) {
             // Fail-closed: a @push_constant whose std140 size can't be computed would silently
             // skip the vkCmdPushConstants update, leaving stale push state and a corrupt frame.
@@ -293,21 +291,50 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
         }
         delete fields
         delete errs
-        let var_name = string(vv.name)
+
+        // Stage into a std140 buffer, then push the staged bytes. Decompose the block with the SAME
+        // shared walk (shader_block_layout) the @uniform bind + the OpenGL binder drive, so push
+        // constants pack byte-identically to UBOs. The old path uploaded reinterpret(addr(pc_var))
+        // raw, which mis-packed float3x3 / float3x4 / composites and a float3-immediately-before-scalar
+        // (daslang's struct image != std140 there). Body shape mirrors generate_bind_uniform: a block
+        // taking the staging pointer, one write_field per leaf, then the upload while the pointer is live.
+        var inner = new ExprBlock(at = fn.at)
+        inner.blockFlags.isClosure = true
+        inner.returnType = new TypeDecl(at = fn.at, baseType = Type.tVoid)
+        var ptr_arg <- new Variable(at = fn.at, name := "ptr")
+        ptr_arg._type = new TypeDecl(at = fn.at,
+            baseType = Type.tPointer,
+            firstType = new TypeDecl(at = fn.at, baseType = Type.tVoid)
+        )
+        ptr_arg._type.flags.constant = true
+        inner.arguments |> emplace(ptr_arg)
+
+        var writes : array<Std140Write>
+        std140_block_writes(st, new ExprVar(at = vv.at, name := vv.name), 0, writes)
+        for (w in writes) {
+            var cll = new ExprCall(at = vv.at, name := "write_field")
+            cll.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "ptr")
+            cll.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(w.offset))
+            cll.arguments |> emplace(w.access)
+            inner.list |> emplace(cll)
+        }
+        unsafe { delete writes; }
+
         let size_expr <- new ExprConstUInt(at = vv.at, value = uint(layout_info.size))
         let stage_expr <- new ExprConstUInt(at = vv.at, value = stage_uint)
-        stmt_list |> push_block_list <| qmacro_block() {
-            unsafe {
-                vkCmdPushConstants(boost_value_to_vk(cb), boost_value_to_vk(layout),
-                    VkShaderStageFlags($e(stage_expr)), 0u, $e(size_expr),
-                    reinterpret<void?>(addr($i(var_name))))
-            }
-        }
+        // Upload the staged bytes while the staging pointer is live. ptr is the block arg; cb / layout
+        // are the function's params (captured by the closure). No unsafe wrap: vkCmdPushConstants is a
+        // plain extern and ptr is already void? (the old path needed unsafe only for reinterpret+addr).
+        var push_stmt = qmacro(vkCmdPushConstants(boost_value_to_vk(cb), boost_value_to_vk(layout),
+            VkShaderStageFlags($e(stage_expr)), 0u, $e(size_expr), $i("ptr")))
+        inner.list |> emplace(push_stmt)
+
+        var mkblk = new ExprMakeBlock(at = fn.at, _block = inner)
+        var wps = new ExprCall(at = fn.at, name := "with_push_staging")
+        wps.arguments |> emplace_new() <| new ExprConstUInt(at = fn.at, value = uint(layout_info.size))
+        wps.arguments |> emplace(mkblk)
+        body.list |> emplace(wps)
     }
     unsafe { delete pc_globals; }
-    var body = new ExprBlock(at = fn.at)
-    for (s in stmt_list) {
-        body.list |> emplace(s)
-    }
     fn.body = body
 }
