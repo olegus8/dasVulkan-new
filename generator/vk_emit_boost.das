@@ -647,14 +647,35 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
 
 // ===== commands: generated creators (RAII create_X returning an owning wrapper) =====
 
+//! One raw-call argument of a batch creator, in command param order.
+enum BatchArgKind {
+    parent          //! np==0 handle -> boost_value_to_vk(name)
+    count           //! shape A: the createInfoCount scalar -> uint(n)
+    create_infos    //! shape A: array of CreateInfo -> addr(vkraw[0])
+    create_info     //! shape B: single AllocateInfo -> vci
+    allocator       //! VkAllocationCallbacks -> null
+    out_handles     //! the array out-handle -> addr(vkout[0])
+}
+
+struct BatchArg {
+    kind : BatchArgKind
+    pname : string      //! parent: das-safe handle param name
+}
+
 struct CreatorInfo {
     command : string            //! vkCreateImage
     fn_name : string            //! create_image
     handle : string             //! VkImage
     boost : string              //! Image
     create_info_boost : string  //! ImageCreateInfo
+    create_info_vk : string     //! VkImageCreateInfo (batch shape A array element type)
     creator_params : array<ParentField>  //! the creator's leading handle params (call + signature)
     store_parents : array<ParentField>   //! the destroyer's parents, stored in the wrapper for finalize
+    // batch creators (array-producing Create/Allocate) -- see derive_creators / emit_batch_creator
+    is_batch : bool
+    shape_a : bool              //! true = array of CreateInfos (pipelines); false = one AllocateInfo
+    count_member : string       //! shape B: CI member holding the element count (descriptorSetCount)
+    batch_call : array<BatchArg>  //! raw-call args in command param order
 }
 
 //! snake_case a vkCreateImage / vkAllocateMemory name -> create_image / allocate_memory
@@ -692,24 +713,26 @@ def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<Own
     for (c in reg.commands) {
         continue if (!empty(c.alias) || !key_exists(reg.enabled_commands, c.name) || !empty(c.protect) ||
             (!(c.name |> starts_with("vkCreate")) && !(c.name |> starts_with("vkAllocate"))))
-        // single out-handle (no len -> not a batch), a create-info struct, leading handle parents
+        // the out-handle (a `len` -> it produces an array -> batch); the create-info struct
+        // (its OWN len decides array-of-CreateInfos vs a single AllocateInfo); the leading
+        // np==0 handle parents (device, pipelineCache, ...).
         var out_handle = ""
-        var batch = false
+        var out_len = ""
         var ci_vk = ""
+        var ci_has_len = false
         var creator_params : array<ParentField>
         for (p in c.params) {
             if (key_exists(em.handle_names, p.type_name) && p.num_ptrs >= 1) {
                 out_handle = p.type_name
-                if (!empty(p.len)) {
-                    batch = true
-                }
+                out_len = p.len
             } elif (key_exists(em.handle_names, p.type_name) && p.num_ptrs == 0) {
                 creator_params |> emplace(ParentField(field = "_{das_safe_name(p.name)}", vktype = p.type_name))
             } elif (key_exists(view_set, p.type_name) && p.num_ptrs == 1) {
                 ci_vk = p.type_name
+                ci_has_len = !empty(p.len)
             }
         }
-        continue if (empty(out_handle) || batch || empty(ci_vk))
+        continue if (empty(out_handle) || empty(ci_vk))
         let oidx = owner_of?[out_handle] ?? -1
         continue if (oidx < 0)
         let oi & = unsafe(owners[oidx])
@@ -718,13 +741,53 @@ def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<Own
             fn_name = command_fn_name(c.name),
             handle = out_handle,
             boost = oi.boost,
-            create_info_boost = boost_name(ci_vk)
+            create_info_boost = boost_name(ci_vk),
+            create_info_vk = ci_vk
         )
         info.creator_params <- creator_params
         info.store_parents := oi.parents
+        if (!empty(out_len)) {
+            info.is_batch = true
+            info.shape_a = ci_has_len
+            info.count_member = batch_count_member(out_len)
+            info.batch_call <- derive_batch_call(em, c, view_set, out_len, ci_has_len)
+        }
         creators |> emplace(info)
     }
     return <- creators
+}
+
+//! shape B len: "pAllocateInfo->descriptorSetCount" -> "descriptorSetCount"
+def private batch_count_member(len_attr : string) : string {
+    let arrow = len_attr |> find("->")
+    return arrow >= 0 ? len_attr |> slice(arrow + 2) : len_attr
+}
+
+def private batch_arg(k : BatchArgKind; pname : string) : BatchArg {
+    var ba : BatchArg
+    ba.kind = k
+    ba.pname = pname
+    return ba
+}
+
+//! the raw-call args of a batch creator, in command param order: parents, the count
+//! scalar (shape A), the create-info, the allocator, the array out-handle.
+def private derive_batch_call(em : EmitModel; c : VkCommandDef; view_set : table<string>; out_len : string; shape_a : bool) : array<BatchArg> {
+    var call : array<BatchArg>
+    for (p in c.params) {
+        if (key_exists(em.handle_names, p.type_name) && p.num_ptrs >= 1) {
+            call |> emplace(batch_arg(BatchArgKind.out_handles, ""))
+        } elif (key_exists(em.handle_names, p.type_name) && p.num_ptrs == 0) {
+            call |> emplace(batch_arg(BatchArgKind.parent, das_safe_name(p.name)))
+        } elif (key_exists(view_set, p.type_name) && p.num_ptrs == 1) {
+            call |> emplace(batch_arg(shape_a ? BatchArgKind.create_infos : BatchArgKind.create_info, ""))
+        } elif (p.type_name == "VkAllocationCallbacks") {
+            call |> emplace(batch_arg(BatchArgKind.allocator, ""))
+        } elif (shape_a && p.name == out_len) {
+            call |> emplace(batch_arg(BatchArgKind.count, ""))
+        }
+    }
+    return <- call
 }
 
 def private param_name_of(field : string) : string {
@@ -735,6 +798,88 @@ def private param_name_of(field : string) : string {
     return field
 }
 
+def private batch_call_arg(a : BatchArg) : string {
+    if (a.kind == BatchArgKind.parent) {
+        return "boost_value_to_vk({a.pname})"
+    } elif (a.kind == BatchArgKind.count) {
+        return "uint(n)"
+    } elif (a.kind == BatchArgKind.create_infos) {
+        return "addr(vkraw[0])"
+    } elif (a.kind == BatchArgKind.create_info) {
+        return "vci"
+    } elif (a.kind == BatchArgKind.out_handles) {
+        return "addr(vkout[0])"
+    }
+    return "null"   // allocator
+}
+
+//! Emit a batch creator (array-producing Create/Allocate) -> array<Boost>. Shape A is an
+//! array of CreateInfos sized by createInfoCount (create_graphics_pipelines /
+//! create_compute_pipelines); shape B is a single AllocateInfo whose count member sizes the
+//! result (allocate_descriptor_sets / allocate_command_buffers). Mirrors the single-creator
+//! and the in_array_struct/out_array idioms (vk_view per element, addr() pointers, owning
+//! wrappers with stored parents).
+def private emit_batch_creator(f : file; ci : CreatorInfo; scratch_types : table<string>) {
+    let ci_var = key_exists(scratch_types, ci.create_info_boost) ? "var " : ""
+    fprint(f, "def {ci.fn_name}(")
+    for (pf in ci.creator_params) {
+        fprint(f, "{param_name_of(pf.field)} : {boost_name(pf.vktype)}; ")
+    }
+    if (ci.shape_a) {
+        fprint(f, "{ci_var}create_infos : array<{ci.create_info_boost}>; ")
+    } else {
+        fprint(f, "{ci_var}create_info : {ci.create_info_boost}; ")
+    }
+    fprint(f, "var result : VkResult? = null) : array<{ci.boost}> \{\n")
+    if (ci.shape_a) {
+        fprint(f, "    let n = length(create_infos)\n")
+        fprint(f, "    var vkraw : array<{ci.create_info_vk}>\n")
+        fprint(f, "    vkraw |> resize(n)\n")
+        fprint(f, "    for (vki in range(n)) \{\n")
+        fprint(f, "        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])\n")
+        fprint(f, "    \}\n")
+    } else {
+        fprint(f, "    let vci = vk_view_create_unsafe(create_info)\n")
+        fprint(f, "    defer() \{ vk_view_destroy(create_info) \}\n")
+        fprint(f, "    let n = int(vci.{ci.count_member})\n")
+    }
+    fprint(f, "    var vkout : array<{ci.handle}>\n")
+    fprint(f, "    vkout |> resize(n)\n")
+    fprint(f, "    if (n > 0) \{\n")
+    fprint(f, "        unsafe \{\n")
+    fprint(f, "            vk_check({ci.command}(")
+    var first = true
+    for (a in ci.batch_call) {
+        fprint(f, ", ") if (!first)
+        first = false
+        fprint(f, batch_call_arg(a))
+    }
+    fprint(f, "), result)\n")
+    fprint(f, "        \}\n")
+    fprint(f, "    \}\n")
+    if (ci.shape_a) {
+        fprint(f, "    for (vkv in create_infos) \{ vk_view_destroy(vkv) \}\n")
+        fprint(f, "    delete vkraw\n")
+    }
+    fprint(f, "    var blist : array<{ci.boost}>\n")
+    fprint(f, "    blist |> resize(n)\n")
+    fprint(f, "    for (i in range(n)) \{\n")
+    fprint(f, "        var b = vk_value_to_boost(vkout[i])\n")
+    fprint(f, "        b._needs_delete = true\n")
+    for (sp in ci.store_parents) {
+        for (cp in ci.creator_params) {
+            if (cp.vktype == sp.vktype) {
+                fprint(f, "        b.{sp.field} = unsafe(reinterpret<uint64>(boost_value_to_vk({param_name_of(cp.field)})))\n")
+                break
+            }
+        }
+    }
+    fprint(f, "        blist[i] = b\n")
+    fprint(f, "    \}\n")
+    fprint(f, "    return <- blist\n")
+    fprint(f, "\}\n\n")
+}
+
 [unused_argument(reg, em)]
 def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : string; creators : array<CreatorInfo>; scratch_types : table<string>) {
     fopen("{out_dir}/vulkan_commands.das", "wb") $(f) {
@@ -743,6 +888,10 @@ def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : stri
         fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_commands shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
         for (ci in creators) {
+            if (ci.is_batch) {
+                emit_batch_creator(f, ci, scratch_types)
+                continue
+            }
             // signature: creator's leading handle params (boost) + create_info + optional result
             fprint(f, "def {ci.fn_name}(")
             for (pf in ci.creator_params) {
@@ -1264,8 +1413,7 @@ def private emit_lint_data(creators : array<CreatorInfo>; plans : array<CmdPlan>
     // hand-written boost wrappers (vulkan_boost.das) the generator deliberately skips
     let hand <- [(raw = "vkCmdBindPipeline", boost = "cmd_bind_pipeline"),
                  (raw = "vkCmdDraw", boost = "cmd_draw"),
-                 (raw = "vkGetDeviceQueue", boost = "get_device_queue"),
-                 (raw = "vkCreateComputePipelines", boost = "create_compute_pipeline")]
+                 (raw = "vkGetDeviceQueue", boost = "get_device_queue")]
     for (h in hand) {
         if (!key_exists(seen, h.raw)) {
             seen |> insert(h.raw)
