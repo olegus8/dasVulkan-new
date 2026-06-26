@@ -12140,6 +12140,41 @@ def vk_view_destroy(_b : AccelerationStructureGeometryKHR) {
     pass
 }
 
+struct AccelerationStructureBuildGeometryInfoKHR {
+    next : void?
+    type_ : VkAccelerationStructureTypeKHR
+    flags : VkBuildAccelerationStructureFlagsKHR
+    mode : VkBuildAccelerationStructureModeKHR
+    srcAccelerationStructure : AccelerationStructureKHR
+    dstAccelerationStructure : AccelerationStructureKHR
+    pGeometries : array<AccelerationStructureGeometryKHR>
+    scratchData : VkDeviceOrHostAddressKHR
+    _vk_view_pGeometries : array<VkAccelerationStructureGeometryKHR>
+}
+def vk_view_create_unsafe(var b : AccelerationStructureBuildGeometryInfoKHR) : VkAccelerationStructureBuildGeometryInfoKHR {
+    var vk = VkAccelerationStructureBuildGeometryInfoKHR()
+    vk.pNext = b.next
+    vk.type_ = b.type_
+    vk.flags = b.flags
+    vk.mode = b.mode
+    vk.srcAccelerationStructure = boost_value_to_vk(b.srcAccelerationStructure)
+    vk.dstAccelerationStructure = boost_value_to_vk(b.dstAccelerationStructure)
+    b._vk_view_pGeometries |> resize(length(b.pGeometries))
+    for (vki in range(length(b.pGeometries))) {
+        b._vk_view_pGeometries[vki] = vk_view_create_unsafe(b.pGeometries[vki])
+    }
+    vk.pGeometries = array_addr(b._vk_view_pGeometries)
+    vk.scratchData = b.scratchData
+    vk.geometryCount = uint(length(b.pGeometries))
+    return <- vk
+}
+def vk_view_destroy(var b : AccelerationStructureBuildGeometryInfoKHR) {
+    for (vki in range(length(b.pGeometries))) {
+        vk_view_destroy(b.pGeometries[vki])
+    }
+    delete b._vk_view_pGeometries
+}
+
 struct AccelerationStructureBuildRangeInfoKHR {
     primitiveCount : uint
     primitiveOffset : uint
@@ -17624,6 +17659,45 @@ def vk_view_destroy(_b : PhysicalDeviceSubpassMergeFeedbackFeaturesEXT) {
     pass
 }
 
+struct MicromapBuildInfoEXT {
+    next : void?
+    type_ : VkMicromapTypeEXT
+    flags : VkBuildMicromapFlagsEXT
+    mode : VkBuildMicromapModeEXT
+    dstMicromap : MicromapEXT
+    pUsageCounts : array<MicromapUsageEXT>
+    data : VkDeviceOrHostAddressConstKHR
+    scratchData : VkDeviceOrHostAddressKHR
+    triangleArray : VkDeviceOrHostAddressConstKHR
+    triangleArrayStride : uint64
+    _vk_view_pUsageCounts : array<VkMicromapUsageEXT>
+}
+def vk_view_create_unsafe(var b : MicromapBuildInfoEXT) : VkMicromapBuildInfoEXT {
+    var vk = VkMicromapBuildInfoEXT()
+    vk.pNext = b.next
+    vk.type_ = b.type_
+    vk.flags = b.flags
+    vk.mode = b.mode
+    vk.dstMicromap = boost_value_to_vk(b.dstMicromap)
+    b._vk_view_pUsageCounts |> resize(length(b.pUsageCounts))
+    for (vki in range(length(b.pUsageCounts))) {
+        b._vk_view_pUsageCounts[vki] = vk_view_create_unsafe(b.pUsageCounts[vki])
+    }
+    vk.pUsageCounts = array_addr(b._vk_view_pUsageCounts)
+    vk.data = b.data
+    vk.scratchData = b.scratchData
+    vk.triangleArray = b.triangleArray
+    vk.triangleArrayStride = b.triangleArrayStride
+    vk.usageCountsCount = uint(length(b.pUsageCounts))
+    return <- vk
+}
+def vk_view_destroy(var b : MicromapBuildInfoEXT) {
+    for (vki in range(length(b.pUsageCounts))) {
+        vk_view_destroy(b.pUsageCounts[vki])
+    }
+    delete b._vk_view_pUsageCounts
+}
+
 struct MicromapCreateInfoEXT {
     next : void?
     createFlags : VkMicromapCreateFlagsEXT
@@ -17784,6 +17858,39 @@ def vk_view_create_unsafe(b : PhysicalDeviceOpacityMicromapPropertiesEXT) : VkPh
 }
 def vk_view_destroy(_b : PhysicalDeviceOpacityMicromapPropertiesEXT) {
     pass
+}
+
+struct AccelerationStructureTrianglesOpacityMicromapEXT {
+    next : void?
+    indexType : VkIndexType
+    indexBuffer : VkDeviceOrHostAddressConstKHR
+    indexStride : uint64
+    baseTriangle : uint
+    pUsageCounts : array<MicromapUsageEXT>
+    micromap : MicromapEXT
+    _vk_view_pUsageCounts : array<VkMicromapUsageEXT>
+}
+def vk_view_create_unsafe(var b : AccelerationStructureTrianglesOpacityMicromapEXT) : VkAccelerationStructureTrianglesOpacityMicromapEXT {
+    var vk = VkAccelerationStructureTrianglesOpacityMicromapEXT()
+    vk.pNext = b.next
+    vk.indexType = b.indexType
+    vk.indexBuffer = b.indexBuffer
+    vk.indexStride = b.indexStride
+    vk.baseTriangle = b.baseTriangle
+    b._vk_view_pUsageCounts |> resize(length(b.pUsageCounts))
+    for (vki in range(length(b.pUsageCounts))) {
+        b._vk_view_pUsageCounts[vki] = vk_view_create_unsafe(b.pUsageCounts[vki])
+    }
+    vk.pUsageCounts = array_addr(b._vk_view_pUsageCounts)
+    vk.micromap = boost_value_to_vk(b.micromap)
+    vk.usageCountsCount = uint(length(b.pUsageCounts))
+    return <- vk
+}
+def vk_view_destroy(var b : AccelerationStructureTrianglesOpacityMicromapEXT) {
+    for (vki in range(length(b.pUsageCounts))) {
+        vk_view_destroy(b.pUsageCounts[vki])
+    }
+    delete b._vk_view_pUsageCounts
 }
 
 struct PipelinePropertiesIdentifierEXT {

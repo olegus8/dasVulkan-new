@@ -2047,6 +2047,10 @@ def cmd_set_rasterization_samples_e_x_t(commandBuffer : CommandBuffer; rasteriza
     vkCmdSetRasterizationSamplesEXT(boost_value_to_vk(commandBuffer), rasterizationSamples)
 }
 
+def cmd_set_sample_mask_e_x_t(commandBuffer : CommandBuffer; samples : VkSampleCountFlags; var pSampleMask : array<uint>) {
+    vkCmdSetSampleMaskEXT(boost_value_to_vk(commandBuffer), samples, array_addr(pSampleMask))
+}
+
 def cmd_set_alpha_to_coverage_enable_e_x_t(commandBuffer : CommandBuffer; alphaToCoverageEnable : uint) {
     vkCmdSetAlphaToCoverageEnableEXT(boost_value_to_vk(commandBuffer), alphaToCoverageEnable)
 }
@@ -2221,6 +2225,14 @@ def get_physical_device_fragment_shading_rates_k_h_r(physicalDevice : PhysicalDe
         }
     }
     return <- vklist
+}
+
+def get_acceleration_structure_build_sizes_k_h_r(device : Device; buildType : VkAccelerationStructureBuildTypeKHR; var pBuildInfo : AccelerationStructureBuildGeometryInfoKHR; var pMaxPrimitiveCounts : array<uint>) : VkAccelerationStructureBuildSizesInfoKHR {
+    let vkview_pBuildInfo = vk_view_create_unsafe(pBuildInfo)
+    defer() { vk_view_destroy(pBuildInfo) }
+    var vkout : VkAccelerationStructureBuildSizesInfoKHR
+    vkGetAccelerationStructureBuildSizesKHR(boost_value_to_vk(device), buildType, vkview_pBuildInfo, array_addr(pMaxPrimitiveCounts), vkout)
+    return vkout
 }
 
 def cmd_set_vertex_input_e_x_t(commandBuffer : CommandBuffer; pVertexBindingDescriptions : array<VertexInputBindingDescription2EXT>; pVertexAttributeDescriptions : array<VertexInputAttributeDescription2EXT>) {
@@ -2526,6 +2538,28 @@ def get_descriptor_set_layout_host_mapping_info_v_a_l_v_e(device : Device; pBind
     return vkout
 }
 
+def cmd_build_micromaps_e_x_t(commandBuffer : CommandBuffer; var pInfos : array<MicromapBuildInfoEXT>) {
+    var vkraw_pInfos : array<VkMicromapBuildInfoEXT>
+    vkraw_pInfos |> resize(length(pInfos))
+    for (vki in range(length(pInfos))) {
+        vkraw_pInfos[vki] = vk_view_create_unsafe(pInfos[vki])
+    }
+    vkCmdBuildMicromapsEXT(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos))
+    for (vkv in pInfos) { vk_view_destroy(vkv) }
+    delete vkraw_pInfos
+}
+
+def build_micromaps_e_x_t(device : Device; deferredOperation : DeferredOperationKHR; var pInfos : array<MicromapBuildInfoEXT>; var result : VkResult? = null) {
+    var vkraw_pInfos : array<VkMicromapBuildInfoEXT>
+    vkraw_pInfos |> resize(length(pInfos))
+    for (vki in range(length(pInfos))) {
+        vkraw_pInfos[vki] = vk_view_create_unsafe(pInfos[vki])
+    }
+    vk_check(vkBuildMicromapsEXT(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos)), result)
+    for (vkv in pInfos) { vk_view_destroy(vkv) }
+    delete vkraw_pInfos
+}
+
 def cmd_copy_micromap_e_x_t(commandBuffer : CommandBuffer; pInfo : CopyMicromapInfoEXT) {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
@@ -2566,6 +2600,14 @@ def cmd_write_micromaps_properties_e_x_t(commandBuffer : CommandBuffer; pMicroma
     var vkraw_pMicromaps <- [for (h in pMicromaps); boost_value_to_vk(h)]
     vkCmdWriteMicromapsPropertiesEXT(boost_value_to_vk(commandBuffer), uint(length(pMicromaps)), array_addr(vkraw_pMicromaps), queryType, boost_value_to_vk(queryPool), firstQuery)
     unsafe { delete vkraw_pMicromaps }
+}
+
+def get_micromap_build_sizes_e_x_t(device : Device; buildType : VkAccelerationStructureBuildTypeKHR; var pBuildInfo : MicromapBuildInfoEXT) : VkMicromapBuildSizesInfoEXT {
+    let vkview_pBuildInfo = vk_view_create_unsafe(pBuildInfo)
+    defer() { vk_view_destroy(pBuildInfo) }
+    var vkout : VkMicromapBuildSizesInfoEXT
+    vkGetMicromapBuildSizesEXT(boost_value_to_vk(device), buildType, vkview_pBuildInfo, vkout)
+    return vkout
 }
 
 def get_shader_module_identifier_e_x_t(device : Device; shaderModule : ShaderModule) : VkShaderModuleIdentifierEXT {
