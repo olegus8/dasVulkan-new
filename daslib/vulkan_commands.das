@@ -219,6 +219,17 @@ def create_swapchain_k_h_r(device : Device; var create_info : SwapchainCreateInf
     return <- b
 }
 
+def create_indirect_commands_layout_n_v(device : Device; var create_info : IndirectCommandsLayoutCreateInfoNV; var result : VkResult? = null) : IndirectCommandsLayoutNV {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkIndirectCommandsLayoutNV
+    vk_check(vkCreateIndirectCommandsLayoutNV(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_indirect_commands_layout_e_x_t(device : Device; var create_info : IndirectCommandsLayoutCreateInfoEXT; var result : VkResult? = null) : IndirectCommandsLayoutEXT {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -307,6 +318,17 @@ def create_private_data_slot(device : Device; create_info : PrivateDataSlotCreat
     return <- b
 }
 
+def create_video_session_k_h_r(device : Device; var create_info : VideoSessionCreateInfoKHR; var result : VkResult? = null) : VideoSessionKHR {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkVideoSessionKHR
+    vk_check(vkCreateVideoSessionKHR(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_video_session_parameters_k_h_r(device : Device; create_info : VideoSessionParametersCreateInfoKHR; var result : VkResult? = null) : VideoSessionParametersKHR {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -367,6 +389,17 @@ def create_shader_instrumentation_a_r_m(device : Device; create_info : ShaderIns
     defer() { vk_view_destroy(create_info) }
     var h : VkShaderInstrumentationARM
     vk_check(vkCreateShaderInstrumentationARM(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+def create_tensor_a_r_m(device : Device; var create_info : TensorCreateInfoARM; var result : VkResult? = null) : TensorARM {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkTensorARM
+    vk_check(vkCreateTensorARM(boost_value_to_vk(device), vci, null, h), result)
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))

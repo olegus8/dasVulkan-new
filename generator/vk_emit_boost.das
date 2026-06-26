@@ -261,7 +261,14 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         return <- bf
     }
     if (!empty(m.arr_dims)) {
-        bf.kind = FieldKind.hard      // inline fixed-array members: defer
+        // inline fixed-array member -> scalar direct copy: the raw struct holds
+        // the same fixed array, so `vk.x = b.x` copies it element-wise.
+        bf.kind = FieldKind.scalar
+        var arr_t = scalar_field_type(reg, em, m)
+        for (d in m.arr_dims) {
+            arr_t = "{arr_t}[{d}]"
+        }
+        bf.boost_type = arr_t
         return <- bf
     }
     // arrays: a len that names a count member
@@ -289,8 +296,15 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
                 bf.elem_vktype = tn           // scratch holds the raw Vk struct
                 bf.elem_boost = boost_name(tn)
                 bf.boost_type = "array<{bf.elem_boost}>"
+            } elif (!key_exists(em.struct_emit, tn)) {
+                // array of enum / flags / scalar-typedef -> arr_scalar (the
+                // element is a value type; scalar_field_type resolves it)
+                let de = scalar_field_type(reg, em, m)
+                bf.kind = FieldKind.arr_scalar
+                bf.boost_type = "array<{de}>"
+                bf.elem_vktype = de
             } else {
-                bf.kind = FieldKind.hard      // array of enum / flags / non-mappable struct -> defer
+                bf.kind = FieldKind.hard      // array of non-mappable struct -> defer
             }
         }
         return <- bf
@@ -304,7 +318,7 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
     // optional single const ptr to a mappable struct (e.g., VkRenderingInfo.pDepthAttachment)
     // -> boost field is `T?`; caller passes `null` or `unsafe(addr(local))`; vk_view clones
     // the pointee into scratch so the caller's local only has to live across the view call.
-    if (m.num_ptrs == 1 && m.is_const && empty(m.len) && m.optional_attr == "true" && key_exists(mappable, tn)) {
+    if (m.num_ptrs == 1 && m.is_const && empty(m.len) && key_exists(mappable, tn)) {
         bf.kind = FieldKind.opt_struct_ptr
         bf.elem_vktype = tn
         bf.elem_boost = boost_name(tn)
@@ -312,7 +326,15 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         bf.is_optional = true
         return <- bf
     }
-    // any remaining pointer -> hard (void*, string arrays, scalar ptr, non-mappable struct ptr)
+    // an OPTIONAL remaining pointer (void*, scalar ptr, ptr to a non-mappable
+    // struct) -> omit the boost field; the raw slot stays null, which is exactly
+    // what optional="true" permits.  Lets a struct emit when its only blockers
+    // are optional raw pointers (e.g. pSampleMask, pSpecializationInfo).
+    if (m.num_ptrs >= 1 && m.is_const && m.optional_attr == "true") {
+        bf.kind = FieldKind.erase
+        return <- bf
+    }
+    // any remaining pointer -> hard (required void*, scalar ptr, non-mappable ptr)
     if (m.num_ptrs >= 1) {
         bf.kind = FieldKind.hard
         return <- bf
