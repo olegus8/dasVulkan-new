@@ -83,14 +83,14 @@ static VkResult WRAP_vkCreateAccelerationStructureKHR ( VkDevice device, const V
 #endif
 
 #if defined(VK_KHR_acceleration_structure)
-static void WRAP_vkCmdBuildAccelerationStructuresKHR ( VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, const VkAccelerationStructureBuildRangeInfoKHR * const * ppBuildRangeInfos ) {
-    ::vkCmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
+static void WRAP_vkCmdBuildAccelerationStructuresKHR ( VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, VkAccelerationStructureBuildRangeInfoKHR ** ppBuildRangeInfos ) {
+    ::vkCmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos, (const VkAccelerationStructureBuildRangeInfoKHR * const *)ppBuildRangeInfos);
 }
 #endif
 
 #if defined(VK_KHR_acceleration_structure)
-static VkResult WRAP_vkBuildAccelerationStructuresKHR ( VkDevice device, VkDeferredOperationKHR deferredOperation, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, const VkAccelerationStructureBuildRangeInfoKHR * const * ppBuildRangeInfos ) {
-    return ::vkBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos);
+static VkResult WRAP_vkBuildAccelerationStructuresKHR ( VkDevice device, VkDeferredOperationKHR deferredOperation, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, VkAccelerationStructureBuildRangeInfoKHR ** ppBuildRangeInfos ) {
+    return ::vkBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos, (const VkAccelerationStructureBuildRangeInfoKHR * const *)ppBuildRangeInfos);
 }
 #endif
 
