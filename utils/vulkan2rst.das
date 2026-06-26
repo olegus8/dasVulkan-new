@@ -67,7 +67,7 @@ def document_module_vulkan_boost() {
         group_by_regex("Mesh shaders",     mod, %regex~^(create_device_mesh_shader|mesh_shader_supported|create_mesh_pipeline)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth|depth_only)$%%),
         group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
-        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|write_field|upload_bytes)$%%),
+        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|transition_image|transition_depth_image|transition_image_aspect)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))

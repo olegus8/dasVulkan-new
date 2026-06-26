@@ -10,6 +10,14 @@ options indenting = 4
 // The fragment reads one value via each path -- rot column 2 (mat3 per-column), gain (the scalar right
 // after the float3) -- with 0.9 decoys elsewhere, so a wrong offset / column / stride yields a clearly
 // different pixel. Vertex is a plain fullscreen triangle; only the fragment reaches the push constant.
+//
+// SKIPPED on Mesa llvmpipe (lavapipe): llvmpipe mis-reads std140 PUSH constants where a member's offset
+// is tighter than naive 16-byte rounding -- a float immediately after a vec3 (std140 offset 12), and any
+// member after a mat3 -- reading them from the wrong offset. This is a llvmpipe driver bug, NOT a layout
+// bug on our side: the SAME std140 block reads correctly as a UBO and on real hardware, our SPIR-V is
+// byte-identical to glslang's + spirv-val-clean, and a fully hand-built push (explicit layout + manual
+// std140 bytes) fails on llvmpipe too. So we keep the full GPU render+read on real hardware and skip only
+// the read on llvmpipe; the shared std140 walk stays CI-gated on llvmpipe via the UBO path (test_ubo_mat3).
 
 require dastest/testing_boost public
 require vulkan
@@ -23,6 +31,7 @@ require spirv/spirv_reflect public
 require scene_helpers
 require math
 require daslib/math_boost
+require strings
 
 // std140 layout: rot @ 0 (3 cols * 16 = 48), hue @ 48 (vec3, 12 bytes), gain @ 60 (scalar packs into
 // the 4 bytes after the vec3 -- NOT at 64). Total 64.
@@ -65,7 +74,6 @@ def private render_push() : array<uint8> {
     let gfx = select_graphics_queue_family(phys)
     var inscope device <- create_device(phys, gfx)
     volkLoadDevice(boost_value_to_vk(device))
-    let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
     let fmt = VkFormat.R8G8B8A8_UNORM
 
@@ -113,8 +121,28 @@ def private render_push() : array<uint8> {
     return <- pixels
 }
 
+// True on Mesa llvmpipe (lavapipe) -- see the header note. A throwaway instance just to read the device
+// name; the render below makes its own.
+def private is_llvmpipe() : bool {
+    if (volkInitialize() != 0) {
+        return false
+    }
+    var inscope instance <- create_instance("push_std140 driver probe", make_api_version(1u, 2u, 0u))
+    volkLoadInstance(boost_value_to_vk(instance))
+    let phys = select_physical_device(instance)
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    unsafe {
+        return find("{reinterpret<string>(addr(props.deviceName[0]))}", "llvmpipe") >= 0
+    }
+}
+
 [test]
 def test_push_std140(t : T?) {
+    if (is_llvmpipe()) {
+        t->skip("Mesa llvmpipe mis-reads std140 push constants (float-after-vec3 / post-mat3 read from the wrong offset in PushConstant storage). Driver bug, not ours: same block reads correctly as a UBO + on real hardware, SPIR-V is glslang-identical + spirv-val-clean. See the header note.")
+        return
+    }
     var pixels <- render_push()
     let c = px(pixels, 128, 128)
     // hue.x=0.2 -> R~51, gain=0.4 -> G~102, rot col2.z=0.6 -> B~153. The scalar `gain` reading right
