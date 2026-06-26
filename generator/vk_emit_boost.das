@@ -198,6 +198,7 @@ struct BoostField {
     count_member : string   //! for arrays: the raw count member name
     is_handle_elem : bool
     is_optional : bool      //! for arrays: optional="true" (may be empty -> null pointer)
+    arr_raw_ptr : string    //! for flags-arrays: raw field ptr type (uint?/uint64?), reinterpret target; "" = none
 }
 
 //! names of members that are the count for some array member (len=thatName)
@@ -261,6 +262,12 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         return <- bf
     }
     if (!empty(m.arr_dims)) {
+        // a fixed array of handles is a fixed array of pointers, which das will not
+        // whole-array-copy (`vk.x = b.x`) -> defer the whole struct to raw-only
+        if (elem_is_handle(em, tn)) {
+            bf.kind = FieldKind.hard
+            return <- bf
+        }
         // inline fixed-array member -> scalar direct copy: the raw struct holds
         // the same fixed array, so `vk.x = b.x` copies it element-wise.
         bf.kind = FieldKind.scalar
@@ -303,6 +310,15 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
                 bf.kind = FieldKind.arr_scalar
                 bf.boost_type = "array<{de}>"
                 bf.elem_vktype = de
+                // a Flags-TYPEDEF member (VkXxxFlags) binds its raw pointer as
+                // uint?/uint64?, but a FlagBits-ENUM member (VkXxxFlagBits) binds it
+                // as the bitfield itself -> reinterpret only the typedef case
+                let mfi = em.flags_lookup?[tn] ?? FlagsInfo()
+                if (mfi.kind == FlagsKind.flags64) {
+                    bf.arr_raw_ptr = "uint64?"
+                } elif (mfi.kind == FlagsKind.flags32) {
+                    bf.arr_raw_ptr = "uint?"
+                }
             } else {
                 bf.kind = FieldKind.hard      // array of non-mappable struct -> defer
             }
@@ -568,7 +584,14 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     // array_addr returns null for an empty array, so an optional empty array
                     // becomes a null pointer (with its count left to the count pass below)
                     fprint(f, "    b._vk_view_{bf.name} := b.{bf.name}\n")
-                    fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
+                    // a Flags-typedef array's raw pointer is uint?/uint64? but the boost
+                    // scratch holds the bitfield alias -> reinterpret to match (set at
+                    // classify time; "" for FlagBits-enum / plain-scalar arrays that match)
+                    if (!empty(bf.arr_raw_ptr)) {
+                        fprint(f, "    vk.{bf.name} = unsafe(reinterpret<{bf.arr_raw_ptr}>(array_addr(b._vk_view_{bf.name})))\n")
+                    } else {
+                        fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
+                    }
                 } elif (bf.kind == FieldKind.arr_handle) {
                     fprint(f, "    b._vk_view_{bf.name} <- [for (h in b.{bf.name}); boost_value_to_vk(h)]\n")
                     fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
