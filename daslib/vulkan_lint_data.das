@@ -310,6 +310,8 @@ let public VK_WRAPPED : table<string; string> <- {
     "vkGetPipelineExecutableInternalRepresentationsKHR" => "get_pipeline_executable_internal_representations_k_h_r",
     "vkCmdSetLineStipple" => "cmd_set_line_stipple",
     "vkGetPhysicalDeviceToolProperties" => "get_physical_device_tool_properties",
+    "vkCmdBuildAccelerationStructuresKHR" => "cmd_build_acceleration_structures_k_h_r",
+    "vkBuildAccelerationStructuresKHR" => "build_acceleration_structures_k_h_r",
     "vkGetAccelerationStructureDeviceAddressKHR" => "get_acceleration_structure_device_address_k_h_r",
     "vkGetDeferredOperationMaxConcurrencyKHR" => "get_deferred_operation_max_concurrency_k_h_r",
     "vkGetDeferredOperationResultKHR" => "get_deferred_operation_result_k_h_r",

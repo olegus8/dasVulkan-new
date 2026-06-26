@@ -998,6 +998,7 @@ enum CmdArgKind {
     in_array_scalar //! count+const scalar/enum ptr -> array<scalar>
     in_array_handle //! count+const handle ptr -> array<BoostHandle>
     in_array_struct //! count+const mappable-struct ptr -> array<BoostStruct> (recursive vk_view)
+    in_array2_struct //! count+const T* const* mappable struct -> array<array<BoostStruct>> (jagged)
     in_scalar       //! by-value scalar / enum / flags
     in_string       //! const char*
     erasevkcount     //! input count member named by an input array's len -> uint(length(arr))
@@ -1123,6 +1124,16 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             plan.has_out_array = true
             plan.out_array_pname = a.pname
             plan.out_array_elem = p.type_name
+            plan.args |> emplace(a)
+            continue
+        }
+        // jagged const T* const* of a mappable struct -> array<array<Boost>> (the inner
+        // length is per-element, carried by the owning struct; no count param to erase)
+        if (p.num_ptrs == 2 && p.is_const && !empty(p.len) && key_exists(view_set, p.type_name)) {
+            a.kind = CmdArgKind.in_array2_struct
+            a.elem_boost = boost_name(p.type_name)
+            a.elem_vktype = p.type_name
+            a.boost_type = "array<array<{a.elem_boost}>>"
             plan.args |> emplace(a)
             continue
         }
@@ -1294,6 +1305,8 @@ def private call_arg(a : CmdArg) : string {
         return "array_addr({a.pname})"
     } elif (a.kind == CmdArgKind.in_array_handle || a.kind == CmdArgKind.in_array_struct) {
         return "array_addr(vkraw_{a.pname})"
+    } elif (a.kind == CmdArgKind.in_array2_struct) {
+        return "array_addr(vkptr_{a.pname})"
     } elif (a.kind == CmdArgKind.erasevkcount) {
         return "uint(length({a.count_for}))"
     } elif (a.kind == CmdArgKind.count_query) {
@@ -1317,7 +1330,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
             for (a in plan.args) {
                 let in_sig = (a.kind == CmdArgKind.in_handle || a.kind == CmdArgKind.in_view ||
                     a.kind == CmdArgKind.in_array_scalar || a.kind == CmdArgKind.in_array_handle ||
-                    a.kind == CmdArgKind.in_array_struct ||
+                    a.kind == CmdArgKind.in_array_struct || a.kind == CmdArgKind.in_array2_struct ||
                     a.kind == CmdArgKind.in_scalar || a.kind == CmdArgKind.in_string)
                 continue if (!in_sig)
                 if (!first) {
@@ -1326,7 +1339,8 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 first = false
                 // in_array_scalar always needs var (array_addr); a view / struct-array needs var only
                 // when its vk_view mutates `b` (scratch fields) -- scratch-free views forward read-only.
-                var needs_var = a.kind == CmdArgKind.in_array_scalar
+                var needs_var = (a.kind == CmdArgKind.in_array_scalar ||
+                    a.kind == CmdArgKind.in_array2_struct)
                 if (a.kind == CmdArgKind.in_view) {
                     needs_var = key_exists(scratch_types, a.boost_type)
                 } elif (a.kind == CmdArgKind.in_array_struct) {
@@ -1360,6 +1374,20 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "    vkraw_{a.pname} |> resize(length({a.pname}))\n")
                     fprint(f, "    for (vki in range(length({a.pname}))) {OB}\n")
                     fprint(f, "        vkraw_{a.pname}[vki] = vk_view_create_unsafe({a.pname}[vki])\n")
+                    fprint(f, "    {CB}\n")
+                } elif (a.kind == CmdArgKind.in_array2_struct) {
+                    // jagged: raw inner arrays kept in vkraw2_, a data pointer per inner
+                    // in vkptr_; array_addr(vkptr_) is the const T* const* the raw call wants.
+                    fprint(f, "    var vkraw2_{a.pname} : array<array<{a.elem_vktype}>>\n")
+                    fprint(f, "    vkraw2_{a.pname} |> resize(length({a.pname}))\n")
+                    fprint(f, "    var vkptr_{a.pname} : array<{a.elem_vktype}?>\n")
+                    fprint(f, "    vkptr_{a.pname} |> resize(length({a.pname}))\n")
+                    fprint(f, "    for (vki in range(length({a.pname}))) {OB}\n")
+                    fprint(f, "        vkraw2_{a.pname}[vki] |> resize(length({a.pname}[vki]))\n")
+                    fprint(f, "        for (vkj in range(length({a.pname}[vki]))) {OB}\n")
+                    fprint(f, "            vkraw2_{a.pname}[vki][vkj] = vk_view_create_unsafe({a.pname}[vki][vkj])\n")
+                    fprint(f, "        {CB}\n")
+                    fprint(f, "        vkptr_{a.pname}[vki] = array_addr(vkraw2_{a.pname}[vki])\n")
                     fprint(f, "    {CB}\n")
                 }
             }
@@ -1452,6 +1480,13 @@ def private emit_scratch_cleanup(f : file; plan : CmdPlan) {
         } elif (a.kind == CmdArgKind.in_array_struct) {
             fprint(f, "    for (vkv in {a.pname}) {OB} vk_view_destroy(vkv) {CB}\n")
             fprint(f, "    delete vkraw_{a.pname}\n")
+        } elif (a.kind == CmdArgKind.in_array2_struct) {
+            fprint(f, "    for (vkrow in {a.pname}) {OB}\n")
+            fprint(f, "        for (vkv in vkrow) {OB} vk_view_destroy(vkv) {CB}\n")
+            fprint(f, "    {CB}\n")
+            fprint(f, "    for (vki in range(length(vkraw2_{a.pname}))) {OB} delete vkraw2_{a.pname}[vki] {CB}\n")
+            fprint(f, "    delete vkraw2_{a.pname}\n")
+            fprint(f, "    delete vkptr_{a.pname}\n")
         }
     }
 }
