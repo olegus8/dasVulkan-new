@@ -110,6 +110,60 @@ def create_image_view(device : Device; create_info : ImageViewCreateInfo; var re
     return <- b
 }
 
+def create_graphics_pipelines(device : Device; pipelineCache : PipelineCache; var create_infos : array<GraphicsPipelineCreateInfo>; var result : VkResult? = null) : array<Pipeline> {
+    let n = length(create_infos)
+    var vkraw : array<VkGraphicsPipelineCreateInfo>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkPipeline>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<Pipeline>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
+}
+
+def create_compute_pipelines(device : Device; pipelineCache : PipelineCache; create_infos : array<ComputePipelineCreateInfo>; var result : VkResult? = null) : array<Pipeline> {
+    let n = length(create_infos)
+    var vkraw : array<VkComputePipelineCreateInfo>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkPipeline>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateComputePipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<Pipeline>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
+}
+
 def create_pipeline_layout(device : Device; var create_info : PipelineLayoutCreateInfo; var result : VkResult? = null) : PipelineLayout {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -154,6 +208,28 @@ def create_descriptor_pool(device : Device; var create_info : DescriptorPoolCrea
     return <- b
 }
 
+def allocate_descriptor_sets(device : Device; var create_info : DescriptorSetAllocateInfo; var result : VkResult? = null) : array<DescriptorSet> {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    let n = int(vci.descriptorSetCount)
+    var vkout : array<VkDescriptorSet>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkAllocateDescriptorSets(boost_value_to_vk(device), vci, addr(vkout[0])), result)
+        }
+    }
+    var blist : array<DescriptorSet>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
+}
+
 def create_framebuffer(device : Device; var create_info : FramebufferCreateInfo; var result : VkResult? = null) : Framebuffer {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -187,6 +263,28 @@ def create_command_pool(device : Device; create_info : CommandPoolCreateInfo; va
     return <- b
 }
 
+def allocate_command_buffers(device : Device; create_info : CommandBufferAllocateInfo; var result : VkResult? = null) : array<CommandBuffer> {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    let n = int(vci.commandBufferCount)
+    var vkout : array<VkCommandBuffer>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), vci, addr(vkout[0])), result)
+        }
+    }
+    var blist : array<CommandBuffer>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
+}
+
 def create_display_mode_k_h_r(physicalDevice : PhysicalDevice; display : DisplayKHR; create_info : DisplayModeCreateInfoKHR; var result : VkResult? = null) : DisplayModeKHR {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -206,6 +304,33 @@ def create_display_plane_surface_k_h_r(instance : Instance; create_info : Displa
     b._needs_delete = true
     b._instance = unsafe(reinterpret<uint64>(boost_value_to_vk(instance)))
     return <- b
+}
+
+def create_shared_swapchains_k_h_r(device : Device; var create_infos : array<SwapchainCreateInfoKHR>; var result : VkResult? = null) : array<SwapchainKHR> {
+    let n = length(create_infos)
+    var vkraw : array<VkSwapchainCreateInfoKHR>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkSwapchainKHR>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateSharedSwapchainsKHR(boost_value_to_vk(device), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<SwapchainKHR>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
 }
 
 def create_swapchain_k_h_r(device : Device; var create_info : SwapchainCreateInfoKHR; var result : VkResult? = null) : SwapchainKHR {
@@ -283,6 +408,60 @@ def create_render_pass2(device : Device; var create_info : RenderPassCreateInfo2
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
     return <- b
+}
+
+def create_ray_tracing_pipelines_n_v(device : Device; pipelineCache : PipelineCache; var create_infos : array<RayTracingPipelineCreateInfoNV>; var result : VkResult? = null) : array<Pipeline> {
+    let n = length(create_infos)
+    var vkraw : array<VkRayTracingPipelineCreateInfoNV>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkPipeline>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateRayTracingPipelinesNV(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<Pipeline>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
+}
+
+def create_ray_tracing_pipelines_k_h_r(device : Device; deferredOperation : DeferredOperationKHR; pipelineCache : PipelineCache; var create_infos : array<RayTracingPipelineCreateInfoKHR>; var result : VkResult? = null) : array<Pipeline> {
+    let n = length(create_infos)
+    var vkraw : array<VkRayTracingPipelineCreateInfoKHR>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkPipeline>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateRayTracingPipelinesKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<Pipeline>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
 }
 
 def create_headless_surface_e_x_t(instance : Instance; create_info : HeadlessSurfaceCreateInfoEXT; var result : VkResult? = null) : SurfaceKHR {
@@ -415,6 +594,33 @@ def create_tensor_view_a_r_m(device : Device; create_info : TensorViewCreateInfo
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
     return <- b
+}
+
+def create_data_graph_pipelines_a_r_m(device : Device; deferredOperation : DeferredOperationKHR; pipelineCache : PipelineCache; var create_infos : array<DataGraphPipelineCreateInfoARM>; var result : VkResult? = null) : array<Pipeline> {
+    let n = length(create_infos)
+    var vkraw : array<VkDataGraphPipelineCreateInfoARM>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkPipeline>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateDataGraphPipelinesARM(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<Pipeline>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
 }
 
 def create_data_graph_pipeline_session_a_r_m(device : Device; create_info : DataGraphPipelineSessionCreateInfoARM; var result : VkResult? = null) : DataGraphPipelineSessionARM {
