@@ -83,6 +83,18 @@ static VkResult WRAP_vkCreateAccelerationStructureKHR ( VkDevice device, const V
 #endif
 
 #if defined(VK_KHR_acceleration_structure)
+static void WRAP_vkCmdBuildAccelerationStructuresKHR ( VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, const VkAccelerationStructureBuildRangeInfoKHR * const * ppBuildRangeInfos ) {
+    ::vkCmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
+}
+#endif
+
+#if defined(VK_KHR_acceleration_structure)
+static VkResult WRAP_vkBuildAccelerationStructuresKHR ( VkDevice device, VkDeferredOperationKHR deferredOperation, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR * pInfos, const VkAccelerationStructureBuildRangeInfoKHR * const * ppBuildRangeInfos ) {
+    return ::vkBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos);
+}
+#endif
+
+#if defined(VK_KHR_acceleration_structure)
 static uint64_t WRAP_vkGetAccelerationStructureDeviceAddressKHR ( VkDevice device, const VkAccelerationStructureDeviceAddressInfoKHR & pInfo ) {
     return (uint64_t)::vkGetAccelerationStructureDeviceAddressKHR(device, &pInfo);
 }
@@ -278,6 +290,14 @@ void das_vulkan_init_funcs_11(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_acceleration_structure)
     addExtern<DAS_BIND_FUN(WRAP_vkCreateAccelerationStructureKHR)>(mod, lib, "vkCreateAccelerationStructureKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateAccelerationStructureKHR")
         ->args({"device","pCreateInfo","pAllocator","pAccelerationStructure"});
+#endif
+#if defined(VK_KHR_acceleration_structure)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBuildAccelerationStructuresKHR)>(mod, lib, "vkCmdBuildAccelerationStructuresKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBuildAccelerationStructuresKHR")
+        ->args({"commandBuffer","infoCount","pInfos","ppBuildRangeInfos"});
+#endif
+#if defined(VK_KHR_acceleration_structure)
+    addExtern<DAS_BIND_FUN(WRAP_vkBuildAccelerationStructuresKHR)>(mod, lib, "vkBuildAccelerationStructuresKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkBuildAccelerationStructuresKHR")
+        ->args({"device","deferredOperation","infoCount","pInfos","ppBuildRangeInfos"});
 #endif
 #if defined(VK_KHR_acceleration_structure)
     addExtern<DAS_BIND_FUN(WRAP_vkGetAccelerationStructureDeviceAddressKHR)>(mod, lib, "vkGetAccelerationStructureDeviceAddressKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetAccelerationStructureDeviceAddressKHR")

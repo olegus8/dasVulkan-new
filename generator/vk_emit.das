@@ -909,6 +909,13 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
             }
             return <- r
         }
+        if (np == 2 && cst) {
+            // const T* const* (jagged array of T): typed double pointer; the boost
+            // wrapper builds the pointer-of-pointers, the raw C call takes it as-is.
+            r.cpp_param = "const {tn} * const * {n}"
+            r.call_arg = n
+            return <- r
+        }
         return MappedParam(ok = false, reason = "struct ptr depth {np}")
     }
     return MappedParam(ok = false, reason = "unknown param type {tn}")

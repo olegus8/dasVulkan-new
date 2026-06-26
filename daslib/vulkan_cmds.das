@@ -1902,6 +1902,62 @@ def get_physical_device_tool_properties(physicalDevice : PhysicalDevice; var res
     return <- vklist
 }
 
+def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var pInfos : array<AccelerationStructureBuildGeometryInfoKHR>; var ppBuildRangeInfos : array<array<AccelerationStructureBuildRangeInfoKHR>>) {
+    var vkraw_pInfos : array<VkAccelerationStructureBuildGeometryInfoKHR>
+    vkraw_pInfos |> resize(length(pInfos))
+    for (vki in range(length(pInfos))) {
+        vkraw_pInfos[vki] = vk_view_create_unsafe(pInfos[vki])
+    }
+    var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
+    vkraw2_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
+    var vkptr_ppBuildRangeInfos : array<VkAccelerationStructureBuildRangeInfoKHR?>
+    vkptr_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
+    for (vki in range(length(ppBuildRangeInfos))) {
+        vkraw2_ppBuildRangeInfos[vki] |> resize(length(ppBuildRangeInfos[vki]))
+        for (vkj in range(length(ppBuildRangeInfos[vki]))) {
+            vkraw2_ppBuildRangeInfos[vki][vkj] = vk_view_create_unsafe(ppBuildRangeInfos[vki][vkj])
+        }
+        vkptr_ppBuildRangeInfos[vki] = array_addr(vkraw2_ppBuildRangeInfos[vki])
+    }
+    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), array_addr(vkptr_ppBuildRangeInfos))
+    for (vkv in pInfos) { vk_view_destroy(vkv) }
+    delete vkraw_pInfos
+    for (vkrow in ppBuildRangeInfos) {
+        for (vkv in vkrow) { vk_view_destroy(vkv) }
+    }
+    for (vki in range(length(vkraw2_ppBuildRangeInfos))) { delete vkraw2_ppBuildRangeInfos[vki] }
+    delete vkraw2_ppBuildRangeInfos
+    delete vkptr_ppBuildRangeInfos
+}
+
+def build_acceleration_structures_k_h_r(device : Device; deferredOperation : DeferredOperationKHR; var pInfos : array<AccelerationStructureBuildGeometryInfoKHR>; var ppBuildRangeInfos : array<array<AccelerationStructureBuildRangeInfoKHR>>; var result : VkResult? = null) {
+    var vkraw_pInfos : array<VkAccelerationStructureBuildGeometryInfoKHR>
+    vkraw_pInfos |> resize(length(pInfos))
+    for (vki in range(length(pInfos))) {
+        vkraw_pInfos[vki] = vk_view_create_unsafe(pInfos[vki])
+    }
+    var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
+    vkraw2_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
+    var vkptr_ppBuildRangeInfos : array<VkAccelerationStructureBuildRangeInfoKHR?>
+    vkptr_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
+    for (vki in range(length(ppBuildRangeInfos))) {
+        vkraw2_ppBuildRangeInfos[vki] |> resize(length(ppBuildRangeInfos[vki]))
+        for (vkj in range(length(ppBuildRangeInfos[vki]))) {
+            vkraw2_ppBuildRangeInfos[vki][vkj] = vk_view_create_unsafe(ppBuildRangeInfos[vki][vkj])
+        }
+        vkptr_ppBuildRangeInfos[vki] = array_addr(vkraw2_ppBuildRangeInfos[vki])
+    }
+    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), array_addr(vkptr_ppBuildRangeInfos)), result)
+    for (vkv in pInfos) { vk_view_destroy(vkv) }
+    delete vkraw_pInfos
+    for (vkrow in ppBuildRangeInfos) {
+        for (vkv in vkrow) { vk_view_destroy(vkv) }
+    }
+    for (vki in range(length(vkraw2_ppBuildRangeInfos))) { delete vkraw2_ppBuildRangeInfos[vki] }
+    delete vkraw2_ppBuildRangeInfos
+    delete vkptr_ppBuildRangeInfos
+}
+
 def get_acceleration_structure_device_address_k_h_r(device : Device; pInfo : AccelerationStructureDeviceAddressInfoKHR) : uint64 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
