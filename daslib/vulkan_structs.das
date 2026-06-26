@@ -3003,7 +3003,7 @@ def vk_view_create_unsafe(var b : SubmitInfo) : VkSubmitInfo {
     b._vk_view_pWaitSemaphores <- [for (h in b.pWaitSemaphores); boost_value_to_vk(h)]
     vk.pWaitSemaphores = array_addr(b._vk_view_pWaitSemaphores)
     b._vk_view_pWaitDstStageMask := b.pWaitDstStageMask
-    vk.pWaitDstStageMask = array_addr(b._vk_view_pWaitDstStageMask)
+    vk.pWaitDstStageMask = unsafe(reinterpret<uint?>(array_addr(b._vk_view_pWaitDstStageMask)))
     b._vk_view_pCommandBuffers <- [for (h in b.pCommandBuffers); boost_value_to_vk(h)]
     vk.pCommandBuffers = array_addr(b._vk_view_pCommandBuffers)
     b._vk_view_pSignalSemaphores <- [for (h in b.pSignalSemaphores); boost_value_to_vk(h)]
@@ -4975,22 +4975,6 @@ def vk_view_create_unsafe(b : SwapchainCounterCreateInfoEXT) : VkSwapchainCounte
     return <- vk
 }
 def vk_view_destroy(_b : SwapchainCounterCreateInfoEXT) {
-    pass
-}
-
-struct PhysicalDeviceGroupProperties {
-    next : void?
-    physicalDevices : VkPhysicalDevice[VK_MAX_DEVICE_GROUP_SIZE]
-    subsetAllocation : uint
-}
-def vk_view_create_unsafe(b : PhysicalDeviceGroupProperties) : VkPhysicalDeviceGroupProperties {
-    var vk = VkPhysicalDeviceGroupProperties()
-    vk.pNext = b.next
-    vk.physicalDevices = b.physicalDevices
-    vk.subsetAllocation = b.subsetAllocation
-    return <- vk
-}
-def vk_view_destroy(_b : PhysicalDeviceGroupProperties) {
     pass
 }
 
@@ -7933,7 +7917,7 @@ def vk_view_create_unsafe(var b : DescriptorSetLayoutBindingFlagsCreateInfo) : V
     var vk = VkDescriptorSetLayoutBindingFlagsCreateInfo()
     vk.pNext = b.next
     b._vk_view_pBindingFlags := b.pBindingFlags
-    vk.pBindingFlags = array_addr(b._vk_view_pBindingFlags)
+    vk.pBindingFlags = unsafe(reinterpret<uint?>(array_addr(b._vk_view_pBindingFlags)))
     vk.bindingCount = uint(length(b.pBindingFlags))
     return <- vk
 }
@@ -17536,7 +17520,7 @@ def vk_view_create_unsafe(var b : ImageCompressionControlEXT) : VkImageCompressi
     vk.pNext = b.next
     vk.flags = b.flags
     b._vk_view_pFixedRateFlags := b.pFixedRateFlags
-    vk.pFixedRateFlags = array_addr(b._vk_view_pFixedRateFlags)
+    vk.pFixedRateFlags = unsafe(reinterpret<uint?>(array_addr(b._vk_view_pFixedRateFlags)))
     vk.compressionControlPlaneCount = b.compressionControlPlaneCount != 0u ? b.compressionControlPlaneCount : uint(length(b.pFixedRateFlags))
     return <- vk
 }
