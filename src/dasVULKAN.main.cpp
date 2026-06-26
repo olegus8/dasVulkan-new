@@ -1,4 +1,5 @@
 #include "dasVULKAN.h"
+#include <cstdio>
 
 #if defined(_WIN32)
 // volk forward-declares the Win32 handle TYPES (HWND/HINSTANCE) but does not pull
@@ -132,6 +133,25 @@ static uint64_t das_vk_surface_from_native(VkInstance instance, void * native_wi
     return (uint64_t) surface;
 }
 
+// A default debug-utils messenger callback: prints the diagnostic and returns
+// VK_FALSE (do not abort the triggering call). Exposed as a raw void* so the das
+// side can install it as VkDebugUtilsMessengerCreateInfoEXT.pfnUserCallback --
+// the interpreter cannot hand a das function to Vulkan as a C callback.
+static VKAPI_ATTR VkBool32 VKAPI_CALL das_vk_debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT types,
+    const VkDebugUtilsMessengerCallbackDataEXT * data, void * user) {
+    (void) severity; (void) types; (void) user;
+    fprintf(stderr, "[vulkan] %s\n",
+        data && data->pMessage ? data->pMessage : "");
+    fflush(stderr);
+    return VK_FALSE;
+}
+
+static void * das_vk_debug_callback_ptr() {
+    return (void *) das_vk_debug_callback;
+}
+
 Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();
@@ -150,6 +170,8 @@ Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
         SideEffects::accessExternal, "das_vk_get_instance_proc_addr");
     addExtern<DAS_BIND_FUN(das_vk_surface_from_native)>(*this, lib, "vk_surface_from_native",
         SideEffects::modifyExternal, "das_vk_surface_from_native")->args({"instance", "native_window", "native_display"});
+    addExtern<DAS_BIND_FUN(das_vk_debug_callback_ptr)>(*this, lib, "vk_debug_callback",
+        SideEffects::accessExternal, "das_vk_debug_callback_ptr");
     verifyAotReady();
 }
 
