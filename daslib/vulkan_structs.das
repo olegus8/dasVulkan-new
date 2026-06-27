@@ -1768,6 +1768,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(b._vk_view_pVertexInputState_value)
             b._vk_view_pVertexInputState_present = true
             vk.pVertexInputState = addr(b._vk_view_pVertexInputState_vk)
+            b.pVertexInputState = null
         }
     }
     unsafe {
@@ -1776,6 +1777,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pInputAssemblyState_vk = vk_view_create_unsafe(b._vk_view_pInputAssemblyState_value)
             b._vk_view_pInputAssemblyState_present = true
             vk.pInputAssemblyState = addr(b._vk_view_pInputAssemblyState_vk)
+            b.pInputAssemblyState = null
         }
     }
     unsafe {
@@ -1784,6 +1786,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pTessellationState_vk = vk_view_create_unsafe(b._vk_view_pTessellationState_value)
             b._vk_view_pTessellationState_present = true
             vk.pTessellationState = addr(b._vk_view_pTessellationState_vk)
+            b.pTessellationState = null
         }
     }
     unsafe {
@@ -1792,6 +1795,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pViewportState_vk = vk_view_create_unsafe(b._vk_view_pViewportState_value)
             b._vk_view_pViewportState_present = true
             vk.pViewportState = addr(b._vk_view_pViewportState_vk)
+            b.pViewportState = null
         }
     }
     unsafe {
@@ -1800,6 +1804,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pRasterizationState_vk = vk_view_create_unsafe(b._vk_view_pRasterizationState_value)
             b._vk_view_pRasterizationState_present = true
             vk.pRasterizationState = addr(b._vk_view_pRasterizationState_vk)
+            b.pRasterizationState = null
         }
     }
     unsafe {
@@ -1808,6 +1813,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pMultisampleState_vk = vk_view_create_unsafe(b._vk_view_pMultisampleState_value)
             b._vk_view_pMultisampleState_present = true
             vk.pMultisampleState = addr(b._vk_view_pMultisampleState_vk)
+            b.pMultisampleState = null
         }
     }
     unsafe {
@@ -1816,6 +1822,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pDepthStencilState_vk = vk_view_create_unsafe(b._vk_view_pDepthStencilState_value)
             b._vk_view_pDepthStencilState_present = true
             vk.pDepthStencilState = addr(b._vk_view_pDepthStencilState_vk)
+            b.pDepthStencilState = null
         }
     }
     unsafe {
@@ -1824,6 +1831,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pColorBlendState_vk = vk_view_create_unsafe(b._vk_view_pColorBlendState_value)
             b._vk_view_pColorBlendState_present = true
             vk.pColorBlendState = addr(b._vk_view_pColorBlendState_vk)
+            b.pColorBlendState = null
         }
     }
     unsafe {
@@ -1832,6 +1840,7 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
             b._vk_view_pDynamicState_vk = vk_view_create_unsafe(b._vk_view_pDynamicState_value)
             b._vk_view_pDynamicState_present = true
             vk.pDynamicState = addr(b._vk_view_pDynamicState_vk)
+            b.pDynamicState = null
         }
     }
     vk.layout = boost_value_to_vk(b.layout)
@@ -1959,6 +1968,7 @@ def vk_view_create_unsafe(var b : PipelineBinaryCreateInfoKHR) : VkPipelineBinar
             b._vk_view_pPipelineCreateInfo_vk = vk_view_create_unsafe(b._vk_view_pPipelineCreateInfo_value)
             b._vk_view_pPipelineCreateInfo_present = true
             vk.pPipelineCreateInfo = addr(b._vk_view_pPipelineCreateInfo_vk)
+            b.pPipelineCreateInfo = null
         }
     }
     return <- vk
@@ -2212,6 +2222,7 @@ def vk_view_create_unsafe(var b : CommandBufferBeginInfo) : VkCommandBufferBegin
             b._vk_view_pInheritanceInfo_vk = vk_view_create_unsafe(b._vk_view_pInheritanceInfo_value)
             b._vk_view_pInheritanceInfo_present = true
             vk.pInheritanceInfo = addr(b._vk_view_pInheritanceInfo_vk)
+            b.pInheritanceInfo = null
         }
     }
     return <- vk
@@ -2336,6 +2347,7 @@ def vk_view_create_unsafe(var b : SubpassDescription) : VkSubpassDescription {
             b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(b._vk_view_pDepthStencilAttachment_value)
             b._vk_view_pDepthStencilAttachment_present = true
             vk.pDepthStencilAttachment = addr(b._vk_view_pDepthStencilAttachment_vk)
+            b.pDepthStencilAttachment = null
         }
     }
     b._vk_view_pPreserveAttachments := b.pPreserveAttachments
@@ -3894,6 +3906,7 @@ def vk_view_create_unsafe(var b : GraphicsShaderGroupCreateInfoNV) : VkGraphicsS
             b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(b._vk_view_pVertexInputState_value)
             b._vk_view_pVertexInputState_present = true
             vk.pVertexInputState = addr(b._vk_view_pVertexInputState_vk)
+            b.pVertexInputState = null
         }
     }
     unsafe {
@@ -3902,6 +3915,7 @@ def vk_view_create_unsafe(var b : GraphicsShaderGroupCreateInfoNV) : VkGraphicsS
             b._vk_view_pTessellationState_vk = vk_view_create_unsafe(b._vk_view_pTessellationState_value)
             b._vk_view_pTessellationState_present = true
             vk.pTessellationState = addr(b._vk_view_pTessellationState_vk)
+            b.pTessellationState = null
         }
     }
     vk.stageCount = uint(length(b.pStages))
@@ -6204,6 +6218,7 @@ def vk_view_create_unsafe(var b : DeviceBufferMemoryRequirements) : VkDeviceBuff
             b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(b._vk_view_pCreateInfo_value)
             b._vk_view_pCreateInfo_present = true
             vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
+            b.pCreateInfo = null
         }
     }
     return <- vk
@@ -6260,6 +6275,7 @@ def vk_view_create_unsafe(var b : DeviceImageMemoryRequirements) : VkDeviceImage
             b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(b._vk_view_pCreateInfo_value)
             b._vk_view_pCreateInfo_present = true
             vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
+            b.pCreateInfo = null
         }
     }
     vk.planeAspect = b.planeAspect
@@ -8033,6 +8049,7 @@ def vk_view_create_unsafe(var b : SubpassDescription2) : VkSubpassDescription2 {
             b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(b._vk_view_pDepthStencilAttachment_value)
             b._vk_view_pDepthStencilAttachment_present = true
             vk.pDepthStencilAttachment = addr(b._vk_view_pDepthStencilAttachment_vk)
+            b.pDepthStencilAttachment = null
         }
     }
     b._vk_view_pPreserveAttachments := b.pPreserveAttachments
@@ -8591,6 +8608,7 @@ def vk_view_create_unsafe(var b : SubpassDescriptionDepthStencilResolve) : VkSub
             b._vk_view_pDepthStencilResolveAttachment_vk = vk_view_create_unsafe(b._vk_view_pDepthStencilResolveAttachment_value)
             b._vk_view_pDepthStencilResolveAttachment_present = true
             vk.pDepthStencilResolveAttachment = addr(b._vk_view_pDepthStencilResolveAttachment_vk)
+            b.pDepthStencilResolveAttachment = null
         }
     }
     return <- vk
@@ -9369,6 +9387,7 @@ def vk_view_create_unsafe(var b : RayTracingPipelineCreateInfoKHR) : VkRayTracin
             b._vk_view_pLibraryInfo_vk = vk_view_create_unsafe(b._vk_view_pLibraryInfo_value)
             b._vk_view_pLibraryInfo_present = true
             vk.pLibraryInfo = addr(b._vk_view_pLibraryInfo_vk)
+            b.pLibraryInfo = null
         }
     }
     unsafe {
@@ -9377,6 +9396,7 @@ def vk_view_create_unsafe(var b : RayTracingPipelineCreateInfoKHR) : VkRayTracin
             b._vk_view_pLibraryInterface_vk = vk_view_create_unsafe(b._vk_view_pLibraryInterface_value)
             b._vk_view_pLibraryInterface_present = true
             vk.pLibraryInterface = addr(b._vk_view_pLibraryInterface_vk)
+            b.pLibraryInterface = null
         }
     }
     unsafe {
@@ -9385,6 +9405,7 @@ def vk_view_create_unsafe(var b : RayTracingPipelineCreateInfoKHR) : VkRayTracin
             b._vk_view_pDynamicState_vk = vk_view_create_unsafe(b._vk_view_pDynamicState_value)
             b._vk_view_pDynamicState_present = true
             vk.pDynamicState = addr(b._vk_view_pDynamicState_vk)
+            b.pDynamicState = null
         }
     }
     vk.layout = boost_value_to_vk(b.layout)
@@ -13240,6 +13261,7 @@ def vk_view_create_unsafe(var b : FragmentShadingRateAttachmentInfoKHR) : VkFrag
             b._vk_view_pFragmentShadingRateAttachment_vk = vk_view_create_unsafe(b._vk_view_pFragmentShadingRateAttachment_value)
             b._vk_view_pFragmentShadingRateAttachment_present = true
             vk.pFragmentShadingRateAttachment = addr(b._vk_view_pFragmentShadingRateAttachment_vk)
+            b.pFragmentShadingRateAttachment = null
         }
     }
     vk.shadingRateAttachmentTexelSize = b.shadingRateAttachmentTexelSize
@@ -14083,6 +14105,7 @@ def vk_view_create_unsafe(var b : PipelineViewportDepthClampControlCreateInfoEXT
             b._vk_view_pDepthClampRange_vk = vk_view_create_unsafe(b._vk_view_pDepthClampRange_value)
             b._vk_view_pDepthClampRange_present = true
             vk.pDepthClampRange = addr(b._vk_view_pDepthClampRange_vk)
+            b.pDepthClampRange = null
         }
     }
     return <- vk
@@ -15044,6 +15067,7 @@ def vk_view_create_unsafe(var b : VideoReferenceSlotInfoKHR) : VkVideoReferenceS
             b._vk_view_pPictureResource_vk = vk_view_create_unsafe(b._vk_view_pPictureResource_value)
             b._vk_view_pPictureResource_present = true
             vk.pPictureResource = addr(b._vk_view_pPictureResource_vk)
+            b.pPictureResource = null
         }
     }
     return <- vk
@@ -15111,6 +15135,7 @@ def vk_view_create_unsafe(var b : VideoDecodeInfoKHR) : VkVideoDecodeInfoKHR {
             b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(b._vk_view_pSetupReferenceSlot_value)
             b._vk_view_pSetupReferenceSlot_present = true
             vk.pSetupReferenceSlot = addr(b._vk_view_pSetupReferenceSlot_vk)
+            b.pSetupReferenceSlot = null
         }
     }
     b._vk_view_pReferenceSlots |> resize(length(b.pReferenceSlots))
@@ -15221,6 +15246,7 @@ def vk_view_create_unsafe(var b : VideoSessionCreateInfoKHR) : VkVideoSessionCre
             b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(b._vk_view_pVideoProfile_value)
             b._vk_view_pVideoProfile_present = true
             vk.pVideoProfile = addr(b._vk_view_pVideoProfile_vk)
+            b.pVideoProfile = null
         }
     }
     vk.pictureFormat = b.pictureFormat
@@ -15234,6 +15260,7 @@ def vk_view_create_unsafe(var b : VideoSessionCreateInfoKHR) : VkVideoSessionCre
             b._vk_view_pStdHeaderVersion_vk = vk_view_create_unsafe(b._vk_view_pStdHeaderVersion_value)
             b._vk_view_pStdHeaderVersion_present = true
             vk.pStdHeaderVersion = addr(b._vk_view_pStdHeaderVersion_vk)
+            b.pStdHeaderVersion = null
         }
     }
     return <- vk
@@ -15413,6 +15440,7 @@ def vk_view_create_unsafe(var b : VideoEncodeInfoKHR) : VkVideoEncodeInfoKHR {
             b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(b._vk_view_pSetupReferenceSlot_value)
             b._vk_view_pSetupReferenceSlot_present = true
             vk.pSetupReferenceSlot = addr(b._vk_view_pSetupReferenceSlot_vk)
+            b.pSetupReferenceSlot = null
         }
     }
     b._vk_view_pReferenceSlots |> resize(length(b.pReferenceSlots))
@@ -15524,6 +15552,7 @@ def vk_view_create_unsafe(var b : PhysicalDeviceVideoEncodeQualityLevelInfoKHR) 
             b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(b._vk_view_pVideoProfile_value)
             b._vk_view_pVideoProfile_present = true
             vk.pVideoProfile = addr(b._vk_view_pVideoProfile_vk)
+            b.pVideoProfile = null
         }
     }
     vk.qualityLevel = b.qualityLevel
@@ -16149,6 +16178,7 @@ def vk_view_create_unsafe(var b : CommandBufferInheritanceViewportScissorInfoNV)
             b._vk_view_pViewportDepths_vk = vk_view_create_unsafe(b._vk_view_pViewportDepths_value)
             b._vk_view_pViewportDepths_present = true
             vk.pViewportDepths = addr(b._vk_view_pViewportDepths_vk)
+            b.pViewportDepths = null
         }
     }
     return <- vk
@@ -16999,6 +17029,7 @@ def vk_view_create_unsafe(var b : RenderingInfo) : VkRenderingInfo {
             b._vk_view_pDepthAttachment_vk = vk_view_create_unsafe(b._vk_view_pDepthAttachment_value)
             b._vk_view_pDepthAttachment_present = true
             vk.pDepthAttachment = addr(b._vk_view_pDepthAttachment_vk)
+            b.pDepthAttachment = null
         }
     }
     unsafe {
@@ -17007,6 +17038,7 @@ def vk_view_create_unsafe(var b : RenderingInfo) : VkRenderingInfo {
             b._vk_view_pStencilAttachment_vk = vk_view_create_unsafe(b._vk_view_pStencilAttachment_value)
             b._vk_view_pStencilAttachment_present = true
             vk.pStencilAttachment = addr(b._vk_view_pStencilAttachment_vk)
+            b.pStencilAttachment = null
         }
     }
     vk.colorAttachmentCount = uint(length(b.pColorAttachments))
@@ -19060,6 +19092,7 @@ def vk_view_create_unsafe(var b : DeviceImageSubresourceInfo) : VkDeviceImageSub
             b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(b._vk_view_pCreateInfo_value)
             b._vk_view_pCreateInfo_present = true
             vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
+            b.pCreateInfo = null
         }
     }
     unsafe {
@@ -19068,6 +19101,7 @@ def vk_view_create_unsafe(var b : DeviceImageSubresourceInfo) : VkDeviceImageSub
             b._vk_view_pSubresource_vk = vk_view_create_unsafe(b._vk_view_pSubresource_value)
             b._vk_view_pSubresource_present = true
             vk.pSubresource = addr(b._vk_view_pSubresource_vk)
+            b.pSubresource = null
         }
     }
     return <- vk
@@ -19348,6 +19382,7 @@ def vk_view_create_unsafe(var b : AntiLagDataAMD) : VkAntiLagDataAMD {
             b._vk_view_pPresentationInfo_vk = vk_view_create_unsafe(b._vk_view_pPresentationInfo_value)
             b._vk_view_pPresentationInfo_present = true
             vk.pPresentationInfo = addr(b._vk_view_pPresentationInfo_vk)
+            b.pPresentationInfo = null
         }
     }
     return <- vk
@@ -20941,6 +20976,7 @@ def vk_view_create_unsafe(var b : TensorCreateInfoARM) : VkTensorCreateInfoARM {
             b._vk_view_pDescription_vk = vk_view_create_unsafe(b._vk_view_pDescription_value)
             b._vk_view_pDescription_present = true
             vk.pDescription = addr(b._vk_view_pDescription_vk)
+            b.pDescription = null
         }
     }
     vk.sharingMode = b.sharingMode
@@ -21167,6 +21203,7 @@ def vk_view_create_unsafe(var b : DeviceTensorMemoryRequirementsARM) : VkDeviceT
             b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(b._vk_view_pCreateInfo_value)
             b._vk_view_pCreateInfo_present = true
             vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
+            b.pCreateInfo = null
         }
     }
     return <- vk
@@ -21357,6 +21394,7 @@ def vk_view_create_unsafe(var b : PhysicalDeviceExternalTensorInfoARM) : VkPhysi
             b._vk_view_pDescription_vk = vk_view_create_unsafe(b._vk_view_pDescription_value)
             b._vk_view_pDescription_present = true
             vk.pDescription = addr(b._vk_view_pDescription_vk)
+            b.pDescription = null
         }
     }
     vk.handleType = b.handleType
@@ -21790,6 +21828,7 @@ def vk_view_create_unsafe(var b : DataGraphPipelineBuiltinModelCreateInfoQCOM) :
             b._vk_view_pOperation_vk = vk_view_create_unsafe(b._vk_view_pOperation_value)
             b._vk_view_pOperation_present = true
             vk.pOperation = addr(b._vk_view_pOperation_vk)
+            b.pOperation = null
         }
     }
     return <- vk
@@ -22149,6 +22188,7 @@ def vk_view_create_unsafe(var b : ImageDescriptorInfoEXT) : VkImageDescriptorInf
             b._vk_view_pView_vk = vk_view_create_unsafe(b._vk_view_pView_value)
             b._vk_view_pView_present = true
             vk.pView = addr(b._vk_view_pView_vk)
+            b.pView = null
         }
     }
     vk.layout = b.layout
@@ -22197,6 +22237,7 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceConstantOffsetEXT) : Vk
             b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(b._vk_view_pEmbeddedSampler_value)
             b._vk_view_pEmbeddedSampler_present = true
             vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
+            b.pEmbeddedSampler = null
         }
     }
     vk.samplerHeapOffset = b.samplerHeapOffset
@@ -22237,6 +22278,7 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourcePushIndexEXT) : VkDescr
             b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(b._vk_view_pEmbeddedSampler_value)
             b._vk_view_pEmbeddedSampler_present = true
             vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
+            b.pEmbeddedSampler = null
         }
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
@@ -22283,6 +22325,7 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceIndirectIndexEXT) : VkD
             b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(b._vk_view_pEmbeddedSampler_value)
             b._vk_view_pEmbeddedSampler_present = true
             vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
+            b.pEmbeddedSampler = null
         }
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
@@ -22327,6 +22370,7 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceIndirectIndexArrayEXT) 
             b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(b._vk_view_pEmbeddedSampler_value)
             b._vk_view_pEmbeddedSampler_present = true
             vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
+            b.pEmbeddedSampler = null
         }
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
@@ -22384,6 +22428,7 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceShaderRecordIndexEXT) :
             b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(b._vk_view_pEmbeddedSampler_value)
             b._vk_view_pEmbeddedSampler_present = true
             vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
+            b.pEmbeddedSampler = null
         }
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex

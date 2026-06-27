@@ -643,12 +643,16 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                 } elif (bf.kind == FieldKind.opt_struct_ptr) {
                     // clone the caller's pointee into our scratch (decoupling lifetime), then
                     // recursively view it; the raw vk pointer goes to the raw scratch slot.
+                    // The boost field holds the caller's non-owning addr (a local), so once
+                    // it is cloned we null it: the default finalize deletes a populated T?
+                    // field, and freeing a borrowed local is not a heap chunk.
                     fprint(f, "    unsafe {OB}\n")
                     fprint(f, "        if (b.{bf.name} != null) {OB}\n")
                     fprint(f, "            b._vk_view_{bf.name}_value := *b.{bf.name}\n")
                     fprint(f, "            b._vk_view_{bf.name}_vk = vk_view_create_unsafe(b._vk_view_{bf.name}_value)\n")
                     fprint(f, "            b._vk_view_{bf.name}_present = true\n")
                     fprint(f, "            vk.{bf.name} = addr(b._vk_view_{bf.name}_vk)\n")
+                    fprint(f, "            b.{bf.name} = null\n")
                     fprint(f, "        {CB}\n")
                     fprint(f, "    {CB}\n")
                 }
