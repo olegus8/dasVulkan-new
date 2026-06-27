@@ -1910,16 +1910,16 @@ def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var p
     }
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     vkraw2_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
-    var vkptr_ppBuildRangeInfos : array<VkAccelerationStructureBuildRangeInfoKHR?>
+    var vkptr_ppBuildRangeInfos : array<void?>
     vkptr_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
     for (vki in range(length(ppBuildRangeInfos))) {
         vkraw2_ppBuildRangeInfos[vki] |> resize(length(ppBuildRangeInfos[vki]))
         for (vkj in range(length(ppBuildRangeInfos[vki]))) {
             vkraw2_ppBuildRangeInfos[vki][vkj] = vk_view_create_unsafe(ppBuildRangeInfos[vki][vkj])
         }
-        vkptr_ppBuildRangeInfos[vki] = array_addr(vkraw2_ppBuildRangeInfos[vki])
+        vkptr_ppBuildRangeInfos[vki] = unsafe(reinterpret<void?>(array_addr(vkraw2_ppBuildRangeInfos[vki])))
     }
-    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), array_addr(vkptr_ppBuildRangeInfos))
+    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR??>(array_addr(vkptr_ppBuildRangeInfos))))
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     for (vkrow in ppBuildRangeInfos) {
@@ -1938,16 +1938,16 @@ def build_acceleration_structures_k_h_r(device : Device; deferredOperation : Def
     }
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     vkraw2_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
-    var vkptr_ppBuildRangeInfos : array<VkAccelerationStructureBuildRangeInfoKHR?>
+    var vkptr_ppBuildRangeInfos : array<void?>
     vkptr_ppBuildRangeInfos |> resize(length(ppBuildRangeInfos))
     for (vki in range(length(ppBuildRangeInfos))) {
         vkraw2_ppBuildRangeInfos[vki] |> resize(length(ppBuildRangeInfos[vki]))
         for (vkj in range(length(ppBuildRangeInfos[vki]))) {
             vkraw2_ppBuildRangeInfos[vki][vkj] = vk_view_create_unsafe(ppBuildRangeInfos[vki][vkj])
         }
-        vkptr_ppBuildRangeInfos[vki] = array_addr(vkraw2_ppBuildRangeInfos[vki])
+        vkptr_ppBuildRangeInfos[vki] = unsafe(reinterpret<void?>(array_addr(vkraw2_ppBuildRangeInfos[vki])))
     }
-    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), array_addr(vkptr_ppBuildRangeInfos)), result)
+    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR??>(array_addr(vkptr_ppBuildRangeInfos)))), result)
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     for (vkrow in ppBuildRangeInfos) {
