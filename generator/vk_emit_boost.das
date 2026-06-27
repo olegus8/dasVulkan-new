@@ -1287,7 +1287,7 @@ def private call_arg(a : CmdArg) : string {
     } elif (a.kind == CmdArgKind.in_array_handle || a.kind == CmdArgKind.in_array_struct) {
         return "array_addr(vkraw_{a.pname})"
     } elif (a.kind == CmdArgKind.in_array2_struct) {
-        return "array_addr(vkptr_{a.pname})"
+        return "unsafe(reinterpret<{a.elem_vktype}??>(array_addr(vkptr_{a.pname})))"
     } elif (a.kind == CmdArgKind.erasevkcount) {
         return "uint(length({a.count_for}))"
     } elif (a.kind == CmdArgKind.count_query) {
@@ -1359,16 +1359,18 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 } elif (a.kind == CmdArgKind.in_array2_struct) {
                     // jagged: raw inner arrays kept in vkraw2_, a data pointer per inner
                     // in vkptr_; array_addr(vkptr_) is the const T* const* the raw call wants.
+                    // vkptr_ holds void? (not T?): a T? array would have das free each
+                    // interior pointer on delete (double-free), so keep it non-owning.
                     fprint(f, "    var vkraw2_{a.pname} : array<array<{a.elem_vktype}>>\n")
                     fprint(f, "    vkraw2_{a.pname} |> resize(length({a.pname}))\n")
-                    fprint(f, "    var vkptr_{a.pname} : array<{a.elem_vktype}?>\n")
+                    fprint(f, "    var vkptr_{a.pname} : array<void?>\n")
                     fprint(f, "    vkptr_{a.pname} |> resize(length({a.pname}))\n")
                     fprint(f, "    for (vki in range(length({a.pname}))) {OB}\n")
                     fprint(f, "        vkraw2_{a.pname}[vki] |> resize(length({a.pname}[vki]))\n")
                     fprint(f, "        for (vkj in range(length({a.pname}[vki]))) {OB}\n")
                     fprint(f, "            vkraw2_{a.pname}[vki][vkj] = vk_view_create_unsafe({a.pname}[vki][vkj])\n")
                     fprint(f, "        {CB}\n")
-                    fprint(f, "        vkptr_{a.pname}[vki] = array_addr(vkraw2_{a.pname}[vki])\n")
+                    fprint(f, "        vkptr_{a.pname}[vki] = unsafe(reinterpret<void?>(array_addr(vkraw2_{a.pname}[vki])))\n")
                     fprint(f, "    {CB}\n")
                 }
             }
