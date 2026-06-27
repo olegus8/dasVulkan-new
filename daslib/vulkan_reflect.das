@@ -8,7 +8,7 @@ options indenting = 4
 // layouts. Bindings used by several stages at the same (set, binding) are merged with their stage
 // flags OR-ed; push-constant ranges sharing an (offset, size) likewise.
 
-module vulkan_reflect
+module vulkan_reflect shared
 
 require vulkan public
 require vulkan/vulkan_boost public

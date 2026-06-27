@@ -3,7 +3,7 @@
 options gen2
 options indenting = 4
 
-module vulkan_structs
+module vulkan_structs shared
 
 require vulkan public
 require vulkan/vulkan_ctors public

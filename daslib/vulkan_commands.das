@@ -3,7 +3,7 @@
 options gen2
 options indenting = 4
 
-module vulkan_commands
+module vulkan_commands shared
 
 require vulkan public
 require vulkan/vulkan_handles public

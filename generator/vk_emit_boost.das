@@ -31,7 +31,7 @@ def private emit_ctors(reg : VkRegistry; em : EmitModel; out_dir : string) {
     fopen("{out_dir}/vulkan_ctors.das", "wb") $(f) {
         panic("can't write vulkan_ctors.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_ctors\n\nrequire vulkan public\n\n")
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_ctors shared\n\nrequire vulkan public\n\n")
         for (s in reg.structs) {
             continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect))
             // find the sType member (always named "sType" with a values= attribute)
@@ -137,7 +137,7 @@ def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
     fopen("{out_dir}/vulkan_handles.das", "wb") $(f) {
         panic("can't write vulkan_handles.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_handles\n\n")
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_handles shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_runtime public\n\n")
         for (oi in owners) {
             // wrapper struct -- handles stored as uint64 (their ABI form) so wrapper
@@ -494,7 +494,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
     fopen("{out_dir}/vulkan_structs.das", "wb") $(f) {
         panic("can't write vulkan_structs.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_structs\n\n")
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_structs shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_ctors public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_runtime public\nrequire math\n\n")
         for (vs in views) {
             let s & = unsafe(reg.structs[vs.s_index])
@@ -718,7 +718,7 @@ def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : stri
     fopen("{out_dir}/vulkan_commands.das", "wb") $(f) {
         panic("can't write vulkan_commands.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_commands\n\n")
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_commands shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
         for (ci in creators) {
             // signature: creator's leading handle params (boost) + create_info + optional result
@@ -1071,7 +1071,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
     fopen("{out_dir}/vulkan_cmds.das", "wb") $(f) {
         panic("can't write vulkan_cmds.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_cmds\n\n")
+        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_cmds shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
         for (plan in plans) {
             // --- signature ---

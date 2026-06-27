@@ -6,7 +6,7 @@ options indenting = 4
 // generated files can require it without a cycle (vulkan_boost re-exports the
 // generated files, so it sits above them).
 
-module vulkan_runtime
+module vulkan_runtime shared
 
 require vulkan public
 

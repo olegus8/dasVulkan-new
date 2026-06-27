@@ -6,7 +6,7 @@ options indenting = 4
 // skips (instance/device/render-pass/shader-module/pipeline). Re-exports the
 // generated boost so users `require vulkan/vulkan_boost` and get everything.
 
-module vulkan_boost
+module vulkan_boost shared
 
 require vulkan public
 require vulkan/vulkan_runtime public
