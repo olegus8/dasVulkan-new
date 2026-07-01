@@ -23,7 +23,7 @@ def load_spirv(path : string) : array<uint8> {
         panic("missing shader {path}")
     }
     fopen(path, "rb") $(f) {
-        fload(f, int(fs.size)) $(data : array<uint8>) {
+        fload(f, int64(fs.size)) $(data : array<uint8>) {
             out := data
         }
     }

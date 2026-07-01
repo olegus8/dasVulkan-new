@@ -321,11 +321,12 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         // inline fixed-array member -> scalar direct copy: the raw struct holds
         // the same fixed array, so `vk.x = b.x` copies it element-wise.
         bf.kind = FieldKind.scalar
-        var arr_t = scalar_field_type(reg, em, m)
-        for (d in m.arr_dims) {
-            arr_t = "{arr_t}[{d}]"
+        bf.boost_type = build_string() $(writer) {
+            writer |> write(scalar_field_type(reg, em, m))
+            for (d in m.arr_dims) {
+                writer |> write("[{d}]")
+            }
         }
-        bf.boost_type = arr_t
         return <- bf
     }
     // arrays: a len that names a count member
@@ -847,12 +848,7 @@ def private batch_count_member(len_attr : string) : string {
     return arrow >= 0 ? len_attr |> slice(arrow + 2) : len_attr
 }
 
-def private batch_arg(k : BatchArgKind; pname : string) : BatchArg {
-    var ba : BatchArg
-    ba.kind = k
-    ba.pname = pname
-    return ba
-}
+def private batch_arg(k : BatchArgKind; pname : string) : BatchArg => BatchArg(kind = k, pname = pname)
 
 //! the raw-call args of a batch creator, in command param order: parents, the count
 //! scalar (shape A), the create-info, the allocator, the array out-handle.
@@ -1519,7 +1515,7 @@ def private emit_scratch_cleanup(f : file; plan : CmdPlan) {
             fprint(f, "    for (vkrow in {a.pname}) {OB}\n")
             fprint(f, "        for (vkv in vkrow) {OB} vk_view_destroy(vkv) {CB}\n")
             fprint(f, "    {CB}\n")
-            fprint(f, "    for (vki in range(length(vkraw2_{a.pname}))) {OB} delete vkraw2_{a.pname}[vki] {CB}\n")
+            fprint(f, "    for (vkrow2 in vkraw2_{a.pname}) {OB} delete vkrow2 {CB}\n")
             fprint(f, "    delete vkraw2_{a.pname}\n")
             fprint(f, "    delete vkptr_{a.pname}\n")
         }
