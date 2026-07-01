@@ -854,7 +854,7 @@ def cmd_bind_pipeline_shader_group_n_v(commandBuffer : CommandBuffer; pipelineBi
 def get_generated_commands_memory_requirements_n_v(device : Device; pInfo : GeneratedCommandsMemoryRequirementsInfoNV) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetGeneratedCommandsMemoryRequirementsNV(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -874,7 +874,7 @@ def cmd_preprocess_generated_commands_e_x_t(commandBuffer : CommandBuffer; pGene
 def get_generated_commands_memory_requirements_e_x_t(device : Device; pInfo : GeneratedCommandsMemoryRequirementsInfoEXT) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetGeneratedCommandsMemoryRequirementsEXT(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -902,19 +902,19 @@ def update_indirect_execution_set_shader_e_x_t(device : Device; indirectExecutio
 }
 
 def get_physical_device_features2(physicalDevice : PhysicalDevice) : VkPhysicalDeviceFeatures2 {
-    var vkout : VkPhysicalDeviceFeatures2
+    var vkout = VkPhysicalDeviceFeatures2()
     vkGetPhysicalDeviceFeatures2(boost_value_to_vk(physicalDevice), vkout)
     return vkout
 }
 
 def get_physical_device_properties2(physicalDevice : PhysicalDevice) : VkPhysicalDeviceProperties2 {
-    var vkout : VkPhysicalDeviceProperties2
+    var vkout = VkPhysicalDeviceProperties2()
     vkGetPhysicalDeviceProperties2(boost_value_to_vk(physicalDevice), vkout)
     return vkout
 }
 
 def get_physical_device_format_properties2(physicalDevice : PhysicalDevice; format : VkFormat) : VkFormatProperties2 {
-    var vkout : VkFormatProperties2
+    var vkout = VkFormatProperties2()
     vkGetPhysicalDeviceFormatProperties2(boost_value_to_vk(physicalDevice), format, vkout)
     return vkout
 }
@@ -922,7 +922,7 @@ def get_physical_device_format_properties2(physicalDevice : PhysicalDevice; form
 def get_physical_device_image_format_properties2(physicalDevice : PhysicalDevice; pImageFormatInfo : PhysicalDeviceImageFormatInfo2; var result : VkResult? = null) : VkImageFormatProperties2 {
     let vkview_pImageFormatInfo = vk_view_create_unsafe(pImageFormatInfo)
     defer() { vk_view_destroy(pImageFormatInfo) }
-    var vkout : VkImageFormatProperties2
+    var vkout = VkImageFormatProperties2()
     vk_check(vkGetPhysicalDeviceImageFormatProperties2(boost_value_to_vk(physicalDevice), vkview_pImageFormatInfo, vkout), result)
     return vkout
 }
@@ -932,6 +932,9 @@ def get_physical_device_queue_family_properties2(physicalDevice : PhysicalDevice
     vkGetPhysicalDeviceQueueFamilyProperties2(boost_value_to_vk(physicalDevice), vkcount, null)
     var vklist : array<VkQueueFamilyProperties2>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkQueueFamilyProperties2()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetPhysicalDeviceQueueFamilyProperties2(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0]))
@@ -941,7 +944,7 @@ def get_physical_device_queue_family_properties2(physicalDevice : PhysicalDevice
 }
 
 def get_physical_device_memory_properties2(physicalDevice : PhysicalDevice) : VkPhysicalDeviceMemoryProperties2 {
-    var vkout : VkPhysicalDeviceMemoryProperties2
+    var vkout = VkPhysicalDeviceMemoryProperties2()
     vkGetPhysicalDeviceMemoryProperties2(boost_value_to_vk(physicalDevice), vkout)
     return vkout
 }
@@ -953,6 +956,9 @@ def get_physical_device_sparse_image_format_properties2(physicalDevice : Physica
     vkGetPhysicalDeviceSparseImageFormatProperties2(boost_value_to_vk(physicalDevice), vkview_pFormatInfo, vkcount, null)
     var vklist : array<VkSparseImageFormatProperties2>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkSparseImageFormatProperties2()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetPhysicalDeviceSparseImageFormatProperties2(boost_value_to_vk(physicalDevice), vkview_pFormatInfo, vkcount, addr(vklist[0]))
@@ -979,7 +985,7 @@ def trim_command_pool(device : Device; commandPool : CommandPool; flags : VkComm
 def get_physical_device_external_buffer_properties(physicalDevice : PhysicalDevice; pExternalBufferInfo : PhysicalDeviceExternalBufferInfo) : VkExternalBufferProperties {
     let vkview_pExternalBufferInfo = vk_view_create_unsafe(pExternalBufferInfo)
     defer() { vk_view_destroy(pExternalBufferInfo) }
-    var vkout : VkExternalBufferProperties
+    var vkout = VkExternalBufferProperties()
     vkGetPhysicalDeviceExternalBufferProperties(boost_value_to_vk(physicalDevice), vkview_pExternalBufferInfo, vkout)
     return vkout
 }
@@ -993,7 +999,7 @@ def get_memory_fd_k_h_r(device : Device; pGetFdInfo : MemoryGetFdInfoKHR; var re
 }
 
 def get_memory_fd_properties_k_h_r(device : Device; handleType : VkExternalMemoryHandleTypeFlags; fd : int; var result : VkResult? = null) : VkMemoryFdPropertiesKHR {
-    var vkout : VkMemoryFdPropertiesKHR
+    var vkout = VkMemoryFdPropertiesKHR()
     vk_check(vkGetMemoryFdPropertiesKHR(boost_value_to_vk(device), handleType, fd, vkout), result)
     return vkout
 }
@@ -1001,7 +1007,7 @@ def get_memory_fd_properties_k_h_r(device : Device; handleType : VkExternalMemor
 def get_physical_device_external_semaphore_properties(physicalDevice : PhysicalDevice; pExternalSemaphoreInfo : PhysicalDeviceExternalSemaphoreInfo) : VkExternalSemaphoreProperties {
     let vkview_pExternalSemaphoreInfo = vk_view_create_unsafe(pExternalSemaphoreInfo)
     defer() { vk_view_destroy(pExternalSemaphoreInfo) }
-    var vkout : VkExternalSemaphoreProperties
+    var vkout = VkExternalSemaphoreProperties()
     vkGetPhysicalDeviceExternalSemaphoreProperties(boost_value_to_vk(physicalDevice), vkview_pExternalSemaphoreInfo, vkout)
     return vkout
 }
@@ -1023,7 +1029,7 @@ def import_semaphore_fd_k_h_r(device : Device; pImportSemaphoreFdInfo : ImportSe
 def get_physical_device_external_fence_properties(physicalDevice : PhysicalDevice; pExternalFenceInfo : PhysicalDeviceExternalFenceInfo) : VkExternalFenceProperties {
     let vkview_pExternalFenceInfo = vk_view_create_unsafe(pExternalFenceInfo)
     defer() { vk_view_destroy(pExternalFenceInfo) }
-    var vkout : VkExternalFenceProperties
+    var vkout = VkExternalFenceProperties()
     vkGetPhysicalDeviceExternalFenceProperties(boost_value_to_vk(physicalDevice), vkview_pExternalFenceInfo, vkout)
     return vkout
 }
@@ -1059,7 +1065,7 @@ def get_swapchain_counter_e_x_t(device : Device; swapchain : SwapchainKHR; count
 }
 
 def get_physical_device_surface_capabilities2_e_x_t(physicalDevice : PhysicalDevice; surface : SurfaceKHR; var result : VkResult? = null) : VkSurfaceCapabilities2EXT {
-    var vkout : VkSurfaceCapabilities2EXT
+    var vkout = VkSurfaceCapabilities2EXT()
     vk_check(vkGetPhysicalDeviceSurfaceCapabilities2EXT(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkout), result)
     return vkout
 }
@@ -1069,6 +1075,9 @@ def enumerate_physical_device_groups(instance : Instance; var result : VkResult?
     vk_check(vkEnumeratePhysicalDeviceGroups(boost_value_to_vk(instance), vkcount, null), result)
     var vklist : array<VkPhysicalDeviceGroupProperties>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPhysicalDeviceGroupProperties()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkEnumeratePhysicalDeviceGroups(boost_value_to_vk(instance), vkcount, addr(vklist[0])), result)
@@ -1104,7 +1113,7 @@ def cmd_set_device_mask(commandBuffer : CommandBuffer; deviceMask : uint) {
 }
 
 def get_device_group_present_capabilities_k_h_r(device : Device; var result : VkResult? = null) : VkDeviceGroupPresentCapabilitiesKHR {
-    var vkout : VkDeviceGroupPresentCapabilitiesKHR
+    var vkout = VkDeviceGroupPresentCapabilitiesKHR()
     vk_check(vkGetDeviceGroupPresentCapabilitiesKHR(boost_value_to_vk(device), vkout), result)
     return vkout
 }
@@ -1207,7 +1216,7 @@ def cmd_set_sample_locations_e_x_t(commandBuffer : CommandBuffer; var pSampleLoc
 }
 
 def get_physical_device_multisample_properties_e_x_t(physicalDevice : PhysicalDevice; samples : VkSampleCountFlags) : VkMultisamplePropertiesEXT {
-    var vkout : VkMultisamplePropertiesEXT
+    var vkout = VkMultisamplePropertiesEXT()
     vkGetPhysicalDeviceMultisamplePropertiesEXT(boost_value_to_vk(physicalDevice), samples, vkout)
     return vkout
 }
@@ -1215,7 +1224,7 @@ def get_physical_device_multisample_properties_e_x_t(physicalDevice : PhysicalDe
 def get_physical_device_surface_capabilities2_k_h_r(physicalDevice : PhysicalDevice; pSurfaceInfo : PhysicalDeviceSurfaceInfo2KHR; var result : VkResult? = null) : VkSurfaceCapabilities2KHR {
     let vkview_pSurfaceInfo = vk_view_create_unsafe(pSurfaceInfo)
     defer() { vk_view_destroy(pSurfaceInfo) }
-    var vkout : VkSurfaceCapabilities2KHR
+    var vkout = VkSurfaceCapabilities2KHR()
     vk_check(vkGetPhysicalDeviceSurfaceCapabilities2KHR(boost_value_to_vk(physicalDevice), vkview_pSurfaceInfo, vkout), result)
     return vkout
 }
@@ -1227,6 +1236,9 @@ def get_physical_device_surface_formats2_k_h_r(physicalDevice : PhysicalDevice; 
     vk_check(vkGetPhysicalDeviceSurfaceFormats2KHR(boost_value_to_vk(physicalDevice), vkview_pSurfaceInfo, vkcount, null), result)
     var vklist : array<VkSurfaceFormat2KHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkSurfaceFormat2KHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceSurfaceFormats2KHR(boost_value_to_vk(physicalDevice), vkview_pSurfaceInfo, vkcount, addr(vklist[0])), result)
@@ -1240,6 +1252,9 @@ def get_physical_device_display_properties2_k_h_r(physicalDevice : PhysicalDevic
     vk_check(vkGetPhysicalDeviceDisplayProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkDisplayProperties2KHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDisplayProperties2KHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceDisplayProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -1253,6 +1268,9 @@ def get_physical_device_display_plane_properties2_k_h_r(physicalDevice : Physica
     vk_check(vkGetPhysicalDeviceDisplayPlaneProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkDisplayPlaneProperties2KHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDisplayPlaneProperties2KHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceDisplayPlaneProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -1266,6 +1284,9 @@ def get_display_mode_properties2_k_h_r(physicalDevice : PhysicalDevice; display 
     vk_check(vkGetDisplayModeProperties2KHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, null), result)
     var vklist : array<VkDisplayModeProperties2KHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDisplayModeProperties2KHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetDisplayModeProperties2KHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, addr(vklist[0])), result)
@@ -1277,7 +1298,7 @@ def get_display_mode_properties2_k_h_r(physicalDevice : PhysicalDevice; display 
 def get_display_plane_capabilities2_k_h_r(physicalDevice : PhysicalDevice; pDisplayPlaneInfo : DisplayPlaneInfo2KHR; var result : VkResult? = null) : VkDisplayPlaneCapabilities2KHR {
     let vkview_pDisplayPlaneInfo = vk_view_create_unsafe(pDisplayPlaneInfo)
     defer() { vk_view_destroy(pDisplayPlaneInfo) }
-    var vkout : VkDisplayPlaneCapabilities2KHR
+    var vkout = VkDisplayPlaneCapabilities2KHR()
     vk_check(vkGetDisplayPlaneCapabilities2KHR(boost_value_to_vk(physicalDevice), vkview_pDisplayPlaneInfo, vkout), result)
     return vkout
 }
@@ -1285,7 +1306,7 @@ def get_display_plane_capabilities2_k_h_r(physicalDevice : PhysicalDevice; pDisp
 def get_buffer_memory_requirements2(device : Device; pInfo : BufferMemoryRequirementsInfo2) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetBufferMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1293,7 +1314,7 @@ def get_buffer_memory_requirements2(device : Device; pInfo : BufferMemoryRequire
 def get_image_memory_requirements2(device : Device; pInfo : ImageMemoryRequirementsInfo2) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetImageMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1305,6 +1326,9 @@ def get_image_sparse_memory_requirements2(device : Device; pInfo : ImageSparseMe
     vkGetImageSparseMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkcount, null)
     var vklist : array<VkSparseImageMemoryRequirements2>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkSparseImageMemoryRequirements2()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetImageSparseMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0]))
@@ -1316,7 +1340,7 @@ def get_image_sparse_memory_requirements2(device : Device; pInfo : ImageSparseMe
 def get_device_buffer_memory_requirements(device : Device; var pInfo : DeviceBufferMemoryRequirements) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetDeviceBufferMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1324,7 +1348,7 @@ def get_device_buffer_memory_requirements(device : Device; var pInfo : DeviceBuf
 def get_device_image_memory_requirements(device : Device; var pInfo : DeviceImageMemoryRequirements) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetDeviceImageMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1336,6 +1360,9 @@ def get_device_image_sparse_memory_requirements(device : Device; var pInfo : Dev
     vkGetDeviceImageSparseMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkcount, null)
     var vklist : array<VkSparseImageMemoryRequirements2>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkSparseImageMemoryRequirements2()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetDeviceImageSparseMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0]))
@@ -1361,7 +1388,7 @@ def merge_validation_caches_e_x_t(device : Device; dstCache : ValidationCacheEXT
 def get_descriptor_set_layout_support(device : Device; var pCreateInfo : DescriptorSetLayoutCreateInfo) : VkDescriptorSetLayoutSupport {
     let vkview_pCreateInfo = vk_view_create_unsafe(pCreateInfo)
     defer() { vk_view_destroy(pCreateInfo) }
-    var vkout : VkDescriptorSetLayoutSupport
+    var vkout = VkDescriptorSetLayoutSupport()
     vkGetDescriptorSetLayoutSupport(boost_value_to_vk(device), vkview_pCreateInfo, vkout)
     return vkout
 }
@@ -1476,6 +1503,9 @@ def get_queue_checkpoint_data_n_v(queue : Queue) : array<VkCheckpointDataNV> {
     vkGetQueueCheckpointDataNV(boost_value_to_vk(queue), vkcount, null)
     var vklist : array<VkCheckpointDataNV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkCheckpointDataNV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetQueueCheckpointDataNV(boost_value_to_vk(queue), vkcount, addr(vklist[0]))
@@ -1590,7 +1620,7 @@ def cmd_bind_invocation_mask_h_u_a_w_e_i(commandBuffer : CommandBuffer; imageVie
 def get_acceleration_structure_memory_requirements_n_v(device : Device; pInfo : AccelerationStructureMemoryRequirementsInfoNV) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetAccelerationStructureMemoryRequirementsNV(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1693,7 +1723,7 @@ def cmd_trace_rays_indirect2_k_h_r(commandBuffer : CommandBuffer; indirectDevice
 def get_cluster_acceleration_structure_build_sizes_n_v(device : Device; pInfo : ClusterAccelerationStructureInputInfoNV) : VkAccelerationStructureBuildSizesInfoKHR {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkAccelerationStructureBuildSizesInfoKHR
+    var vkout = VkAccelerationStructureBuildSizesInfoKHR()
     vkGetClusterAccelerationStructureBuildSizesNV(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -1728,7 +1758,7 @@ def get_image_view_handle64_n_v_x(device : Device; pInfo : ImageViewHandleInfoNV
 }
 
 def get_image_view_address_n_v_x(device : Device; imageView : ImageView; var result : VkResult? = null) : VkImageViewAddressPropertiesNVX {
-    var vkout : VkImageViewAddressPropertiesNVX
+    var vkout = VkImageViewAddressPropertiesNVX()
     vk_check(vkGetImageViewAddressNVX(boost_value_to_vk(device), boost_value_to_vk(imageView), vkout), result)
     return vkout
 }
@@ -1757,7 +1787,7 @@ def release_profiling_lock_k_h_r(device : Device) {
 }
 
 def get_image_drm_format_modifier_properties_e_x_t(device : Device; image : Image; var result : VkResult? = null) : VkImageDrmFormatModifierPropertiesEXT {
-    var vkout : VkImageDrmFormatModifierPropertiesEXT
+    var vkout = VkImageDrmFormatModifierPropertiesEXT()
     vk_check(vkGetImageDrmFormatModifierPropertiesEXT(boost_value_to_vk(device), boost_value_to_vk(image), vkout), result)
     return vkout
 }
@@ -1781,6 +1811,9 @@ def get_physical_device_supported_framebuffer_mixed_samples_combinations_n_v(phy
     vk_check(vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkFramebufferMixedSamplesCombinationNV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkFramebufferMixedSamplesCombinationNV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -1847,6 +1880,9 @@ def get_pipeline_executable_properties_k_h_r(device : Device; pPipelineInfo : Pi
     vk_check(vkGetPipelineExecutablePropertiesKHR(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, null), result)
     var vklist : array<VkPipelineExecutablePropertiesKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPipelineExecutablePropertiesKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPipelineExecutablePropertiesKHR(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, addr(vklist[0])), result)
@@ -1862,6 +1898,9 @@ def get_pipeline_executable_statistics_k_h_r(device : Device; pExecutableInfo : 
     vk_check(vkGetPipelineExecutableStatisticsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, null), result)
     var vklist : array<VkPipelineExecutableStatisticKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPipelineExecutableStatisticKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPipelineExecutableStatisticsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, addr(vklist[0])), result)
@@ -1877,6 +1916,9 @@ def get_pipeline_executable_internal_representations_k_h_r(device : Device; pExe
     vk_check(vkGetPipelineExecutableInternalRepresentationsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, null), result)
     var vklist : array<VkPipelineExecutableInternalRepresentationKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPipelineExecutableInternalRepresentationKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPipelineExecutableInternalRepresentationsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, addr(vklist[0])), result)
@@ -1894,6 +1936,9 @@ def get_physical_device_tool_properties(physicalDevice : PhysicalDevice; var res
     vk_check(vkGetPhysicalDeviceToolProperties(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkPhysicalDeviceToolProperties>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPhysicalDeviceToolProperties()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceToolProperties(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -1981,7 +2026,7 @@ def deferred_operation_join_k_h_r(device : Device; operation : DeferredOperation
 def get_pipeline_indirect_memory_requirements_n_v(device : Device; pCreateInfo : ComputePipelineCreateInfo) : VkMemoryRequirements2 {
     let vkview_pCreateInfo = vk_view_create_unsafe(pCreateInfo)
     defer() { vk_view_destroy(pCreateInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetPipelineIndirectMemoryRequirementsNV(boost_value_to_vk(device), vkview_pCreateInfo, vkout)
     return vkout
 }
@@ -2275,6 +2320,9 @@ def get_physical_device_fragment_shading_rates_k_h_r(physicalDevice : PhysicalDe
     vk_check(vkGetPhysicalDeviceFragmentShadingRatesKHR(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkPhysicalDeviceFragmentShadingRateKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkPhysicalDeviceFragmentShadingRateKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceFragmentShadingRatesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -2286,7 +2334,7 @@ def get_physical_device_fragment_shading_rates_k_h_r(physicalDevice : PhysicalDe
 def get_acceleration_structure_build_sizes_k_h_r(device : Device; buildType : VkAccelerationStructureBuildTypeKHR; var pBuildInfo : AccelerationStructureBuildGeometryInfoKHR; var pMaxPrimitiveCounts : array<uint>) : VkAccelerationStructureBuildSizesInfoKHR {
     let vkview_pBuildInfo = vk_view_create_unsafe(pBuildInfo)
     defer() { vk_view_destroy(pBuildInfo) }
-    var vkout : VkAccelerationStructureBuildSizesInfoKHR
+    var vkout = VkAccelerationStructureBuildSizesInfoKHR()
     vkGetAccelerationStructureBuildSizesKHR(boost_value_to_vk(device), buildType, vkview_pBuildInfo, array_addr(pMaxPrimitiveCounts), vkout)
     return vkout
 }
@@ -2366,6 +2414,9 @@ def get_queue_checkpoint_data2_n_v(queue : Queue) : array<VkCheckpointData2NV> {
     vkGetQueueCheckpointData2NV(boost_value_to_vk(queue), vkcount, null)
     var vklist : array<VkCheckpointData2NV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkCheckpointData2NV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vkGetQueueCheckpointData2NV(boost_value_to_vk(queue), vkcount, addr(vklist[0]))
@@ -2394,7 +2445,7 @@ def transition_image_layout(device : Device; pTransitions : array<HostImageLayou
 def get_physical_device_video_capabilities_k_h_r(physicalDevice : PhysicalDevice; pVideoProfile : VideoProfileInfoKHR; var result : VkResult? = null) : VkVideoCapabilitiesKHR {
     let vkview_pVideoProfile = vk_view_create_unsafe(pVideoProfile)
     defer() { vk_view_destroy(pVideoProfile) }
-    var vkout : VkVideoCapabilitiesKHR
+    var vkout = VkVideoCapabilitiesKHR()
     vk_check(vkGetPhysicalDeviceVideoCapabilitiesKHR(boost_value_to_vk(physicalDevice), vkview_pVideoProfile, vkout), result)
     return vkout
 }
@@ -2406,6 +2457,9 @@ def get_physical_device_video_format_properties_k_h_r(physicalDevice : PhysicalD
     vk_check(vkGetPhysicalDeviceVideoFormatPropertiesKHR(boost_value_to_vk(physicalDevice), vkview_pVideoFormatInfo, vkcount, null), result)
     var vklist : array<VkVideoFormatPropertiesKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkVideoFormatPropertiesKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceVideoFormatPropertiesKHR(boost_value_to_vk(physicalDevice), vkview_pVideoFormatInfo, vkcount, addr(vklist[0])), result)
@@ -2417,7 +2471,7 @@ def get_physical_device_video_format_properties_k_h_r(physicalDevice : PhysicalD
 def get_physical_device_video_encode_quality_level_properties_k_h_r(physicalDevice : PhysicalDevice; var pQualityLevelInfo : PhysicalDeviceVideoEncodeQualityLevelInfoKHR; var result : VkResult? = null) : VkVideoEncodeQualityLevelPropertiesKHR {
     let vkview_pQualityLevelInfo = vk_view_create_unsafe(pQualityLevelInfo)
     defer() { vk_view_destroy(pQualityLevelInfo) }
-    var vkout : VkVideoEncodeQualityLevelPropertiesKHR
+    var vkout = VkVideoEncodeQualityLevelPropertiesKHR()
     vk_check(vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(boost_value_to_vk(physicalDevice), vkview_pQualityLevelInfo, vkout), result)
     return vkout
 }
@@ -2433,6 +2487,9 @@ def get_video_session_memory_requirements_k_h_r(device : Device; videoSession : 
     vk_check(vkGetVideoSessionMemoryRequirementsKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), vkcount, null), result)
     var vklist : array<VkVideoSessionMemoryRequirementsKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkVideoSessionMemoryRequirementsKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetVideoSessionMemoryRequirementsKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), vkcount, addr(vklist[0])), result)
@@ -2500,7 +2557,7 @@ def cmd_decompress_memory_indirect_count_n_v(commandBuffer : CommandBuffer; indi
 def get_partitioned_acceleration_structures_build_sizes_n_v(device : Device; pInfo : PartitionedAccelerationStructureInstancesInputNV) : VkAccelerationStructureBuildSizesInfoKHR {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkAccelerationStructureBuildSizesInfoKHR
+    var vkout = VkAccelerationStructureBuildSizesInfoKHR()
     vkGetPartitionedAccelerationStructuresBuildSizesNV(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -2589,7 +2646,7 @@ def cmd_end_rendering(commandBuffer : CommandBuffer) {
 def get_descriptor_set_layout_host_mapping_info_v_a_l_v_e(device : Device; pBindingReference : DescriptorSetBindingReferenceVALVE) : VkDescriptorSetLayoutHostMappingInfoVALVE {
     let vkview_pBindingReference = vk_view_create_unsafe(pBindingReference)
     defer() { vk_view_destroy(pBindingReference) }
-    var vkout : VkDescriptorSetLayoutHostMappingInfoVALVE
+    var vkout = VkDescriptorSetLayoutHostMappingInfoVALVE()
     vkGetDescriptorSetLayoutHostMappingInfoVALVE(boost_value_to_vk(device), vkview_pBindingReference, vkout)
     return vkout
 }
@@ -2661,13 +2718,13 @@ def cmd_write_micromaps_properties_e_x_t(commandBuffer : CommandBuffer; pMicroma
 def get_micromap_build_sizes_e_x_t(device : Device; buildType : VkAccelerationStructureBuildTypeKHR; var pBuildInfo : MicromapBuildInfoEXT) : VkMicromapBuildSizesInfoEXT {
     let vkview_pBuildInfo = vk_view_create_unsafe(pBuildInfo)
     defer() { vk_view_destroy(pBuildInfo) }
-    var vkout : VkMicromapBuildSizesInfoEXT
+    var vkout = VkMicromapBuildSizesInfoEXT()
     vkGetMicromapBuildSizesEXT(boost_value_to_vk(device), buildType, vkview_pBuildInfo, vkout)
     return vkout
 }
 
 def get_shader_module_identifier_e_x_t(device : Device; shaderModule : ShaderModule) : VkShaderModuleIdentifierEXT {
-    var vkout : VkShaderModuleIdentifierEXT
+    var vkout = VkShaderModuleIdentifierEXT()
     vkGetShaderModuleIdentifierEXT(boost_value_to_vk(device), boost_value_to_vk(shaderModule), vkout)
     return vkout
 }
@@ -2675,7 +2732,7 @@ def get_shader_module_identifier_e_x_t(device : Device; shaderModule : ShaderMod
 def get_image_subresource_layout2(device : Device; image : Image; pSubresource : ImageSubresource2) : VkSubresourceLayout2 {
     let vkview_pSubresource = vk_view_create_unsafe(pSubresource)
     defer() { vk_view_destroy(pSubresource) }
-    var vkout : VkSubresourceLayout2
+    var vkout = VkSubresourceLayout2()
     vkGetImageSubresourceLayout2(boost_value_to_vk(device), boost_value_to_vk(image), vkview_pSubresource, vkout)
     return vkout
 }
@@ -2693,6 +2750,9 @@ def get_framebuffer_tile_properties_q_c_o_m(device : Device; framebuffer : Frame
     vk_check(vkGetFramebufferTilePropertiesQCOM(boost_value_to_vk(device), boost_value_to_vk(framebuffer), vkcount, null), result)
     var vklist : array<VkTilePropertiesQCOM>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkTilePropertiesQCOM()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetFramebufferTilePropertiesQCOM(boost_value_to_vk(device), boost_value_to_vk(framebuffer), vkcount, addr(vklist[0])), result)
@@ -2704,7 +2764,7 @@ def get_framebuffer_tile_properties_q_c_o_m(device : Device; framebuffer : Frame
 def get_dynamic_rendering_tile_properties_q_c_o_m(device : Device; var pRenderingInfo : RenderingInfo; var result : VkResult? = null) : VkTilePropertiesQCOM {
     let vkview_pRenderingInfo = vk_view_create_unsafe(pRenderingInfo)
     defer() { vk_view_destroy(pRenderingInfo) }
-    var vkout : VkTilePropertiesQCOM
+    var vkout = VkTilePropertiesQCOM()
     vk_check(vkGetDynamicRenderingTilePropertiesQCOM(boost_value_to_vk(device), vkview_pRenderingInfo, vkout), result)
     return vkout
 }
@@ -2716,6 +2776,9 @@ def get_physical_device_optical_flow_image_formats_n_v(physicalDevice : Physical
     vk_check(vkGetPhysicalDeviceOpticalFlowImageFormatsNV(boost_value_to_vk(physicalDevice), vkview_pOpticalFlowImageFormatInfo, vkcount, null), result)
     var vklist : array<VkOpticalFlowImageFormatPropertiesNV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkOpticalFlowImageFormatPropertiesNV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceOpticalFlowImageFormatsNV(boost_value_to_vk(physicalDevice), vkview_pOpticalFlowImageFormatInfo, vkcount, addr(vklist[0])), result)
@@ -2739,6 +2802,9 @@ def get_device_fault_reports_k_h_r(device : Device; timeout : uint64; var result
     vk_check(vkGetDeviceFaultReportsKHR(boost_value_to_vk(device), timeout, vkcount, null), result)
     var vklist : array<VkDeviceFaultInfoKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDeviceFaultInfoKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetDeviceFaultReportsKHR(boost_value_to_vk(device), timeout, vkcount, addr(vklist[0])), result)
@@ -2748,7 +2814,7 @@ def get_device_fault_reports_k_h_r(device : Device; timeout : uint64; var result
 }
 
 def get_device_fault_debug_info_k_h_r(device : Device; var result : VkResult? = null) : VkDeviceFaultDebugInfoKHR {
-    var vkout : VkDeviceFaultDebugInfoKHR
+    var vkout = VkDeviceFaultDebugInfoKHR()
     vk_check(vkGetDeviceFaultDebugInfoKHR(boost_value_to_vk(device), vkout), result)
     return vkout
 }
@@ -2768,7 +2834,7 @@ def release_swapchain_images_k_h_r(device : Device; var pReleaseInfo : ReleaseSw
 def get_device_image_subresource_layout(device : Device; var pInfo : DeviceImageSubresourceInfo) : VkSubresourceLayout2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkSubresourceLayout2
+    var vkout = VkSubresourceLayout2()
     vkGetDeviceImageSubresourceLayout(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -2786,7 +2852,7 @@ def set_swapchain_present_timing_queue_size_e_x_t(device : Device; swapchain : S
 def get_past_presentation_timing_e_x_t(device : Device; pPastPresentationTimingInfo : PastPresentationTimingInfoEXT; var result : VkResult? = null) : VkPastPresentationTimingPropertiesEXT {
     let vkview_pPastPresentationTimingInfo = vk_view_create_unsafe(pPastPresentationTimingInfo)
     defer() { vk_view_destroy(pPastPresentationTimingInfo) }
-    var vkout : VkPastPresentationTimingPropertiesEXT
+    var vkout = VkPastPresentationTimingPropertiesEXT()
     vk_check(vkGetPastPresentationTimingEXT(boost_value_to_vk(device), vkview_pPastPresentationTimingInfo, vkout), result)
     return vkout
 }
@@ -2796,6 +2862,9 @@ def get_physical_device_cooperative_matrix_properties_k_h_r(physicalDevice : Phy
     vk_check(vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkCooperativeMatrixPropertiesKHR>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkCooperativeMatrixPropertiesKHR()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -2847,7 +2916,7 @@ def set_latency_marker_n_v(device : Device; swapchain : SwapchainKHR; pLatencyMa
 }
 
 def get_latency_timings_n_v(device : Device; swapchain : SwapchainKHR) : VkGetLatencyMarkerInfoNV {
-    var vkout : VkGetLatencyMarkerInfoNV
+    var vkout = VkGetLatencyMarkerInfoNV()
     vkGetLatencyTimingsNV(boost_value_to_vk(device), boost_value_to_vk(swapchain), vkout)
     return vkout
 }
@@ -2875,6 +2944,9 @@ def get_physical_device_cooperative_matrix_flexible_dimensions_properties_n_v(ph
     vk_check(vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkCooperativeMatrixFlexibleDimensionsPropertiesNV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkCooperativeMatrixFlexibleDimensionsPropertiesNV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -2888,6 +2960,9 @@ def get_physical_device_cooperative_vector_properties_n_v(physicalDevice : Physi
     vk_check(vkGetPhysicalDeviceCooperativeVectorPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkCooperativeVectorPropertiesNV>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkCooperativeVectorPropertiesNV()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceCooperativeVectorPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -2919,6 +2994,9 @@ def enumerate_physical_device_shader_instrumentation_metrics_a_r_m(physicalDevic
     vk_check(vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(boost_value_to_vk(physicalDevice), vkcount, null), result)
     var vklist : array<VkShaderInstrumentationMetricDescriptionARM>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkShaderInstrumentationMetricDescriptionARM()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
@@ -2942,7 +3020,7 @@ def clear_shader_instrumentation_metrics_a_r_m(device : Device; instrumentation 
 def get_tensor_memory_requirements_a_r_m(device : Device; pInfo : TensorMemoryRequirementsInfoARM) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetTensorMemoryRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -2961,7 +3039,7 @@ def bind_tensor_memory_a_r_m(device : Device; pBindInfos : array<BindTensorMemor
 def get_device_tensor_memory_requirements_a_r_m(device : Device; var pInfo : DeviceTensorMemoryRequirementsARM) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetDeviceTensorMemoryRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -2975,7 +3053,7 @@ def cmd_copy_tensor_a_r_m(commandBuffer : CommandBuffer; var pCopyTensorInfo : C
 def get_physical_device_external_tensor_properties_a_r_m(physicalDevice : PhysicalDevice; var pExternalTensorInfo : PhysicalDeviceExternalTensorInfoARM) : VkExternalTensorPropertiesARM {
     let vkview_pExternalTensorInfo = vk_view_create_unsafe(pExternalTensorInfo)
     defer() { vk_view_destroy(pExternalTensorInfo) }
-    var vkout : VkExternalTensorPropertiesARM
+    var vkout = VkExternalTensorPropertiesARM()
     vkGetPhysicalDeviceExternalTensorPropertiesARM(boost_value_to_vk(physicalDevice), vkview_pExternalTensorInfo, vkout)
     return vkout
 }
@@ -2987,6 +3065,9 @@ def get_data_graph_pipeline_session_bind_point_requirements_a_r_m(device : Devic
     vk_check(vkGetDataGraphPipelineSessionBindPointRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkcount, null), result)
     var vklist : array<VkDataGraphPipelineSessionBindPointRequirementARM>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDataGraphPipelineSessionBindPointRequirementARM()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetDataGraphPipelineSessionBindPointRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0])), result)
@@ -2998,7 +3079,7 @@ def get_data_graph_pipeline_session_bind_point_requirements_a_r_m(device : Devic
 def get_data_graph_pipeline_session_memory_requirements_a_r_m(device : Device; pInfo : DataGraphPipelineSessionMemoryRequirementsInfoARM) : VkMemoryRequirements2 {
     let vkview_pInfo = vk_view_create_unsafe(pInfo)
     defer() { vk_view_destroy(pInfo) }
-    var vkout : VkMemoryRequirements2
+    var vkout = VkMemoryRequirements2()
     vkGetDataGraphPipelineSessionMemoryRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkout)
     return vkout
 }
@@ -3034,6 +3115,9 @@ def get_physical_device_queue_family_data_graph_properties_a_r_m(physicalDevice 
     vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkcount, null), result)
     var vklist : array<VkQueueFamilyDataGraphPropertiesARM>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkQueueFamilyDataGraphPropertiesARM()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkcount, addr(vklist[0])), result)
@@ -3045,7 +3129,7 @@ def get_physical_device_queue_family_data_graph_properties_a_r_m(physicalDevice 
 def get_physical_device_queue_family_data_graph_processing_engine_properties_a_r_m(physicalDevice : PhysicalDevice; pQueueFamilyDataGraphProcessingEngineInfo : PhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM) : VkQueueFamilyDataGraphProcessingEnginePropertiesARM {
     let vkview_pQueueFamilyDataGraphProcessingEngineInfo = vk_view_create_unsafe(pQueueFamilyDataGraphProcessingEngineInfo)
     defer() { vk_view_destroy(pQueueFamilyDataGraphProcessingEngineInfo) }
-    var vkout : VkQueueFamilyDataGraphProcessingEnginePropertiesARM
+    var vkout = VkQueueFamilyDataGraphProcessingEnginePropertiesARM()
     vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM(boost_value_to_vk(physicalDevice), vkview_pQueueFamilyDataGraphProcessingEngineInfo, vkout)
     return vkout
 }
@@ -3230,6 +3314,9 @@ def get_physical_device_queue_family_data_graph_optical_flow_image_formats_a_r_m
     vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkview_pQueueFamilyDataGraphProperties, vkview_pOpticalFlowImageFormatInfo, vkcount, null), result)
     var vklist : array<VkDataGraphOpticalFlowImageFormatPropertiesARM>
     vklist |> resize(int(vkcount))
+    for (vki in range(int(vkcount))) {
+        vklist[vki] = VkDataGraphOpticalFlowImageFormatPropertiesARM()
+    }
     if (vkcount > 0u) {
         unsafe {
             vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkview_pQueueFamilyDataGraphProperties, vkview_pOpticalFlowImageFormatInfo, vkcount, addr(vklist[0])), result)

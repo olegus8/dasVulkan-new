@@ -56,6 +56,25 @@ def private emit_ctors(reg : VkRegistry; em : EmitModel; out_dir : string) {
     to_log(LOG_INFO, "boost: {count} sType constructors -> vulkan_ctors.das\n")
 }
 
+//! true iff emit_ctors emits an sType-prefilling ctor for this raw struct.
+//! An out struct/array a get/enumerate command fills must have its sType set
+//! before the call, so where such a ctor exists the wrapper builds with it.
+def private has_stype_ctor(reg : VkRegistry; em : EmitModel; name : string) : bool {
+    for (s in reg.structs) {
+        continue if (s.name != name)
+        if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect)) {
+            return false
+        }
+        for (m in s.members) {
+            if (m.name == "sType" && !empty(m.stype_value)) {
+                return true
+            }
+        }
+        return false
+    }
+    return false
+}
+
 // ===== ownership: derive create/destroy pairs, emit wrapper structs =====
 
 //! the idiomatic boost name for a handle: strip the leading "Vk"
@@ -1411,6 +1430,11 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 fprint(f, "){lhs_close}\n")
                 fprint(f, "    var vklist : array<{plan.out_array_elem}>\n")
                 fprint(f, "    vklist |> resize(int(vkcount))\n")
+                if (has_stype_ctor(reg, em, plan.out_array_elem)) {
+                    fprint(f, "    for (vki in range(int(vkcount))) {OB}\n")
+                    fprint(f, "        vklist[vki] = {plan.out_array_elem}()\n")
+                    fprint(f, "    {CB}\n")
+                }
                 fprint(f, "    if (vkcount > 0u) {OB}\n")
                 fprint(f, "        unsafe {OB}\n")
                 fprint(f, "            {lhs_open}{plan.command}(")
@@ -1421,7 +1445,12 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 emit_scratch_cleanup(f, plan)
                 fprint(f, "    return <- vklist\n")
             } elif (plan.has_out_value) {
-                fprint(f, "    var vkout : {cmd_value_type(reg, em, plan.out_value_vktype)}\n")
+                let out_vt = cmd_value_type(reg, em, plan.out_value_vktype)
+                if (has_stype_ctor(reg, em, out_vt)) {
+                    fprint(f, "    var vkout = {out_vt}()\n")
+                } else {
+                    fprint(f, "    var vkout : {out_vt}\n")
+                }
                 if (plan.is_result) {
                     // VkResult-returning out-value call: wrap in vk_check so callers can
                     // see failures (OOM, device-lost) via `result` and don't silently
