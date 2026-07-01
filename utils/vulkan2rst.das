@@ -47,13 +47,13 @@ def document_module_vulkan_commands() {
     var groups <- array<DocGroup>(
         group_by_regex("Memory",            mod, %regex~^allocate_memory$%%),
         group_by_regex("Buffers & images",  mod, %regex~^create_(buffer|buffer_view|image|image_view|sampler|sampler_ycbcr_conversion)$%%),
-        group_by_regex("Pipelines & shaders", mod, %regex~^create_(pipeline_layout|shader_instrumentation_a_r_m|data_graph_pipeline_session_a_r_m)$%%),
-        group_by_regex("Descriptors",       mod, %regex~^create_(descriptor_set_layout|descriptor_pool|descriptor_update_template|private_data_slot)$%%),
+        group_by_regex("Pipelines & shaders", mod, %regex~^create_(pipeline_layout|shader_instrumentation_a_r_m|data_graph_pipeline_session_a_r_m|graphics_pipelines|compute_pipelines|ray_tracing_pipelines_k_h_r|ray_tracing_pipelines_n_v|data_graph_pipelines_a_r_m)$%%),
+        group_by_regex("Descriptors",       mod, %regex~^(create_(descriptor_set_layout|descriptor_pool|descriptor_update_template|private_data_slot)|allocate_descriptor_sets)$%%),
         group_by_regex("Render passes & framebuffers", mod, %regex~^create_(render_pass.*|framebuffer)$%%),
-        group_by_regex("Commands & queries", mod, %regex~^create_(command_pool|query_pool|indirect_commands_layout_e_x_t|indirect_execution_set_e_x_t)$%%),
+        group_by_regex("Commands & queries", mod, %regex~^(create_(command_pool|query_pool|indirect_commands_layout_e_x_t|indirect_commands_layout_n_v|indirect_execution_set_e_x_t)|allocate_command_buffers)$%%),
         group_by_regex("Synchronization",   mod, %regex~^create_(fence|semaphore|event)$%%),
-        group_by_regex("Surfaces & swapchains", mod, %regex~^create_(display_mode_k_h_r|display_plane_surface_k_h_r|headless_surface_e_x_t|swapchain.*)$%%),
-        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|external_compute_queue_n_v|cu_function_n_v_x|tensor_view_a_r_m|video_session_parameters_k_h_r)$%%)
+        group_by_regex("Surfaces & swapchains", mod, %regex~^create_(display_mode_k_h_r|display_plane_surface_k_h_r|headless_surface_e_x_t|swapchain.*|shared_swapchains_k_h_r)$%%),
+        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|external_compute_queue_n_v|cu_function_n_v_x|tensor_view_a_r_m|tensor_a_r_m|video_session_k_h_r|video_session_parameters_k_h_r)$%%)
     )
     document("Commands — RAII creators returning owning handle wrappers", mod, "vulkan_commands.rst", groups)
 }
