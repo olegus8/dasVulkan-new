@@ -7,7 +7,7 @@ options indenting = 4
 // present helper. Pairs with daslib/vulkan_boost; the surface bridge takes raw
 // void* handles (e.g. from glfwGetNativeWindow/Display) so there is no GLFW dep.
 
-module vulkan_window
+module vulkan_window shared
 
 require vulkan public
 require vulkan/vulkan_boost public
@@ -50,6 +50,7 @@ struct public Swapchain {
     images : array<VkImage>            //!< owned by the swapchain object itself; not destroyed here
     views : array<ImageView>          //!< created + owned here
     framebuffers : array<Framebuffer> //!< created + owned here (after build_swapchain_framebuffers)
+    readback_supported : bool         //!< true if the images carry TRANSFER_SRC (host readback is possible)
 }
 
 def public finalize(var sc : Swapchain) {
@@ -67,7 +68,8 @@ def public finalize(var sc : Swapchain) {
     delete sc.handle
 }
 
-def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR; var out_color_space : VkColorSpaceKHR&) : VkFormat {
+def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR; var out_color_space : VkColorSpaceKHR&;
+                                  preferred : VkFormat) : VkFormat {
     var count = 0u
     vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, null), null)
     var formats : array<VkSurfaceFormatKHR>
@@ -75,6 +77,26 @@ def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR;
     unsafe {
         vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, addr(formats[0])), null)
     }
+    // 1. honor an explicit preference if the surface supports it. A UNORM format presents
+    // pass-through (no GPU sRGB encode), which a UI/2D app wants so already-sRGB vertex colors aren't
+    // double-encoded; an sRGB format suits a linear-lit 3D pipeline. Caller's call.
+    if (preferred != VkFormat.UNDEFINED) {
+        // prefer the requested format with the standard sRGB-nonlinear colorspace (predictable
+        // presentation); only then fall back to the requested format with any colorspace.
+        for (f in formats) {
+            if (f.format == preferred && f.colorSpace == VkColorSpaceKHR.SRGB_NONLINEAR_KHR) {
+                out_color_space = f.colorSpace
+                return f.format
+            }
+        }
+        for (f in formats) {
+            if (f.format == preferred) {
+                out_color_space = f.colorSpace
+                return f.format
+            }
+        }
+    }
+    // 2. default: prefer B8G8R8A8_SRGB.
     for (f in formats) {
         if (f.format == VkFormat.B8G8R8A8_SRGB && f.colorSpace == VkColorSpaceKHR.SRGB_NONLINEAR_KHR) {
             out_color_space = f.colorSpace
@@ -87,13 +109,14 @@ def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR;
 
 //! create a swapchain sized to the surface (FIFO present). Image views are made;
 //! call build_swapchain_framebuffers afterwards to populate framebuffers.
-def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : SurfaceKHR; width, height : int) : Swapchain {
+def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : SurfaceKHR; width, height : int;
+                            preferred_format : VkFormat = VkFormat.UNDEFINED) : Swapchain {
     let dev = boost_value_to_vk(device)
     var caps : VkSurfaceCapabilitiesKHR
     vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys, boost_value_to_vk(surface), caps), null)
 
     var color_space = VkColorSpaceKHR.SRGB_NONLINEAR_KHR
-    let format = choose_surface_format(phys, surface, color_space)
+    let format = choose_surface_format(phys, surface, color_space, preferred_format)
     var sc = Swapchain(color_space = color_space, format = format)
 
     var extent : VkExtent2D
@@ -115,6 +138,12 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
         imageFormat = sc.format, imageColorSpace = sc.color_space, imageExtent = extent, imageArrayLayers = 1u)
     ci.imageUsage.color_attachment = true
     ci.imageUsage.transfer_dst = true   // the blit-present path (present_frame + vkCmdBlitImage) writes the swapchain image as a transfer dst
+    // readback path (vulkan_live screenshot/record) copies the presented image to a host buffer -- only
+    // when the surface advertises it, since some WSI implementations don't and would reject the swapchain.
+    sc.readback_supported = caps.supportedUsageFlags.transfer_src
+    if (sc.readback_supported) {
+        ci.imageUsage.transfer_src = true
+    }
     ci.imageSharingMode = VkSharingMode.EXCLUSIVE
     ci.preTransform = caps.currentTransform
     ci.compositeAlpha.opaque_khr = true
@@ -148,8 +177,9 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
 def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhysicalDevice;
                               surface : SurfaceKHR; render_pass : RenderPass; width, height : int) {
     vkDeviceWaitIdle(boost_value_to_vk(device))
-    delete sc       // release the old swapchain (and the surface) before making a new one
-    sc <- create_swapchain(device, phys, surface, width, height)
+    let keep_format = sc.format     // preserve the format across resize (the render pass was built for it)
+    delete sc       // release the old swapchain before making a new one (the surface is app-owned)
+    sc <- create_swapchain(device, phys, surface, width, height, keep_format)
     build_swapchain_framebuffers(device, sc, render_pass)
 }
 

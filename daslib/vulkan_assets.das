@@ -10,6 +10,8 @@ options indenting = 4
 // so the texture tutorials' oracle gates load real maps in CI. (The recording/ folders stay CI-skipped
 // because they also need audio.)
 
+// NOT shared: requires geometry/geom_gen, a core daslang module that isn't shared (a shared module
+// can only require shared ones). No shared module depends on vulkan_assets, so this is harmless.
 module vulkan_assets
 
 require vulkan public
