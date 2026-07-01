@@ -16,6 +16,7 @@ require daslib/regex_boost
 // RAII handles, builders, block brackets, and the windowing helpers.
 require vulkan/vulkan_runtime
 require vulkan/vulkan_handles
+require vulkan/vulkan_structs
 require vulkan/vulkan_commands
 require vulkan/vulkan_boost
 require vulkan/vulkan_window
