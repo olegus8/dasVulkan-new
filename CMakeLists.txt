@@ -69,73 +69,9 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         TARGET_LINK_LIBRARIES(dasModuleVulkan PUBLIC "-framework Cocoa" "-framework QuartzCore")
     ENDIF()
 
-    # The engine authors its shaders in GLSL, so it needs a GLSL -> SPIR-V
-    # step.  Boris's dasVulkan compiles daScript shaders and ships no such
-    # macro, so DAS_VULKAN_COMPILE_SHADER is ours: the generated app CMake
-    # calls it per shader.  It drives the Vulkan SDK tools found on PATH;
-    # the binding itself never touches the SDK (vendored headers + volk).
-    FIND_PROGRAM(DAS_VULKAN_GLSLANG_VALIDATOR_EXE glslangValidator)
-    FIND_PROGRAM(DAS_VULKAN_SPIRV_OPT_EXE spirv-opt)
-    FIND_PROGRAM(DAS_VULKAN_SPIRV_DIS_EXE spirv-dis)
-
-    MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
-        CMAKE_PARSE_ARGUMENTS(DS "" ""
-            "GLSLANG_PRE_ARGS;GLSLANG_ARGS;SPIRV_OPT_ARGS" ${ARGN})
-        get_filename_component(input_src ${input} ABSOLUTE)
-        get_filename_component(input_dir ${input_src} DIRECTORY)
-        get_filename_component(input_name ${input} NAME_WE)
-        get_filename_component(input_name_ext ${input} NAME)
-        # Preprocessed GLSL, kept for inspection.  glslangValidator -E
-        # writes to stdout, so redirect it (hence no VERBATIM here).
-        ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_src} ${extra_deps}
-            OUTPUT ${input_dir}/${input_name}.pre.glsl
-            WORKING_DIRECTORY ${input_dir}
-            USES_TERMINAL
-            COMMAND_EXPAND_LISTS
-            COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_PRE_ARGS}
-                ${input_name_ext} > ${input_name}.pre.glsl
-            COMMENT "glslangValidator -E ${input} to ${input_name}.pre.glsl")
-        ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_src} ${extra_deps}
-            OUTPUT ${input_dir}/${input_name}.base.spv
-            WORKING_DIRECTORY ${input_dir}
-            VERBATIM
-            USES_TERMINAL
-            COMMAND_EXPAND_LISTS
-            COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_ARGS}
-                ${input_name_ext} -o ${input_name}.base.spv
-            COMMENT "glslangValidator ${input} to ${input_name}.base.spv")
-        ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_dir}/${input_name}.base.spv
-            OUTPUT ${input_dir}/${input_name}.base.spvasm
-            WORKING_DIRECTORY ${input_dir}
-            VERBATIM
-            COMMAND_EXPAND_LISTS
-            COMMAND ${DAS_VULKAN_SPIRV_DIS_EXE} --nested-indent --comment
-                --no-color ${input_dir}/${input_name}.base.spv
-                -o ${input_name}.base.spvasm
-            COMMENT "spirv-dis ${input_name}.base.spv")
-        ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_dir}/${input_name}.base.spv
-            OUTPUT ${input_dir}/${input_name}.spv
-            WORKING_DIRECTORY ${input_dir}
-            VERBATIM
-            COMMAND_EXPAND_LISTS
-            COMMAND ${DAS_VULKAN_SPIRV_OPT_EXE} ${DS_SPIRV_OPT_ARGS}
-                ${input_dir}/${input_name}.base.spv -o ${input_name}.spv
-            COMMENT "spirv-opt ${input_name}.base.spv to ${input_name}.spv")
-        ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_dir}/${input_name}.spv
-            OUTPUT ${input_dir}/${input_name}.spvasm
-            WORKING_DIRECTORY ${input_dir}
-            VERBATIM
-            COMMAND_EXPAND_LISTS
-            COMMAND ${DAS_VULKAN_SPIRV_DIS_EXE} --nested-indent --comment
-                --no-color ${input_dir}/${input_name}.spv
-                -o ${input_name}.spvasm
-            COMMENT "spirv-dis ${input_name}.spv")
-    ENDMACRO()
+    # GLSL -> SPIR-V helper (DAS_VULKAN_COMPILE_SHADER) for GLSL-authored
+    # apps; inert here, only the consuming app's generated CMake calls it.
+    INCLUDE(${DAS_VULKAN_DIR}/cmake/DasVulkanCompileShader.cmake)
 
     # Install the boost daslib so daspkg / DLL consumers resolve it from the
     # install tree; the static in-tree build resolves it via ADD_MODULE_DAS.
