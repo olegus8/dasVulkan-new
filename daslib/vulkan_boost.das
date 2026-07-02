@@ -435,6 +435,13 @@ def public rt_supported(phys : VkPhysicalDevice) : bool {
 //! [vulkan_miss_shader] / [vulkan_closest_hit_shader] annotations, build_blas / build_tlas,
 //! build_shader_binding_table, and cmd_trace_rays_k_h_r. Gate with rt_supported first.
 def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_extra : array<string>
+    return <- create_device_ray_tracing(phys, queue_family, no_extra)
+}
+
+//! create_device_ray_tracing with additional device extensions on top of the RT set (a windowed
+//! RT app passes ``["VK_KHR_swapchain"]``).
+def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uint; extra_extensions : array<string>) : Device {
     if (!rt_supported(phys)) {
         panic("create_device_ray_tracing: device does not support VK_KHR_ray_tracing_pipeline + VK_KHR_acceleration_structure + bufferDeviceAddress")
     }
@@ -449,6 +456,7 @@ def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uin
     var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
     rtf.rayTracingPipeline = 1u
     var extensions <- ["VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_deferred_host_operations"]
+    extensions |> push_from(extra_extensions)
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
     ci.enabledExtensionCount = uint(length(extensions))
@@ -1898,34 +1906,39 @@ def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipe
     return <- data
 }
 
-//! Create the minimal triangle-path ray-tracing pipeline: raygen + miss + closest-hit stages,
-//! one GENERAL group per general stage and one TRIANGLES_HIT_GROUP for the closest-hit. Group
-//! order is [raygen, miss, hit] — the layout build_shader_binding_table assumes.
-//! ``max_recursion >= 2`` lets the closest-hit stage trace (shadow) rays itself.
+//! Create a triangle-path ray-tracing pipeline: raygen + N miss + closest-hit stages, one GENERAL
+//! group per general stage and one TRIANGLES_HIT_GROUP for the closest-hit. Group order is
+//! [raygen, miss[0..N), hit] — the layout build_shader_binding_table assumes; ``traceRayEXT``'s
+//! ``miss_index`` selects within the miss region. Shadow-ray setups take two miss shaders (index
+//! 0 = radiance/sky, index 1 = the shadow "lit" flip). ``max_recursion >= 2`` lets the
+//! closest-hit stage trace (shadow) rays itself.
 def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
-                                       raygen : ShaderModule; miss : ShaderModule; closest_hit : ShaderModule;
+                                       raygen : ShaderModule; miss : array<ShaderModule>; closest_hit : ShaderModule;
                                        max_recursion : uint = 1u) : Pipeline {
+    assert(!empty(miss), "create_ray_tracing_pipeline: need at least one miss shader")
     var ci : RayTracingPipelineCreateInfoKHR
+    ci.pStages |> reserve(2 + length(miss))
+    ci.pGroups |> reserve(2 + length(miss))
     var st_rgen = PipelineShaderStageCreateInfo(module_ = weak_copy(raygen), pName = "main")
     st_rgen.stage.raygen_khr = true
     ci.pStages |> emplace(st_rgen)
-    var st_miss = PipelineShaderStageCreateInfo(module_ = weak_copy(miss), pName = "main")
-    st_miss.stage.miss_khr = true
-    ci.pStages |> emplace(st_miss)
+    ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
+        generalShader = 0u, closestHitShader = VK_SHADER_UNUSED_KHR,
+        anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
+    for (i in range(length(miss))) {
+        var st_miss = PipelineShaderStageCreateInfo(module_ = weak_copy(miss[i]), pName = "main")
+        st_miss.stage.miss_khr = true
+        ci.pStages |> emplace(st_miss)
+        ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
+            generalShader = uint(1 + i), closestHitShader = VK_SHADER_UNUSED_KHR,
+            anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
+    }
     var st_chit = PipelineShaderStageCreateInfo(module_ = weak_copy(closest_hit), pName = "main")
     st_chit.stage.closest_hit_khr = true
     ci.pStages |> emplace(st_chit)
-    ci.pGroups <- [
-        RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
-            generalShader = 0u, closestHitShader = VK_SHADER_UNUSED_KHR,
-            anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR),
-        RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
-            generalShader = 1u, closestHitShader = VK_SHADER_UNUSED_KHR,
-            anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR),
-        RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.TRIANGLES_HIT_GROUP_KHR,
-            generalShader = VK_SHADER_UNUSED_KHR, closestHitShader = 2u,
-            anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR)
-    ]
+    ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.TRIANGLES_HIT_GROUP_KHR,
+        generalShader = VK_SHADER_UNUSED_KHR, closestHitShader = uint(1 + length(miss)),
+        anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
     ci.maxPipelineRayRecursionDepth = max_recursion
     ci.layout = weak_copy(layout)
     var infos : array<RayTracingPipelineCreateInfoKHR>
@@ -1938,6 +1951,17 @@ def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
     }
     var p <- pipes[0]
     delete pipes
+    return <- p
+}
+
+//! Single-miss convenience over the N-miss overload: groups [raygen, miss, hit].
+def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
+                                       raygen : ShaderModule; miss : ShaderModule; closest_hit : ShaderModule;
+                                       max_recursion : uint = 1u) : Pipeline {
+    var mlist : array<ShaderModule>
+    mlist |> push(weak_copy(miss))
+    var p <- create_ray_tracing_pipeline(device, layout, raygen, mlist, closest_hit, max_recursion)
+    delete mlist
     return <- p
 }
 

@@ -118,3 +118,8 @@ Running it
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang -load_module <dasVulkan> \
        <dasVulkan>/tutorials/14_teapot/recording/record_teapot.das
+
+:doc:`15_raytracing` leaves the rasterizer behind entirely: the scene goes
+into acceleration structures and a ``VK_KHR_ray_tracing_pipeline`` traces one
+camera ray per pixel -- raygen, miss, and closest-hit shaders all authored in
+daslang, with a real traced shadow ray per hit.
