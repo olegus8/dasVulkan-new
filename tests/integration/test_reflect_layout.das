@@ -14,8 +14,16 @@ def test_reflect_mappers(t : T?) {
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.uniform_buffer) == VkDescriptorType.UNIFORM_BUFFER, "uniform_buffer -> UNIFORM_BUFFER")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.storage_buffer) == VkDescriptorType.STORAGE_BUFFER, "storage_buffer -> STORAGE_BUFFER")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.combined_image_sampler) == VkDescriptorType.COMBINED_IMAGE_SAMPLER, "combined_image_sampler -> COMBINED_IMAGE_SAMPLER")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.storage_image) == VkDescriptorType.STORAGE_IMAGE, "storage_image -> STORAGE_IMAGE")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.sampled_image) == VkDescriptorType.SAMPLED_IMAGE, "sampled_image -> SAMPLED_IMAGE")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.sampler) == VkDescriptorType.SAMPLER, "sampler -> SAMPLER")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.comparison_sampler) == VkDescriptorType.SAMPLER, "comparison_sampler -> SAMPLER")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.input_attachment) == VkDescriptorType.INPUT_ATTACHMENT, "input_attachment -> INPUT_ATTACHMENT")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.acceleration_structure) == VkDescriptorType.ACCELERATION_STRUCTURE_KHR, "acceleration_structure -> ACCELERATION_STRUCTURE_KHR")
     let vf = to_vk_stage_flags(SpirvStageFlags.vertex | SpirvStageFlags.compute)
     t |> success(vf.vertex && vf.compute && !vf.fragment, "stage flags map vertex|compute, not fragment")
+    let rt = to_vk_stage_flags(SpirvStageFlags.raygen | SpirvStageFlags.miss | SpirvStageFlags.closest_hit)
+    t |> success(rt.raygen_khr && rt.miss_khr && rt.closest_hit_khr && !rt.compute, "RT stage flags map raygen|miss|closest_hit, not compute")
 }
 
 [test]

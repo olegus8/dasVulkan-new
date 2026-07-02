@@ -402,6 +402,79 @@ def public create_device_mesh_shader(phys : VkPhysicalDevice; queue_family : uin
     return <- create_device(phys, queue_family, ["VK_EXT_mesh_shader"], mf)
 }
 
+//! True iff ``phys`` advertises the three device extensions hardware ray tracing needs
+//! (``VK_KHR_acceleration_structure``, ``VK_KHR_ray_tracing_pipeline``,
+//! ``VK_KHR_deferred_host_operations``) AND reports the ``accelerationStructure``,
+//! ``rayTracingPipeline`` and ``bufferDeviceAddress`` feature bits as supported. The extension
+//! strings alone are not sufficient: a driver can list an extension yet report its feature bit
+//! as 0, which still fails ``vkCreateDevice``. Use this to gate RT setup — CI software renderers
+//! (Mesa lavapipe) typically fail this probe, so RT tests soft-skip there.
+def public rt_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_KHR_acceleration_structure") ||
+            !device_extension_available(phys, "VK_KHR_ray_tracing_pipeline") ||
+            !device_extension_available(phys, "VK_KHR_deferred_host_operations")) {
+        return false
+    }
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var asf = VkPhysicalDeviceAccelerationStructureFeaturesKHR()
+    var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = reinterpret<void?>(addr(f12))
+        f12.pNext = reinterpret<void?>(addr(asf))
+        asf.pNext = reinterpret<void?>(addr(rtf))
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return f12.bufferDeviceAddress != 0u && asf.accelerationStructure != 0u && rtf.rayTracingPipeline != 0u
+}
+
+//! Create a device with the hardware ray-tracing stack enabled in one call: ``bufferDeviceAddress``
+//! (Vulkan 1.2 core), ``accelerationStructure`` and ``rayTracingPipeline`` features threaded through
+//! the pNext chain, plus the three device-extension strings. The instance must be at api version
+//! >= 1.2 (RT shaders are SPIR-V 1.4). Pairs with the [vulkan_raygen_shader] /
+//! [vulkan_miss_shader] / [vulkan_closest_hit_shader] annotations, build_blas / build_tlas,
+//! build_shader_binding_table, and cmd_trace_rays_k_h_r. Gate with rt_supported first.
+def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_extra : array<string>
+    return <- create_device_ray_tracing(phys, queue_family, no_extra)
+}
+
+//! create_device_ray_tracing with additional device extensions on top of the RT set (a windowed
+//! RT app passes ``["VK_KHR_swapchain"]``).
+def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uint; extra_extensions : array<string>) : Device {
+    if (!rt_supported(phys)) {
+        panic("create_device_ray_tracing: device does not support VK_KHR_ray_tracing_pipeline + VK_KHR_acceleration_structure + bufferDeviceAddress")
+    }
+    var prio = 1.0f
+    var qci = VkDeviceQueueCreateInfo()
+    qci.queueFamilyIndex = queue_family
+    qci.queueCount = 1u
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    f12.bufferDeviceAddress = 1u
+    var asf = VkPhysicalDeviceAccelerationStructureFeaturesKHR()
+    asf.accelerationStructure = 1u
+    var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
+    rtf.rayTracingPipeline = 1u
+    var extensions <- ["VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_deferred_host_operations"]
+    extensions |> push_from(extra_extensions)
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = 1u
+    ci.enabledExtensionCount = uint(length(extensions))
+    unsafe {
+        qci.pQueuePriorities = addr(prio)
+        ci.pQueueCreateInfos = addr(qci)
+        ci.pNext = reinterpret<void?>(addr(f12))
+        f12.pNext = reinterpret<void?>(addr(asf))
+        asf.pNext = reinterpret<void?>(addr(rtf))
+        ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    return <- b
+}
+
 def public get_device_queue(device : Device; queue_family, index : uint) : VkQueue {
     var q : VkQueue
     vkGetDeviceQueue(boost_value_to_vk(device), queue_family, index, q)
@@ -1732,5 +1805,387 @@ def public copy_image_to_buffer(cmd : CommandBuffer; image : Image; buffer : Hos
     unsafe {
         vkCmdCopyImageToBuffer(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
             boost_value_to_vk(buffer.buffer), 1u, addr(region))
+    }
+}
+
+// ===== hardware ray tracing rails (VK_KHR_ray_tracing_pipeline) =====
+
+//! buffer + memory allocated with the DEVICE_ADDRESS flag + its GPU virtual address, owned
+//! together. The building block for everything ray tracing references by VkDeviceAddress:
+//! acceleration-structure storage, build scratch, build inputs, shader binding tables.
+struct public AddressBuffer {
+    buffer : Buffer
+    memory : DeviceMemory
+    size : uint64
+    address : uint64
+}
+
+def public finalize(var ab : AddressBuffer) {
+    delete ab.buffer
+    delete ab.memory
+}
+
+//! Create a buffer + memory + device address. The helper adds the ``shader_device_address``
+//! usage bit and the matching ``VkMemoryAllocateFlagsInfo`` DEVICE_ADDRESS allocate flag (an
+//! address query against memory allocated without it is invalid). ``host_visible = true``
+//! allocates HOST_VISIBLE|HOST_COHERENT memory (mappable — SBTs, AS build inputs); ``false``
+//! allocates DEVICE_LOCAL (AS storage, scratch). Requires a device created with the
+//! ``bufferDeviceAddress`` feature (create_device_ray_tracing).
+def public create_address_buffer(device : Device; phys : VkPhysicalDevice; size : uint64;
+                                 usage : VkBufferUsageFlags; host_visible : bool) : AddressBuffer {
+    var u = usage
+    u.shader_device_address = true
+    var bci = BufferCreateInfo(size = size, usage = u)
+    var inscope buffer <- create_buffer(device, bci)
+    var req : VkMemoryRequirements
+    vkGetBufferMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(buffer), req)
+    var want : VkMemoryPropertyFlags
+    if (host_visible) {
+        want.host_visible = true
+        want.host_coherent = true
+    } else {
+        want.device_local = true
+    }
+    var flags_info = VkMemoryAllocateFlagsInfo()
+    flags_info.flags.device_address = true
+    var mai = MemoryAllocateInfo(allocationSize = req.size,
+        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
+    unsafe {
+        mai.next = reinterpret<void?>(addr(flags_info))
+    }
+    var inscope memory <- allocate_memory(device, mai)
+    vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
+    let bdai = BufferDeviceAddressInfo(buffer = weak_copy(buffer))
+    let address = get_buffer_device_address(device, bdai)
+    var ab = AddressBuffer(buffer <- buffer, memory <- memory, size = size, address = address)
+    return <- ab
+}
+
+//! Typed upload of `array<TT>` into an AddressBuffer (host_visible allocations only) — same
+//! contract as the HostBuffer overload.
+def public upload_bytes(buf : AddressBuffer; device : Device; var data : array<auto(TT)>) {
+    if (empty(data)) {
+        return
+    }
+    let nbytes = length(data) * typeinfo sizeof(type<TT>)
+    assert(uint64(nbytes) <= buf.size, "upload_bytes: data exceeds destination AddressBuffer.size")
+    var mapped : void? = null
+    let mf : VkMemoryMapFlags
+    unsafe {
+        vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
+        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+    }
+    vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
+}
+
+//! Query the ray-tracing pipeline properties (the shader-group handle size / alignment rules the
+//! SBT layout needs) via the ``vkGetPhysicalDeviceProperties2`` pNext chain.
+def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceRayTracingPipelinePropertiesKHR {
+    var rtp = VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = reinterpret<void?>(addr(rtp))
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    rtp.pNext = null   // don't leak the dangling chain pointer to the caller
+    return rtp
+}
+
+//! Fetch the opaque shader-group handles of a ray-tracing pipeline
+//! (``vkGetRayTracingShaderGroupHandlesKHR`` — raw-only in the generated layer: its ``void*``
+//! out-param is not boost-mappable). Returns ``group_count`` records of ``handle_size`` bytes,
+//! tightly packed — the raw material build_shader_binding_table copies into aligned SBT records.
+def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipeline;
+                                                first_group : uint; group_count : uint; handle_size : uint) : array<uint8> {
+    var data : array<uint8>
+    data |> resize(int(group_count * handle_size))
+    unsafe {
+        vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
+            first_group, group_count, uint64(length(data)), reinterpret<void?>(addr(data[0]))), null)
+    }
+    return <- data
+}
+
+//! Create a triangle-path ray-tracing pipeline: raygen + N miss + closest-hit stages, one GENERAL
+//! group per general stage and one TRIANGLES_HIT_GROUP for the closest-hit. Group order is
+//! [raygen, miss[0..N), hit] — the layout build_shader_binding_table assumes; ``traceRayEXT``'s
+//! ``miss_index`` selects within the miss region. Shadow-ray setups take two miss shaders (index
+//! 0 = radiance/sky, index 1 = the shadow "lit" flip). ``max_recursion >= 2`` lets the
+//! closest-hit stage trace (shadow) rays itself.
+def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
+                                       raygen : ShaderModule; miss : array<ShaderModule>; closest_hit : ShaderModule;
+                                       max_recursion : uint = 1u) : Pipeline {
+    assert(!empty(miss), "create_ray_tracing_pipeline: need at least one miss shader")
+    var ci : RayTracingPipelineCreateInfoKHR
+    ci.pStages |> reserve(2 + length(miss))
+    ci.pGroups |> reserve(2 + length(miss))
+    var st_rgen = PipelineShaderStageCreateInfo(module_ = weak_copy(raygen), pName = "main")
+    st_rgen.stage.raygen_khr = true
+    ci.pStages |> emplace(st_rgen)
+    ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
+        generalShader = 0u, closestHitShader = VK_SHADER_UNUSED_KHR,
+        anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
+    for (i in range(length(miss))) {
+        var st_miss = PipelineShaderStageCreateInfo(module_ = weak_copy(miss[i]), pName = "main")
+        st_miss.stage.miss_khr = true
+        ci.pStages |> emplace(st_miss)
+        ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.GENERAL_KHR,
+            generalShader = uint(1 + i), closestHitShader = VK_SHADER_UNUSED_KHR,
+            anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
+    }
+    var st_chit = PipelineShaderStageCreateInfo(module_ = weak_copy(closest_hit), pName = "main")
+    st_chit.stage.closest_hit_khr = true
+    ci.pStages |> emplace(st_chit)
+    ci.pGroups |> push(RayTracingShaderGroupCreateInfoKHR(type_ = VkRayTracingShaderGroupTypeKHR.TRIANGLES_HIT_GROUP_KHR,
+        generalShader = VK_SHADER_UNUSED_KHR, closestHitShader = uint(1 + length(miss)),
+        anyHitShader = VK_SHADER_UNUSED_KHR, intersectionShader = VK_SHADER_UNUSED_KHR))
+    ci.maxPipelineRayRecursionDepth = max_recursion
+    ci.layout = weak_copy(layout)
+    var infos : array<RayTracingPipelineCreateInfoKHR>
+    infos |> emplace(ci)
+    var no_op : DeferredOperationKHR
+    var no_cache : PipelineCache
+    var pipes <- create_ray_tracing_pipelines_k_h_r(device, no_op, no_cache, infos)
+    unsafe {
+        delete infos
+    }
+    var p <- pipes[0]
+    delete pipes
+    return <- p
+}
+
+//! Single-miss convenience over the N-miss overload: groups [raygen, miss, hit].
+def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
+                                       raygen : ShaderModule; miss : ShaderModule; closest_hit : ShaderModule;
+                                       max_recursion : uint = 1u) : Pipeline {
+    var mlist : array<ShaderModule>
+    mlist |> push(weak_copy(miss))
+    var p <- create_ray_tracing_pipeline(device, layout, raygen, mlist, closest_hit, max_recursion)
+    delete mlist
+    return <- p
+}
+
+//! A built shader binding table: the backing device-address buffer plus the four strided regions
+//! ``cmd_trace_rays_k_h_r`` consumes. ``callable`` is a valid empty region (no callable shaders).
+struct public ShaderBindingTable {
+    buffer : AddressBuffer
+    raygen : StridedDeviceAddressRegionKHR
+    miss : StridedDeviceAddressRegionKHR
+    hit : StridedDeviceAddressRegionKHR
+    callable : StridedDeviceAddressRegionKHR
+}
+
+def public finalize(var sbt : ShaderBindingTable) {
+    delete sbt.buffer
+}
+
+def private align_up(v : uint64; alignment : uint64) : uint64 => (v + alignment - 1ul) & ~(alignment - 1ul)
+
+//! Build the shader binding table for a pipeline created by create_ray_tracing_pipeline (group
+//! order [raygen | miss_count × miss | hit_count × hit]). Queries the device's group-handle
+//! size/alignment rules, fetches the opaque handles, packs them into records aligned per
+//! ``shaderGroupHandleAlignment`` with each region start aligned per ``shaderGroupBaseAlignment``,
+//! and uploads into a SHADER_BINDING_TABLE device-address buffer. The returned regions point into
+//! that buffer — keep the ShaderBindingTable alive for every trace that uses it.
+def public build_shader_binding_table(device : Device; phys : VkPhysicalDevice; pipeline : Pipeline;
+                                      miss_count : uint; hit_count : uint) : ShaderBindingTable {
+    let props = get_ray_tracing_properties(phys)
+    let handle_size = uint64(props.shaderGroupHandleSize)
+    let record = align_up(handle_size, uint64(props.shaderGroupHandleAlignment))
+    let base_align = uint64(props.shaderGroupBaseAlignment)
+    let rgen_size = align_up(record, base_align)
+    let miss_size = align_up(uint64(miss_count) * record, base_align)
+    let hit_size = align_up(uint64(hit_count) * record, base_align)
+    let total = rgen_size + miss_size + hit_size
+    let group_count = 1u + miss_count + hit_count
+    var handles <- get_ray_tracing_shader_group_handles(device, pipeline, 0u, group_count, uint(handle_size))
+    var usage : VkBufferUsageFlags
+    usage.shader_binding_table_khr = true
+    // over-allocate by base_align so the record block can start base-aligned even when the
+    // buffer's device address itself is not (region.deviceAddress % base_align must be 0)
+    var sbt = ShaderBindingTable(buffer <- create_address_buffer(device, phys, total + base_align, usage, true))
+    let start = align_up(sbt.buffer.address, base_align)
+    let pad = int(start - sbt.buffer.address)
+    var records : array<uint8>
+    records |> resize(pad + int(total))
+    for (g in range(int(group_count))) {
+        var dst = pad
+        if (g == 0) {
+            dst += 0
+        } elif (g <= int(miss_count)) {
+            dst += int(rgen_size) + (g - 1) * int(record)
+        } else {
+            dst += int(rgen_size + miss_size) + (g - 1 - int(miss_count)) * int(record)
+        }
+        for (b in range(int(handle_size))) {
+            records[dst + b] = handles[g * int(handle_size) + b]
+        }
+    }
+    sbt.buffer |> upload_bytes(device, records)
+    delete handles
+    delete records
+    sbt.raygen = StridedDeviceAddressRegionKHR(deviceAddress = start, stride = rgen_size, size = rgen_size)
+    sbt.miss = StridedDeviceAddressRegionKHR(deviceAddress = start + rgen_size, stride = record, size = miss_size)
+    sbt.hit = StridedDeviceAddressRegionKHR(deviceAddress = start + rgen_size + miss_size, stride = record, size = hit_size)
+    return <- sbt
+}
+
+//! Trace using a built ShaderBindingTable (the four strided regions in one argument).
+def public cmd_trace_rays(cmd : CommandBuffer; sbt : ShaderBindingTable; width : uint; height : uint; depth : uint = 1u) {
+    cmd_trace_rays_k_h_r(cmd, sbt.raygen, sbt.miss, sbt.hit, sbt.callable, width, height, depth)
+}
+
+//! Host-side stand-in for ``VkAccelerationStructureInstanceKHR``, which the generator skips (C
+//! bitfield members). The daslang layout is byte-identical to the C struct (48-byte row-major
+//! 3x4 transform, two packed bitfield words, the referenced BLAS address), so an
+//! ``array<AccelInstance>`` uploads straight into the TLAS instance buffer. Build records with
+//! make_accel_instance (it packs the bitfield words); set translation via ``inst.transform[r][3]``.
+struct public AccelInstance {
+    transform : float[3][4]        // row r = [x-axis, y-axis, z-axis, translation][r]
+    customIndex24_mask8 : uint     // instanceCustomIndex:24 | mask:8
+    sbtOffset24_flags8 : uint      // instanceShaderBindingTableRecordOffset:24 | flags:8
+    blasAddress : uint64           // accelerationStructureReference
+}
+
+//! An AccelInstance with the identity transform. ``flags`` is VkGeometryInstanceFlagBitsKHR
+//! (e.g. 1 = TRIANGLE_FACING_CULL_DISABLE); the default ``mask`` 0xFF passes every trace cull mask.
+def public make_accel_instance(blas_address : uint64; custom_index : uint = 0u; mask : uint = 0xFFu;
+                               sbt_record_offset : uint = 0u; flags : uint = 0u) : AccelInstance {
+    var inst : AccelInstance
+    inst.transform[0][0] = 1.0
+    inst.transform[1][1] = 1.0
+    inst.transform[2][2] = 1.0
+    inst.customIndex24_mask8 = (custom_index & 0x00FFFFFFu) | (mask << 24u)
+    inst.sbtOffset24_flags8 = (sbt_record_offset & 0x00FFFFFFu) | (flags << 24u)
+    inst.blasAddress = blas_address
+    return inst
+}
+
+//! An acceleration structure with its backing storage buffer and GPU address, owned together
+//! (``var inscope tlas <- build_tlas(...)``). For a BLAS, ``address`` is what TLAS instances
+//! reference (make_accel_instance takes it).
+struct public AccelStructure {
+    handle : AccelerationStructureKHR
+    buffer : AddressBuffer
+    address : uint64
+}
+
+def public finalize(var a : AccelStructure) {
+    delete a.handle
+    delete a.buffer
+}
+
+// shared create→sizes→scratch→build→address dance behind build_blas / build_tlas. run_cmd_sync
+// waits the queue idle, so the scratch (and the caller's build-input buffers) may be freed right
+// after, and a BLAS built this way is complete before a TLAS build that references it starts.
+def private build_accel_structure(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;
+                                  geom : AccelerationStructureGeometryKHR; as_type : VkAccelerationStructureTypeKHR;
+                                  prim_count : uint) : AccelStructure {
+    var bgi = AccelerationStructureBuildGeometryInfoKHR(type_ = as_type,
+        mode = VkBuildAccelerationStructureModeKHR.BUILD_KHR)
+    bgi.flags.prefer_fast_trace_khr = true
+    bgi.pGeometries |> push(geom)
+    var max_prims <- [prim_count]
+    let sizes = get_acceleration_structure_build_sizes_k_h_r(device, VkAccelerationStructureBuildTypeKHR.DEVICE_KHR, bgi, max_prims)
+    delete max_prims
+    var storage_usage : VkBufferUsageFlags
+    storage_usage.acceleration_structure_storage_khr = true
+    var inscope as_buf <- create_address_buffer(device, phys, sizes.accelerationStructureSize, storage_usage, false)
+    let asci = AccelerationStructureCreateInfoKHR(buffer = weak_copy(as_buf.buffer),
+        size = sizes.accelerationStructureSize, type_ = as_type)
+    var inscope handle <- create_acceleration_structure_k_h_r(device, asci)
+    var scratch_usage : VkBufferUsageFlags
+    scratch_usage.storage_buffer = true
+    var inscope scratch <- create_address_buffer(device, phys, sizes.buildScratchSize, scratch_usage, false)
+    bgi.dstAccelerationStructure = weak_copy(handle)
+    bgi.scratchData.deviceAddress = scratch.address
+    var infos : array<AccelerationStructureBuildGeometryInfoKHR>
+    infos |> emplace(bgi)
+    var ranges : array<array<AccelerationStructureBuildRangeInfoKHR>>
+    ranges |> resize(1)
+    ranges[0] |> push(AccelerationStructureBuildRangeInfoKHR(primitiveCount = prim_count))
+    run_cmd_sync(device, pool, queue) $(cmd) {
+        cmd_build_acceleration_structures_k_h_r(cmd, infos, ranges)
+    }
+    unsafe {
+        delete infos
+    }
+    delete ranges
+    let dai = AccelerationStructureDeviceAddressInfoKHR(accelerationStructure = weak_copy(handle))
+    let address = get_acceleration_structure_device_address_k_h_r(device, dai)
+    var result = AccelStructure(handle <- handle, buffer <- as_buf, address = address)
+    return <- result
+}
+
+//! Build a bottom-level acceleration structure over an indexed triangle list, blocking until the
+//! GPU build completes. ``vertices`` are xyz positions (VK_FORMAT_R32G32B32_SFLOAT, stride
+//! ``sizeof(float3)``); ``indices`` are uint triples, one per triangle. The build-input buffers
+//! are transient — only the returned AccelStructure stays resident.
+def public build_blas(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;
+                      var vertices : array<float3>; var indices : array<uint>) : AccelStructure {
+    assert(!empty(vertices), "build_blas: vertices must be non-empty")
+    assert(!empty(indices), "build_blas: indices must be non-empty")
+    assert(length(indices) % 3 == 0, "build_blas: indices must be uint triples")
+    var input_usage : VkBufferUsageFlags
+    input_usage.acceleration_structure_build_input_read_only_khr = true
+    let vsize = uint64(length(vertices) * typeinfo sizeof(type<float3>))
+    var inscope vbuf <- create_address_buffer(device, phys, vsize, input_usage, true)
+    vbuf |> upload_bytes(device, vertices)
+    let isize = uint64(length(indices) * 4)
+    var inscope ibuf <- create_address_buffer(device, phys, isize, input_usage, true)
+    ibuf |> upload_bytes(device, indices)
+    var tri = VkAccelerationStructureGeometryTrianglesDataKHR()
+    tri.vertexFormat = VkFormat.R32G32B32_SFLOAT
+    tri.vertexData.deviceAddress = vbuf.address
+    tri.vertexStride = uint64(typeinfo sizeof(type<float3>))
+    tri.maxVertex = uint(length(vertices) - 1)
+    tri.indexType = VkIndexType.UINT32
+    tri.indexData.deviceAddress = ibuf.address
+    var geom : AccelerationStructureGeometryKHR
+    geom.geometryType = VkGeometryTypeKHR.TRIANGLES_KHR
+    geom.geometry.triangles = tri
+    geom.flags.opaque_khr = true
+    return <- build_accel_structure(device, phys, pool, queue, geom, VkAccelerationStructureTypeKHR.BOTTOM_LEVEL_KHR,
+        uint(length(indices) / 3))
+}
+
+//! Build a top-level acceleration structure over BLAS instances (make_accel_instance), blocking
+//! until the GPU build completes. The referenced BLASes must be fully built — true for build_blas,
+//! which waits the queue idle.
+def public build_tlas(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;
+                      var instances : array<AccelInstance>) : AccelStructure {
+    static_assert(typeinfo sizeof(type<AccelInstance>) == 64, "AccelInstance must stay wire-identical to VkAccelerationStructureInstanceKHR (64 bytes)")
+    assert(!empty(instances), "build_tlas: instances must be non-empty")
+    var input_usage : VkBufferUsageFlags
+    input_usage.acceleration_structure_build_input_read_only_khr = true
+    let isize = uint64(length(instances) * typeinfo sizeof(type<AccelInstance>))
+    var inscope ibuf <- create_address_buffer(device, phys, isize, input_usage, true)
+    ibuf |> upload_bytes(device, instances)
+    var idata = VkAccelerationStructureGeometryInstancesDataKHR()
+    idata.data.deviceAddress = ibuf.address
+    var geom : AccelerationStructureGeometryKHR
+    geom.geometryType = VkGeometryTypeKHR.INSTANCES_KHR
+    geom.geometry.instances = idata
+    return <- build_accel_structure(device, phys, pool, queue, geom, VkAccelerationStructureTypeKHR.TOP_LEVEL_KHR,
+        uint(length(instances)))
+}
+
+//! Write a top-level acceleration structure into a descriptor set — the pNext-chained
+//! ``VkWriteDescriptorSetAccelerationStructureKHR`` dance in one call. Matches the
+//! ``SpirvDescriptorKind.acceleration_structure`` binding vulkan_reflect lays out for an
+//! ``accelerationStructureEXT`` shader global.
+def public write_descriptor_acceleration_structure(device : Device; dset : DescriptorSet; binding : uint; tlas : AccelStructure) {
+    var raw_as = boost_value_to_vk(tlas.handle)
+    var was = VkWriteDescriptorSetAccelerationStructureKHR()
+    was.accelerationStructureCount = 1u
+    var w = VkWriteDescriptorSet()
+    w.dstSet = boost_value_to_vk(dset)
+    w.dstBinding = binding
+    w.descriptorCount = 1u
+    w.descriptorType = VkDescriptorType.ACCELERATION_STRUCTURE_KHR
+    unsafe {
+        was.pAccelerationStructures = addr(raw_as)
+        w.pNext = reinterpret<void?>(addr(was))
+        vkUpdateDescriptorSets(boost_value_to_vk(device), 1u, addr(w), 0u, null)
     }
 }

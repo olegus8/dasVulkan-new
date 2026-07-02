@@ -10,13 +10,22 @@ options indenting = 4
 //
 // so a backend-agnostic dasImgui app ports to Vulkan by swapping `require imgui/imgui_harness` for
 // `require vulkan/vulkan_imgui_app`. Apps that draw their own geometry behind the UI use the
-// `harness_end_frame(scene)` overload to record into the same render pass as the UI.
+// `harness_end_frame(scene)` overload to record into the same render pass as the UI. Apps that
+// build their own Vulkan resources (pipelines, buffers, images) reach the harness-owned objects
+// through the `harness_device()` / `harness_phys()` / `harness_queue()` / `harness_pool()` /
+// `harness_render_pass()` accessors.
 //
-// Standalone-windowed only for now (no headless / no live-host reload wiring yet); input is the GLFW
-// backend (ImGui_ImplGlfw) -- mouse, keyboard, and scroll.
+// Live-ready: the boost-v2 widget stack + imgui_live_core are re-exported and the boost synth tick
+// runs in `harness_new_frame`, so a harness app started under daslang-live answers `imgui_snapshot`
+// / `imgui_click` / `imgui_force_set` (and the vulkan_live `screenshot`) with no opt-in — the
+// Vulkan mirror of what imgui_harness wires for GL. Windowed only (no headless backend); input is
+// the GLFW backend (ImGui_ImplGlfw) -- mouse, keyboard, and scroll.
 
 module vulkan_imgui_app shared public
 
+options persistent_heap   // collectable heap so per-frame JsonValue churn (live commands) is reclaimed
+
+// windowed backend first — mirrors imgui_harness's require ordering (live_api after the backend)
 require imgui public
 require imgui_app
 require glfw/glfw_boost
@@ -26,7 +35,26 @@ require vulkan/vulkan_window public
 require vulkan/vulkan_imgui_driver public
 require vulkan/vulkan_live public
 require imgui/imgui_theme_daslang
+
+// live-host + boost-v2 widget stack — re-exported public so one `require vulkan/vulkan_imgui_app`
+// gives a consumer the same surface a GL imgui_harness app gets. ?dashv: live_api is the HTTP
+// live-command server (pulls dasHV); guarded so builds without dashv still compile.
+require ?dashv live/live_api public
+require live/live_commands public
+require live/live_vars public
 require live_host public
+require imgui/imgui_live_core public
+require imgui/imgui_boost_runtime public
+require imgui/imgui_boost_v2 public
+require imgui/imgui_widgets_builtin public
+require imgui/imgui_containers_builtin public
+require imgui/imgui_scope_builtin public
+require imgui/imgui_id_builtin public
+require imgui/imgui_style_builtin public
+require imgui/imgui_layout_builtin public
+require imgui/imgui_docking_builtin public
+require imgui/imgui_drawlist_builtin public
+require imgui/imgui_colors public
 
 // ===== app state (one owning heap struct, held by a single pointer so teardown is explicit) =====
 
@@ -45,6 +73,7 @@ struct private VulkanApp {
     igvk          : ImguiVkRenderer
     ctx           : ImGuiContext?
     shot_was_down : bool
+    rt_enabled    : bool      // harness_init(ray_tracing=true) AND the device supports the RT pipeline
 }
 
 def private finalize(var a : VulkanApp) {
@@ -76,10 +105,12 @@ var private g_app : VulkanApp?
 
 // ===== lifecycle =====
 
-def public harness_init(title : string; width : int = 800; height : int = 600) {
+def public harness_init(title : string; width : int = 800; height : int = 600; ray_tracing : bool = false) {
     //! Create the window + Vulkan device/swapchain + ImGui context (daslang theme + JetBrains Mono) +
     //! the vulkan_imgui_driver renderer, and register the swapchain with vulkan_live. Idempotent.
-    //! Call from your script's init().
+    //! Call from your script's init(). Pass `ray_tracing = true` to request the hardware-RT device
+    //! (acceleration structures + RT pipeline + buffer device address); when the GPU lacks the
+    //! extension the harness silently falls back to the plain device — probe `harness_rt_supported()`.
     if (g_app != null) {
         return
     }
@@ -117,7 +148,13 @@ def public harness_init(title : string; width : int = 800; height : int = 600) {
     if (!queue_family_supports_present(phys, gfx, surface)) {
         panic("vulkan_imgui_app: graphics queue family can't present")
     }
-    var inscope device <- create_device(phys, gfx, ["VK_KHR_swapchain"])
+    let rt_enabled = ray_tracing && rt_supported(phys)
+    var inscope device : Device
+    if (rt_enabled) {
+        device <- create_device_ray_tracing(phys, gfx, ["VK_KHR_swapchain"])
+    } else {
+        device <- create_device(phys, gfx, ["VK_KHR_swapchain"])
+    }
     volkLoadDevice(boost_value_to_vk(device))
     var queue = get_device_queue(device, gfx, 0u)
     var poolci : CommandPoolCreateInfo
@@ -144,7 +181,7 @@ def public harness_init(title : string; width : int = 800; height : int = 600) {
 
     g_app = new VulkanApp(window = window, instance <- instance, surface <- surface, phys = phys,
         gfx = gfx, device <- device, queue = queue, pool <- pool, swap <- swap, render_pass <- render_pass,
-        sync <- sync, igvk <- igvk, ctx = ctx, shot_was_down = false)
+        sync <- sync, igvk <- igvk, ctx = ctx, shot_was_down = false, rt_enabled = rt_enabled)
 
     // register on the app's OWN swapchain field (not the moved-out local), so an in-place resize is seen
     vk_live_set_target(g_app.device, g_app.phys, g_app.queue, g_app.pool, g_app.swap)
@@ -171,6 +208,9 @@ def public harness_begin_frame() : bool {
     if (fbw != g_app.swap.width || fbh != g_app.swap.height) {
         recreate_swapchain(g_app.swap, g_app.device, g_app.phys, g_app.surface, g_app.render_pass, fbw, fbh)  // waits idle internally
     }
+    // boost runtime frame open: advances the widget registry's frame clock (render-twice detection,
+    // snapshot bookkeeping) — mirrors imgui_harness's begin_frame placement
+    begin_frame()
     // Feeds DisplaySize/DisplayFramebufferScale, DeltaTime, and the polled mouse/keyboard/scroll events
     // (callbacks installed by InitForVulkan) into io.
     ImGui_ImplGlfw_NewFrame()
@@ -181,11 +221,18 @@ def public harness_begin_frame() : bool {
     if (io.DeltaTime > 0.1f) {
         io.DeltaTime = 0.1f
     }
+    // step the L1 synthetic-input coroutines (imgui_click et al) one frame — must run between the
+    // GLFW backend's NewFrame (above) and NewFrame() in harness_new_frame
+    advance_coroutines()
     return true
 }
 
 def public harness_new_frame() {
-    //! ImGui::NewFrame(). Call after harness_begin_frame() and before building the UI.
+    //! Runs the boost synth tick — so synthetic input (`imgui_click`, `imgui_force_set`,
+    //! `set_user_control`) works on every harness app with no opt-in — then ImGui::NewFrame().
+    //! The tick sits between ImGui_ImplGlfw_NewFrame (in harness_begin_frame) and NewFrame(),
+    //! the slot synthetic input must drain in. Mirrors imgui_harness.
+    imgui_synth_tick()
     NewFrame()
 }
 
@@ -208,6 +255,7 @@ def private after_present(ok : bool) {
 
 def public harness_end_frame() {
     //! Render the UI and present. Call after building the UI.
+    end_of_frame()
     Render()
     imgui_vk_update_textures(g_app.igvk, g_app.device, g_app.phys, g_app.queue, g_app.pool)
     let ok = vk_live_draw_frame(g_app.render_pass, g_app.sync,
@@ -220,6 +268,7 @@ def public harness_end_frame() {
 def public harness_end_frame(scene : block<(cmd : CommandBuffer) : void>) {
     //! Render `scene` (custom geometry) then the UI on top, into one render pass, and present. Use this
     //! when the app draws its own Vulkan geometry behind the ImGui UI.
+    end_of_frame()
     Render()
     imgui_vk_update_textures(g_app.igvk, g_app.device, g_app.phys, g_app.queue, g_app.pool)
     let ok = vk_live_draw_frame(g_app.render_pass, g_app.sync,
@@ -240,6 +289,49 @@ def public harness_shutdown() {
     }
     g_app = null
     glfwTerminate()
+}
+
+// ===== harness-owned Vulkan objects — non-owning views for apps that build their own resources =====
+
+def private app_or_panic : VulkanApp ? {
+    if (g_app == null) {
+        panic("vulkan_imgui_app: harness accessor called before harness_init")
+    }
+    return g_app
+}
+
+def public harness_device : Device {
+    //! Non-owning view of the harness device (weak_copy — never delete it).
+    return weak_copy(app_or_panic().device)
+}
+
+def public harness_phys : VkPhysicalDevice {
+    return app_or_panic().phys
+}
+
+def public harness_queue : VkQueue {
+    return app_or_panic().queue
+}
+
+def public harness_pool : CommandPool {
+    //! Non-owning view of the harness command pool (weak_copy — never delete it).
+    return weak_copy(app_or_panic().pool)
+}
+
+def public harness_render_pass : RenderPass {
+    //! Non-owning view of the swapchain render pass (for pipelines drawn inside harness_end_frame's scene block).
+    return weak_copy(app_or_panic().render_pass)
+}
+
+def public harness_rt_supported : bool {
+    //! True when harness_init was asked for ray_tracing AND the device actually has the RT pipeline.
+    return g_app != null && g_app.rt_enabled
+}
+
+def public harness_size : int2 {
+    //! Current swapchain extent (the render-pass target size), e.g. for projection aspect.
+    let a = app_or_panic()
+    return int2(a.swap.width, a.swap.height)
 }
 
 // ===== compatibility shims (match imgui_harness so apps port unchanged) =====

@@ -15,8 +15,16 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
     SET(DAS_VULKAN_INCLUDED TRUE)
     MESSAGE(STATUS "dasVulkan module included.")
 
+    # Optional GLSL -> SPIR-V helper (DAS_VULKAN_COMPILE_SHADER) for apps that
+    # author shaders in GLSL. Inert unless called, so the module build stays
+    # free of any Vulkan SDK dependency. Available in both build modes.
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/DasVulkanCompileShader.cmake)
+
     IF(COMMAND ADD_MODULE_CPP)
-        SET(DAS_VULKAN_DIR ${CMAKE_SOURCE_DIR}/modules/dasVulkan)
+        # CMAKE_CURRENT_LIST_DIR, not ${CMAKE_SOURCE_DIR}/modules/dasVulkan: in the daslang
+        # web build the top-level source dir is web/, so the CMAKE_SOURCE_DIR form would
+        # resolve to web/modules/dasVulkan (same trap dasGlfw documents).
+        SET(DAS_VULKAN_DIR ${CMAKE_CURRENT_LIST_DIR})
         SET(VULKAN_HEADERS_INCLUDE ${DAS_VULKAN_DIR}/vendor/Vulkan-Headers/include)
         SET(VOLK_DIR ${DAS_VULKAN_DIR}/vendor/volk)
 
@@ -40,8 +48,9 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         # emits NEED/DECLARE/PULL(Module_dasVULKAN) so the app needs no manual
         # registration, and each ADD_MODULE_DAS registers a boost path so
         # `require vulkan/<name>` resolves in-tree (getDasRoot()/modules/
-        # dasVulkan/daslib/<name>.das).  Mirrors the 13 paths the .das_module
-        # registers for the DLL/daspkg flow, minus register_dynamic_module.
+        # dasVulkan/daslib/<name>.das).  KEEP IN SYNC with the
+        # register_native_path list in .das_module (the DLL/daspkg flow) —
+        # every new daslib file has these two registration points.
         ADD_MODULE_CPP(dasVULKAN)
         ADD_MODULE_DAS(vulkan daslib vulkan_runtime)
         ADD_MODULE_DAS(vulkan daslib vulkan_ctors)
@@ -56,7 +65,14 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         ADD_MODULE_DAS(vulkan daslib vulkan_lint)
         ADD_MODULE_DAS(vulkan daslib spirv_vulkan_shader)
         ADD_MODULE_DAS(vulkan daslib vulkan_assets)
-        ADD_MODULE_LIB(libDasModuleVulkan dasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
+        ADD_MODULE_DAS(vulkan daslib vulkan_live)
+        ADD_MODULE_DAS(vulkan daslib vulkan_imgui_driver)
+        ADD_MODULE_DAS(vulkan daslib vulkan_imgui_app)
+        # static half only — no ADD_MODULE_LIB shared twin: in a superbuild the DLL
+        # flavor comes from this module's own standalone build (daspkg); the twin is
+        # dead weight an embedded host never loads (and the imgui-family externals
+        # can't even link theirs without a dllexport matrix)
+        ADD_DAS_STATIC_MODULE_LIB(libDasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
 
         MACRO(SETUP_VULKAN vulkan_mod_lib)
             TARGET_INCLUDE_DIRECTORIES(${vulkan_mod_lib} PRIVATE
@@ -78,15 +94,9 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
             SETUP_CPP11(${vulkan_mod_lib})
         ENDMACRO()
         SETUP_VULKAN(libDasModuleVulkan)
-        SETUP_VULKAN(dasModuleVulkan)
         IF(APPLE)
             TARGET_LINK_LIBRARIES(libDasModuleVulkan PUBLIC "-framework Cocoa" "-framework QuartzCore")
-            TARGET_LINK_LIBRARIES(dasModuleVulkan PUBLIC "-framework Cocoa" "-framework QuartzCore")
         ENDIF()
-
-        # GLSL -> SPIR-V helper (DAS_VULKAN_COMPILE_SHADER) for GLSL-authored
-        # apps; inert here, only the consuming app's generated CMake calls it.
-        INCLUDE(${DAS_VULKAN_DIR}/cmake/DasVulkanCompileShader.cmake)
 
         # Install the boost daslib so daspkg / DLL consumers resolve it from the
         # install tree; the static in-tree build resolves it via ADD_MODULE_DAS.

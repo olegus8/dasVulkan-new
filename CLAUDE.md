@@ -48,13 +48,21 @@ dev Windows box that binary is `d:/Work/daScript/bin/Release/daslang.exe`.
 `generator/*.das` parses `vk.xml` (vendored under `vendor/` at the SDK tag) with
 `dasPUGIXML` and emits both layers:
 
-- C++ → `src/*.gen.*` (committed, per the dasGlfw/dasSQLITE convention; CI guards
-  staleness).
+- C++ → `src/*.gen.*` (committed, per the dasGlfw/dasSQLITE convention).
 - boost → `daslib/vulkan_*.das`.
 
 `daslang generator/generate.das` regenerates everything; **`--no-cpp` regenerates
 only the boost** (the fast iteration loop — no C++ rebuild). `--boost-out`
 defaults to `daslib`.
+
+**The skip ratchet.** Full runs also write `generator/skip_report.txt` — every
+struct/command the generator could not emit, with its reason, sorted. The
+committed copy is the golden baseline: CI re-runs the generator into scratch
+dirs and diffs the regenerated report against it, so an emitter change that
+silently grows the skip tail (drops generated surface) fails the gate. A
+justified change regenerates the report in the same commit. (Full byte-diff of
+the generated sources themselves is NOT gated — regen locally and check the
+git diff when touching the emitter.)
 
 ## Boost file layout (acyclic)
 

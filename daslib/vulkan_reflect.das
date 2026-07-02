@@ -18,7 +18,11 @@ require spirv/spirv_reflect public
 def to_vk_descriptor_type(kind : SpirvDescriptorKind) : VkDescriptorType {
     if (kind == SpirvDescriptorKind.storage_buffer) return VkDescriptorType.STORAGE_BUFFER
     if (kind == SpirvDescriptorKind.combined_image_sampler) return VkDescriptorType.COMBINED_IMAGE_SAMPLER
+    if (kind == SpirvDescriptorKind.storage_image) return VkDescriptorType.STORAGE_IMAGE
+    if (kind == SpirvDescriptorKind.sampled_image) return VkDescriptorType.SAMPLED_IMAGE
+    if (kind == SpirvDescriptorKind.sampler || kind == SpirvDescriptorKind.comparison_sampler) return VkDescriptorType.SAMPLER
     if (kind == SpirvDescriptorKind.input_attachment) return VkDescriptorType.INPUT_ATTACHMENT
+    if (kind == SpirvDescriptorKind.acceleration_structure) return VkDescriptorType.ACCELERATION_STRUCTURE_KHR
     return VkDescriptorType.UNIFORM_BUFFER
 }
 
@@ -39,6 +43,15 @@ def to_vk_stage_flags(stages : SpirvStageFlags) : VkShaderStageFlags {
     }
     if (stages.mesh) {
         f.mesh_ext = true
+    }
+    if (stages.raygen) {
+        f.raygen_khr = true
+    }
+    if (stages.miss) {
+        f.miss_khr = true
+    }
+    if (stages.closest_hit) {
+        f.closest_hit_khr = true
     }
     return f
 }

@@ -1109,7 +1109,8 @@ def public emit_init(out_dir : string; ordered_calls : array<string>) {
 
 // ===== orchestrator =====
 
-def public emit_all(reg : VkRegistry; em : EmitModel; out_dir : string) {
+//! returns the raw-command skip log so generate.das can fold it into the skip-ratchet report
+def public emit_all(reg : VkRegistry; em : EmitModel; out_dir : string) : array<string> {
     var header_lines : array<string>
     var enum_init_fns : array<string>
     var struct_add_fns : array<string>
@@ -1139,4 +1140,5 @@ def public emit_all(reg : VkRegistry; em : EmitModel; out_dir : string) {
     for (sl in skip_log) {
         to_log(LOG_INFO, "  skip: {sl}\n")
     }
+    return <- skip_log
 }

@@ -1575,7 +1575,10 @@ def private emit_lint_data(creators : array<CreatorInfo>; plans : array<CmdPlan>
     to_log(LOG_INFO, "boost: vulkan_lint_data with {length(pairs)} wrapped calls\n")
 }
 
-def public emit_boost(reg : VkRegistry; em : EmitModel; out_dir : string) {
+//! `struct_skips_out` / `cmd_skips_out` receive the boost-layer skip logs so generate.das can
+//! fold them into the skip-ratchet report
+def public emit_boost(reg : VkRegistry; em : EmitModel; out_dir : string;
+                      var struct_skips_out : array<string>; var cmd_skips_out : array<string>) {
     var skip_log : array<string>
     emit_ctors(reg, em, out_dir)
     let owners <- derive_owners(reg, em)
@@ -1595,4 +1598,6 @@ def public emit_boost(reg : VkRegistry; em : EmitModel; out_dir : string) {
     emit_plain_commands_boost(reg, em, out_dir, plans, scratch_types)
     emit_lint_data(creators, plans, out_dir)
     to_log(LOG_INFO, "boost: {length(skip_log)} structs + {length(cmd_skip)} commands skipped (unmappable)\n")
+    struct_skips_out <- skip_log
+    cmd_skips_out <- cmd_skip
 }

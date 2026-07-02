@@ -81,21 +81,21 @@ jobs:
         # the texture tutorials' oracle gates (tut 8/10) load real JPG/HDR maps via
         # `require stbimage`, so its shared lib must be built (it is enabled by
         # default in daslang -- `--target daslang` alone just never builds it).
-        # Building daslang also produces lib/liblibDaScriptDyn{,_runtime}.so (the
-        # module links them). The generated dasVulkan C++ is committed, so no
-        # generator run in CI -- pugixml/LLVM/HV/GLFW are all unnecessary.
+        # `dasModulePUGIXML` is the generator's vk.xml parser -- the skip-ratchet
+        # step below re-runs the generator against the vendored registry. Building
+        # daslang also produces lib/liblibDaScriptDyn{,_runtime}.so (the module
+        # links them). LLVM/HV/GLFW stay unnecessary.
         run: |
           set -eux
           cmake --no-warn-unused-cli -B./build \
             -DCMAKE_BUILD_TYPE:STRING=Release \
             -DDAS_HV_DISABLED=ON \
-            -DDAS_PUGIXML_DISABLED=ON \
             -DDAS_LLVM_DISABLED=ON \
             -DDAS_GLFW_DISABLED=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja
-          cmake --build ./build --parallel --target daslang dasModuleStbImage
+          cmake --build ./build --parallel --target daslang dasModuleStbImage dasModulePUGIXML
           sccache --show-stats
           echo "BIN_DIR=bin" >> "$GITHUB_ENV"
 
@@ -118,6 +118,24 @@ jobs:
           cmake --build "${GITHUB_WORKSPACE}/dasVulkan/_build" --config Release --parallel 2
           sccache --show-stats
           ls -la "${GITHUB_WORKSPACE}/dasVulkan"/*.shared_module
+
+      - name: "Skip ratchet: the generator's skip tail must match the committed report"
+        # Re-run the generator against the vendored vk.xml into scratch dirs (the tree
+        # stays untouched) and diff the regenerated skip report against the committed
+        # generator/skip_report.txt. An emitter change that silently GROWS the skip
+        # tail (drops structs/commands from the generated surface) fails here; a
+        # justified change regenerates the report in the same commit.
+        working-directory: ${{ github.workspace }}/dasVulkan
+        run: |
+          set -eux
+          mkdir -p /tmp/vk_regen_src /tmp/vk_regen_daslib
+          "${GITHUB_WORKSPACE}/daslang-src/${BIN_DIR}/daslang" \
+            -load_module "${GITHUB_WORKSPACE}/dasVulkan" \
+            generator/generate.das -- \
+            --out /tmp/vk_regen_src \
+            --boost-out /tmp/vk_regen_daslib \
+            --skip-report /tmp/vk_skip_report.txt
+          diff -u generator/skip_report.txt /tmp/vk_skip_report.txt
 
       - name: "Lint: every committed .das must be clean (paranoid + perf + style)"
         # The unified linter (daslang's utils/lint/main.das) runs all three passes over the whole

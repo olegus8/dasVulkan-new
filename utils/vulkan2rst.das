@@ -67,6 +67,7 @@ def document_module_vulkan_boost() {
         group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|get_device_queue|instance_extension_available|device_extension_available)$%%),
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_graphics_pipeline_dyn|create_compute_pipeline)$%%),
         group_by_regex("Mesh shaders",     mod, %regex~^(create_device_mesh_shader|mesh_shader_supported|create_mesh_pipeline)$%%),
+        group_by_regex("Hardware ray tracing", mod, %regex~^(rt_supported|create_device_ray_tracing|create_address_buffer|get_ray_tracing_properties|get_ray_tracing_shader_group_handles|create_ray_tracing_pipeline|build_shader_binding_table|cmd_trace_rays|make_accel_instance|build_blas|build_tlas|write_descriptor_acceleration_structure)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth|depth_only)$%%),
         group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
         group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),

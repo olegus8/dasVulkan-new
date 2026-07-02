@@ -70,6 +70,25 @@ class SpirvVulkanTaskShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.Task
 }
 
+// VK_KHR_ray_tracing_pipeline stages. Same one-liner shape as mesh/task: the base SpirvShader
+// handles @ray_payload / @incoming_ray_payload / @hit_attribute globals, the accelerationStructureEXT
+// descriptor, and traceRayEXT; these mirrors add the Vulkan uniform/push-constant bind helpers.
+// Pairs with create_device_ray_tracing + build_shader_binding_table.
+[function_macro(name="vulkan_raygen_shader")]
+class SpirvVulkanRayGenShader : SpirvVulkanShader {
+    def override shader_stage() : ShaderStage => ShaderStage.RayGen
+}
+
+[function_macro(name="vulkan_miss_shader")]
+class SpirvVulkanMissShader : SpirvVulkanShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Miss
+}
+
+[function_macro(name="vulkan_closest_hit_shader")]
+class SpirvVulkanClosestHitShader : SpirvVulkanShader {
+    def override shader_stage() : ShaderStage => ShaderStage.ClosestHit
+}
+
 // Reserve an empty bind_uniform_<shader>(device : Device; memory : DeviceMemory) function so
 // consumer code referencing it resolves during the first inference pass. The body is filled in
 // patch by generate_bind_uniform; until then `exports = true` flags the function as still dummy.
@@ -215,6 +234,9 @@ def private stage_to_uint(stage : ShaderStage) : uint {
     if (stage == ShaderStage.Fragment) return 0x10u
     if (stage == ShaderStage.Task) return 0x40u   // VK_SHADER_STAGE_TASK_BIT_EXT
     if (stage == ShaderStage.Mesh) return 0x80u   // VK_SHADER_STAGE_MESH_BIT_EXT
+    if (stage == ShaderStage.RayGen) return 0x100u        // VK_SHADER_STAGE_RAYGEN_BIT_KHR
+    if (stage == ShaderStage.ClosestHit) return 0x400u    // VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
+    if (stage == ShaderStage.Miss) return 0x800u          // VK_SHADER_STAGE_MISS_BIT_KHR
     return 0x20u  // compute
 }
 
