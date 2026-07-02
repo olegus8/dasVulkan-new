@@ -15,6 +15,11 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
     SET(DAS_VULKAN_INCLUDED TRUE)
     MESSAGE(STATUS "dasVulkan module included.")
 
+    # Optional GLSL -> SPIR-V helper (DAS_VULKAN_COMPILE_SHADER) for apps that
+    # author shaders in GLSL. Inert unless called, so the module build stays
+    # free of any Vulkan SDK dependency. Available in both build modes.
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/DasVulkanCompileShader.cmake)
+
     IF(COMMAND ADD_MODULE_CPP)
         # CMAKE_CURRENT_LIST_DIR, not ${CMAKE_SOURCE_DIR}/modules/dasVulkan: in the daslang
         # web build the top-level source dir is web/, so the CMAKE_SOURCE_DIR form would
