@@ -25,7 +25,6 @@ MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
         "GLSLANG_PRE_ARGS;GLSLANG_ARGS;SPIRV_OPT_ARGS" ${ARGN})
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
-    get_filename_component(input_name ${input} NAME_WE)
     get_filename_component(input_name_ext ${input} NAME)
     IF(DS_OUTPUT_DIR)
         SET(out_dir ${DS_OUTPUT_DIR})
@@ -36,50 +35,51 @@ MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
     # writes to stdout, so redirect it (hence no VERBATIM here).
     ADD_CUSTOM_COMMAND(
         DEPENDS ${input_src} ${extra_deps}
-        OUTPUT ${out_dir}/${input_name}.pre.glsl
+        OUTPUT ${out_dir}/${input_name_ext}.pre.glsl
         WORKING_DIRECTORY ${input_dir}
         USES_TERMINAL
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_PRE_ARGS}
-            ${input_name_ext} > ${out_dir}/${input_name}.pre.glsl
-        COMMENT "glslangValidator -E ${input} to ${input_name}.pre.glsl")
+            ${input_name_ext} > ${out_dir}/${input_name_ext}.pre.glsl
+        COMMENT "glslangValidator -E ${input} to ${input_name_ext}.pre.glsl")
     ADD_CUSTOM_COMMAND(
         DEPENDS ${input_src} ${extra_deps}
-        OUTPUT ${out_dir}/${input_name}.base.spv
+        OUTPUT ${out_dir}/${input_name_ext}.base.spv
         WORKING_DIRECTORY ${input_dir}
         VERBATIM
         USES_TERMINAL
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_ARGS}
-            ${input_name_ext} -o ${out_dir}/${input_name}.base.spv
-        COMMENT "glslangValidator ${input} to ${input_name}.base.spv")
+            ${input_name_ext} -o ${out_dir}/${input_name_ext}.base.spv
+        COMMENT "glslangValidator ${input} to ${input_name_ext}.base.spv")
     ADD_CUSTOM_COMMAND(
-        DEPENDS ${out_dir}/${input_name}.base.spv
-        OUTPUT ${out_dir}/${input_name}.base.spvasm
+        DEPENDS ${out_dir}/${input_name_ext}.base.spv
+        OUTPUT ${out_dir}/${input_name_ext}.base.spvasm
         WORKING_DIRECTORY ${input_dir}
         VERBATIM
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_SPIRV_DIS_EXE} --nested-indent --comment
-            --no-color ${out_dir}/${input_name}.base.spv
-            -o ${out_dir}/${input_name}.base.spvasm
-        COMMENT "spirv-dis ${input_name}.base.spv")
+            --no-color ${out_dir}/${input_name_ext}.base.spv
+            -o ${out_dir}/${input_name_ext}.base.spvasm
+        COMMENT "spirv-dis ${input_name_ext}.base.spv")
     ADD_CUSTOM_COMMAND(
-        DEPENDS ${out_dir}/${input_name}.base.spv
-        OUTPUT ${out_dir}/${input_name}.spv
+        DEPENDS ${out_dir}/${input_name_ext}.base.spv
+        OUTPUT ${out_dir}/${input_name_ext}.spv
         WORKING_DIRECTORY ${input_dir}
         VERBATIM
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_SPIRV_OPT_EXE} ${DS_SPIRV_OPT_ARGS}
-            ${out_dir}/${input_name}.base.spv -o ${out_dir}/${input_name}.spv
-        COMMENT "spirv-opt ${input_name}.base.spv to ${input_name}.spv")
+            ${out_dir}/${input_name_ext}.base.spv
+            -o ${out_dir}/${input_name_ext}.spv
+        COMMENT "spirv-opt to ${input_name_ext}.spv")
     ADD_CUSTOM_COMMAND(
-        DEPENDS ${out_dir}/${input_name}.spv
-        OUTPUT ${out_dir}/${input_name}.spvasm
+        DEPENDS ${out_dir}/${input_name_ext}.spv
+        OUTPUT ${out_dir}/${input_name_ext}.spvasm
         WORKING_DIRECTORY ${input_dir}
         VERBATIM
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_SPIRV_DIS_EXE} --nested-indent --comment
-            --no-color ${out_dir}/${input_name}.spv
-            -o ${out_dir}/${input_name}.spvasm
-        COMMENT "spirv-dis ${input_name}.spv")
+            --no-color ${out_dir}/${input_name_ext}.spv
+            -o ${out_dir}/${input_name_ext}.spvasm
+        COMMENT "spirv-dis ${input_name_ext}.spv")
 ENDMACRO()
