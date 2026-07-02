@@ -1970,7 +1970,7 @@ def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var p
     for (vkrow in ppBuildRangeInfos) {
         for (vkv in vkrow) { vk_view_destroy(vkv) }
     }
-    for (vki in range(length(vkraw2_ppBuildRangeInfos))) { delete vkraw2_ppBuildRangeInfos[vki] }
+    for (vkrow2 in vkraw2_ppBuildRangeInfos) { delete vkrow2 }
     delete vkraw2_ppBuildRangeInfos
     delete vkptr_ppBuildRangeInfos
 }
@@ -1998,7 +1998,7 @@ def build_acceleration_structures_k_h_r(device : Device; deferredOperation : Def
     for (vkrow in ppBuildRangeInfos) {
         for (vkv in vkrow) { vk_view_destroy(vkv) }
     }
-    for (vki in range(length(vkraw2_ppBuildRangeInfos))) { delete vkraw2_ppBuildRangeInfos[vki] }
+    for (vkrow2 in vkraw2_ppBuildRangeInfos) { delete vkrow2 }
     delete vkraw2_ppBuildRangeInfos
     delete vkptr_ppBuildRangeInfos
 }
