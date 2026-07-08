@@ -129,11 +129,12 @@ def private is_opaque_resource_struct(st : Structure?) : bool {
             n == "texture2D" || n == "sampler" || n == "subpassInput")
 }
 
-// Fill the dummy bind_uniform function body: for every @uniform struct global reachable from
-// fnMain, walk its std140 field layout and emit one write_field call per field. The whole body
-// is wrapped in `with_mapped_memory(device, memory) <| $(ptr : void?) { ... }` so each call to
-// the generated function does exactly one map/unmap cycle. Samplers/images are skipped here —
-// they bind via descriptor-set writes, not via mapped memory.
+// Fill the dummy bind_uniform function body: walk the std140 layout of the FIRST @uniform struct
+// block reachable from fnMain and emit one write_field call per field. The whole body is wrapped
+// in `with_mapped_memory(device, memory) <| $(ptr : void?) { ... }` so each call does exactly one
+// map/unmap cycle. Samplers/images are skipped here — they bind via descriptor-set writes, not via
+// mapped memory. A with_mapped_memory write is valid ONLY for host-visible memory; device-local
+// UBOs are staged by the host and never bound through this helper (see the loop comment).
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     var inner = new ExprBlock(at = fn.at)
@@ -149,21 +150,16 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     ptr_arg._type.flags.constant = true
     inner.arguments |> emplace(ptr_arg)
 
-    // First pass: collect reachable @uniform struct globals. The generated function takes ONE
-    // (device, memory) pair, so it can only write fields belonging to ONE UBO allocation -- if
-    // a shader reaches >1 @uniform struct (different set/binding => different memory), writing
-    // them all into the same allocation would corrupt the upload. Fail-closed at >1 until the
-    // macro grows per-binding bind functions.
+    // Collect the @uniform struct globals reachable from fnMain. Only struct-typed @uniform globals
+    // that are real std140 interface blocks count. Sampler / image markers (sampler2D,
+    // sampler2DShadow, image2D, subpassInput …) are also `tStructure` at the AST level but bind via
+    // descriptor-set writes, not mapped memory — skip them by NAME (is_opaque_resource_struct), since
+    // the shared sampler2D/3D/image2D now carry a GL-superset field and are no longer empty. The
+    // empty() check stays as defence-in-depth. Standalone scalars under @uniform are rejected by the
+    // SPIR-V emitter, so they never reach this point.
     var ubo_globals : array<Variable?>
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
-            // Only struct-typed @uniform globals that are real std140 interface blocks. Sampler /
-            // image markers (sampler2D, sampler2DShadow, image2D, subpassInput …) are also
-            // `tStructure` at the AST level but bind via descriptor-set writes, not mapped memory —
-            // skip them by NAME (is_opaque_resource_struct), since the shared sampler2D/3D/image2D
-            // now carry a GL-superset field and are no longer empty. The empty() check stays as
-            // defence-in-depth. Standalone scalars under @uniform are rejected by the SPIR-V emitter,
-            // so they never reach this point.
             if (!(vv.annotation |> find_arg("uniform") is tBool) ||
                 vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null ||
                 is_opaque_resource_struct(vv._type.structType) ||
@@ -171,22 +167,23 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             ubo_globals |> push(vv)
         }
     }
-    if (length(ubo_globals) > 1) {
-        macro_error(compiling_program(), ubo_globals[0].at,
-            "[vulkan_*_shader]: shader reaches {length(ubo_globals)} @uniform struct globals; bind_uniform_<shader>(device, memory) takes one memory allocation and would corrupt cross-block writes. Split into separate shaders, merge the UBOs into one struct, or wait for per-binding bind functions.")
-        unsafe { delete ubo_globals; }
-        return
-    }
-    for (vv in ubo_globals) {
+    // The generated <shader>_bind_uniform maps ONE (device, memory) allocation and writes ONE UBO
+    // block's std140 fields into it, so it binds the FIRST reachable @uniform block. A shader may
+    // legitimately reach more than one UBO block (e.g. a per-frame block plus a shared lookup table);
+    // the additional blocks are deliberately NOT auto-bound. A UBO's allocation is the host's call,
+    // and host-coherent (mappable) memory must never be conflated with device-local (staged, NOT
+    // mappable) memory — a with_mapped_memory write is valid only for host-visible memory. The host
+    // binds each additional / device-local block through its own upload path.
+    if (!empty(ubo_globals)) {
+        let vv = ubo_globals[0]
         let st = vv._type.structType
         var layout_errors : array<string>
         var fields : array<BlockField>
         let layout = compute_block_layout(string(vv.name), st, fields, layout_errors)
         if (!layout.ok) {
-            // Fail-closed: a UBO that can't lay out (e.g. a bool field) silently producing a
-            // no-op bind_uniform would write garbage at runtime. Surface the compute_block_layout
-            // diagnostic through macro_error so the shader fails to compile. compute_block_layout
-            // pushes exactly one error on the failure path; take the first.
+            // A UBO that can't lay out (e.g. a bool field) silently producing a no-op bind_uniform
+            // would write garbage at runtime. Surface the compute_block_layout diagnostic through
+            // macro_error so the shader fails to compile; it pushes exactly one error, take the first.
             let msg = empty(layout_errors) ? "(no diagnostic)" : layout_errors[0]
             macro_error(compiling_program(), vv.at,
                 "[vulkan_*_shader]: @uniform '{vv.name}' std140 layout failed: {msg}")
@@ -198,7 +195,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
         // Decompose the block into leaf writes via the shared std140 walk (shader_block_layout) — the
         // SAME walk the OpenGL binder drives, so both rails pack byte-identically. This is what gives
         // float3x3 / float3x4 their per-column std140 padding and arrays / nested structs their correct
-        // strides; a flat write_field per top-level field (the old loop) mis-packed those shapes.
+        // strides; a flat write_field per top-level field mis-packs those shapes.
         var writes : array<Std140Write>
         std140_block_writes(st, new ExprVar(at = vv.at, name := vv.name), 0, writes)
         for (w in writes) {

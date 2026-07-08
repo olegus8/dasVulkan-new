@@ -121,19 +121,21 @@ don't show up strongly in the rendered output. Known soft spots:
   Each will land the rail correctly first; the visual polish is the second
   pass.
 
-Two unresolved emitter / generator quirks the polish pass should clean up
-(currently worked around in tutorial 10's host code):
+One resolved-by-design generator behavior and one still-open quirk
+(both surfaced by tutorial 10's host code):
 
-- **Per-shader `bind_uniform` helper doesn't write the second `@uniform`
-  block.** When a module declares two `@uniform` UBO globals (e.g.
-  `xform` at set 0 + `scene` at set 1) and a single shader references both
-  or only the non-first one, the generated `<shader>_bind_uniform` helper
-  silently writes zero fields for the non-first UBO. Worked around in
-  `deferred_tut.das` with a manual `with_mapped_memory` + `write_field`
-  block (`write_scene_ubo_manual`). The `xform` UBO bound through the
-  helper works fine. Likely a `collect_dependencies` traversal that walks
-  only the first matched UBO; needs a look at
-  `daslib/spirv_vulkan_shader.das:generate_bind_uniform`.
+- **Per-shader `bind_uniform` binds only the FIRST `@uniform` block --
+  by design.** When a shader reaches more than one `@uniform` UBO block
+  (e.g. `xform` at set 0 + `scene` at set 1), the generated
+  `<shader>_bind_uniform` writes the first reachable block's std140
+  fields through `with_mapped_memory` and leaves the rest to the host.
+  A `with_mapped_memory` write is valid only for host-visible memory, so
+  a host-coherent UBO must never be conflated with a device-local
+  (staged, NOT mappable) one -- the host owns each additional /
+  device-local block's upload. `deferred_tut.das`'s
+  `write_scene_ubo_manual` for the `scene` UBO is the sanctioned pattern,
+  not a workaround. (Earlier this case failed closed with a `macro_error`;
+  see `daslib/spirv_vulkan_shader.das:generate_bind_uniform`.)
 - **`@push_constant` struct's non-matrix fields don't propagate.**
   Setting `op.model` (float4x4) host-side then calling the generated
   push helper writes the matrix correctly, but a sibling `int material`
