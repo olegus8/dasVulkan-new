@@ -131,7 +131,7 @@ struct GltfVkMat {
     base_color_factor : float4
     mr_factors : float4         // x metallic, y roughness, z occlusion strength, w normal scale
     emissive_alpha : float4     // xyz emissive factor, w alpha cutoff
-    mode_flags : float4         // x alpha mode: 0 OPAQUE, 1 MASK, 2 BLEND
+    mode_flags : float4         // x alpha mode 0/1/2, y environment amount, z environment max lod
 }
 var @uniform @set = 0 @binding = 1 vg_mat : GltfVkMat
 
@@ -141,6 +141,8 @@ var @set = 0 @binding = 3 vg_metal_rough_tex : sampler2D
 var @set = 0 @binding = 4 vg_normal_tex : sampler2D
 var @set = 0 @binding = 5 vg_occlusion_tex : sampler2D
 var @set = 0 @binding = 6 vg_emissive_tex : sampler2D
+// equirect HDR environment (linear radiance, mipmapped); amount 0 -> flat ambient (white bound)
+var @set = 0 @binding = 7 vg_env_tex : sampler2D
 
 var @in @location = 0 f_world_pos : float3
 var @in @location = 1 f_world_normal : float3
@@ -171,7 +173,15 @@ def gltf_vk_fs {
     let v = normalize(vg_mat.cam_pos.xyz - f_world_pos)
     let l = normalize(vg_mat.light_dir.xyz)
     let direct = gltf_pbr_direct(albedo, metallic, roughness, n, v, l, vg_mat.light_color.xyz)
-    let ambient = gltf_pbr_ambient(albedo, vg_mat.ambient.xyz, occ, vg_mat.mr_factors.z)
+    var ambient = gltf_pbr_ambient(albedo, vg_mat.ambient.xyz, occ, vg_mat.mr_factors.z)
+    if (vg_mat.mode_flags.y > 0.0) {
+        // image-based ambient: irradiance from a deep mip along n, reflection from a
+        // roughness-scaled mip along the mirror direction (mips as prefiltered environment)
+        let irr = textureLod(vg_env_tex, gltf_equirect_uv(n), vg_mat.mode_flags.z - 2.0).xyz
+        let refl = textureLod(vg_env_tex, gltf_equirect_uv(gltf_reflect_dir(n, v)), roughness * vg_mat.mode_flags.z).xyz
+        ambient = gltf_env_ambient(albedo, metallic, roughness, n, v, irr, refl,
+            gltf_occlusion_factor(occ, vg_mat.mr_factors.z)) * vg_mat.mode_flags.y
+    }
 
     let linear_out = ambient + direct + emissive
     // UNORM color target -> encode linear -> sRGB in the shader (GL parity)
@@ -209,6 +219,8 @@ struct public GltfVkModel {
     white_tex : Texture
     flat_normal_tex : Texture
     default_sampler : Sampler
+    env_tex : Texture                       // equirect HDR environment; width == 0 => none
+    env_max_lod : float
     cam_ubo : HostBuffer                    // rigid-path view_proj
     mat_ubos : array<HostBuffer>            // one per material + trailing default slot
     skin_ubos : array<HostBuffer>           // one per skin
@@ -241,6 +253,7 @@ def public finalize(var m : GltfVkModel) {
         delete m.skin_ubos
         delete m.mat_ubos
         delete m.cam_ubo
+        delete m.env_tex
         delete m.default_sampler
         delete m.flat_normal_tex
         delete m.white_tex
@@ -543,7 +556,7 @@ def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQu
         maxSets = uint(nsets),
         pPoolSizes <- [
             DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = uint(nsets * 2)),
-            DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = uint(nsets * 5))])
+            DescriptorPoolSize(type_ = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = uint(nsets * 6))])
     model.desc_pool <- create_descriptor_pool(device, dpci)
     for (k in keys(pair_keys)) {
         let skin_slot = (k % 4096) - 1
@@ -611,11 +624,49 @@ def private write_gltf_set(device : Device; model : GltfVkModel; scene : GltfSce
     write_tex_binding(writes, model, scene, raw_set, 4u, mat.normalTex, true)
     write_tex_binding(writes, model, scene, raw_set, 5u, mat.occlusionTex, false)
     write_tex_binding(writes, model, scene, raw_set, 6u, mat.emissiveTex, false)
+    writes |> emplace_env_write(model, raw_set)
 
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
     unsafe {
         delete writes
+    }
+}
+
+// binding 7: the environment (white when none is set — the shader gates on mode_flags.y anyway)
+def private emplace_env_write(var writes : array<WriteDescriptorSet>; model : GltfVkModel; raw_set : VkDescriptorSet) {
+    var w = WriteDescriptorSet(
+        dstSet = vk_value_to_boost(raw_set),
+        dstBinding = 7u,
+        descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1u)
+    let view = model.env_tex.width > 0 ? weak_copy(model.env_tex.view) : weak_copy(model.white_tex.view)
+    w.pImageInfo |> push(DescriptorImageInfo(
+        sampler = weak_copy(model.default_sampler),
+        imageView = view,
+        imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL))
+    writes |> emplace(w)
+}
+
+//! Attach an equirect (2:1 lat-long) HDR environment — e.g. vulkan_assets' load_texture_hdr,
+//! which builds the mip chain the roughness lookup uses. Takes ownership of `env`; call it
+//! between frames (the device is idle there). `GltfPbrLight.environment` scales the
+//! contribution per frame; without an environment the flat ambient is used.
+def public gltf_vk_set_environment(var model : GltfVkModel; device : Device; var env : Texture) {
+    unsafe {
+        delete model.env_tex
+    }
+    model.env_tex <- env
+    model.env_max_lod = (model.env_tex.width > 0
+        ? floor(log2(float(max(model.env_tex.width, model.env_tex.height)))) : 0.0)
+    for (raw in values(model.desc_sets)) {
+        var writes : array<WriteDescriptorSet>
+        writes |> emplace_env_write(model, unsafe(reinterpret<VkDescriptorSet>(raw)))
+        let no_copies : array<CopyDescriptorSet>
+        update_descriptor_sets(device, writes, no_copies)
+        unsafe {
+            delete writes
+        }
     }
 }
 
@@ -645,7 +696,7 @@ def private write_tex_binding(var writes : array<WriteDescriptorSet>; model : Gl
 
 // ===== per-frame update + record =====
 
-def private fill_mat_globals(mat : GltfMaterial; cam_pos : float3; light : GltfPbrLight) {
+def private fill_mat_globals(mat : GltfMaterial; cam_pos : float3; light : GltfPbrLight; env_amount, env_max_lod : float) {
     vg_mat.cam_pos = float4(cam_pos, 0.0)
     vg_mat.light_dir = float4(normalize(light.direction), 0.0)
     vg_mat.light_color = float4(light.color * light.intensity, 0.0)
@@ -654,7 +705,7 @@ def private fill_mat_globals(mat : GltfMaterial; cam_pos : float3; light : GltfP
     vg_mat.mr_factors = float4(mat.metallicFactor, mat.roughnessFactor, mat.occlusionStrength, mat.normalScale)
     vg_mat.emissive_alpha = float4(mat.emissiveFactor, mat.alphaCutoff)
     let mode = mat.alphaMode == GltfAlphaMode.mask ? 1.0 : (mat.alphaMode == GltfAlphaMode.blend ? 2.0 : 0.0)
-    vg_mat.mode_flags = float4(mode, 0.0, 0.0, 0.0)
+    vg_mat.mode_flags = float4(mode, env_amount, env_max_lod, 0.0)
 }
 
 //! Write the frame's UBOs: rigid view_proj, every skin's (root-baked) joint palette, and every
@@ -683,8 +734,9 @@ def public gltf_vk_update(device : Device; model : GltfVkModel; scene : GltfScen
         }
         gltf_vk_vs_skinned_bind_uniform(device, model.skin_ubos[s].memory)
     }
+    let env_amount = model.env_tex.width > 0 ? light.environment : 0.0
     for (m in range(length(model.mat_ubos))) {
-        fill_mat_globals(material_at(scene, m), cam_pos, light)
+        fill_mat_globals(material_at(scene, m), cam_pos, light, env_amount, model.env_max_lod)
         gltf_vk_fs_bind_uniform(device, model.mat_ubos[m].memory)
     }
 }
