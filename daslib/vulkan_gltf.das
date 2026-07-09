@@ -176,8 +176,9 @@ def gltf_vk_fs {
     var ambient = gltf_pbr_ambient(albedo, vg_mat.ambient.xyz, occ, vg_mat.mr_factors.z)
     if (vg_mat.mode_flags.y > 0.0) {
         // image-based ambient: irradiance from a deep mip along n, reflection from a
-        // roughness-scaled mip along the mirror direction (mips as prefiltered environment)
-        let irr = textureLod(vg_env_tex, gltf_equirect_uv(n), vg_mat.mode_flags.z - 2.0).xyz
+        // roughness-scaled mip along the mirror direction (mips as prefiltered environment);
+        // clamp so a tiny environment (max lod < 2) can't produce a negative LOD
+        let irr = textureLod(vg_env_tex, gltf_equirect_uv(n), max(vg_mat.mode_flags.z - 2.0, 0.0)).xyz
         let refl = textureLod(vg_env_tex, gltf_equirect_uv(gltf_reflect_dir(n, v)), roughness * vg_mat.mode_flags.z).xyz
         ambient = gltf_env_ambient(albedo, metallic, roughness, n, v, irr, refl,
             gltf_occlusion_factor(occ, vg_mat.mr_factors.z)) * vg_mat.mode_flags.y
