@@ -288,6 +288,14 @@ def private vk_wrap_mode(mode : int) : VkSamplerAddressMode {
 
 def private vk_mag_filter(f : int) : VkFilter => f == 9728 ? VkFilter.NEAREST : VkFilter.LINEAR   // GL_NEAREST
 
+// glTF minFilter: 9728/9729 = unmipped NEAREST/LINEAR (base level pinned via mip NEAREST + maxLod 0,
+// the Vulkan-spec GL-emulation note), 9984..9987 = <min>_MIPMAP_<mip>, absent (0) = trilinear default
+def private vk_min_filter(f : int) : VkFilter => (f == 9728 || f == 9984 || f == 9986) ? VkFilter.NEAREST : VkFilter.LINEAR
+
+def private vk_mipmap_mode(f : int) : VkSamplerMipmapMode => (f == 9728 || f == 9729 || f == 9984 || f == 9985) ? VkSamplerMipmapMode.NEAREST : VkSamplerMipmapMode.LINEAR
+
+def private vk_max_lod(f : int) : float => (f == 9728 || f == 9729) ? 0.0 : 32.0
+
 def private push_attr(var attrs : array<VkVertexInputAttributeDescription>; loc : uint; fmt : VkFormat; off : uint) {
     var a : VkVertexInputAttributeDescription
     a.location = loc
@@ -489,12 +497,12 @@ def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQu
     for (js in scene.samplers) {
         let sci = SamplerCreateInfo(
             magFilter = vk_mag_filter(js.magFilter),
-            minFilter = vk_mag_filter(js.minFilter),
-            mipmapMode = VkSamplerMipmapMode.LINEAR,
+            minFilter = vk_min_filter(js.minFilter),
+            mipmapMode = vk_mipmap_mode(js.minFilter),
             addressModeU = vk_wrap_mode(js.wrapS),
             addressModeV = vk_wrap_mode(js.wrapT),
             addressModeW = VkSamplerAddressMode.REPEAT,
-            maxLod = 32.0f)
+            maxLod = vk_max_lod(js.minFilter))
         var smp <- create_sampler(device, sci)
         model.samplers |> emplace(smp)
     }
