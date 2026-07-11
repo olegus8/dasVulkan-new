@@ -474,7 +474,11 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
         r.ibuf_cap = cap
     }
 
-    // upload the per-command-list vertex/index data back to back into the mapped GPU buffers
+    // upload the per-command-list vertex/index data back to back into the mapped GPU buffers.
+    // NOTE the intptr arithmetic (mirrors write_field): `reinterpret<uint8?>(dst) + off` parses as
+    // `reinterpret<uint8?>((dst) + off)` — cast syntax is juxtaposition, the parens are NOT call
+    // parens — so the add runs on the void? at stride sizeof(void) = 0 and silently vanishes,
+    // uploading every list at offset 0 (last list wins; single-window UIs never noticed).
     map_and_write(device, r.vbuf.memory, vtx_bytes) $(dst) {
         var off = 0ul
         for (i in range(length(dd.CmdLists))) {
@@ -482,7 +486,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
             let cnt = length(cl.VtxBuffer)
             if (cnt > 0) {
                 unsafe {
-                    let d = reinterpret<void?>(reinterpret<uint8?>(dst) + off)
+                    let d = reinterpret<void?>(intptr(dst) + off)
                     memcpy(d, reinterpret<void?>(addr(cl.VtxBuffer[0])), cnt * VERT_SIZE)
                 }
                 off += uint64(cnt * VERT_SIZE)
@@ -496,7 +500,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
             let cnt = length(cl.IdxBuffer)
             if (cnt > 0) {
                 unsafe {
-                    let d = reinterpret<void?>(reinterpret<uint8?>(dst) + off)
+                    let d = reinterpret<void?>(intptr(dst) + off)
                     memcpy(d, reinterpret<void?>(addr(cl.IdxBuffer[0])), cnt * IDX_SIZE)
                 }
                 off += uint64(cnt * IDX_SIZE)
