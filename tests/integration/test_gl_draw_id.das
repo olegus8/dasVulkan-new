@@ -139,7 +139,7 @@ def private render_draw_id() : array<uint8> {
 def private write_u32_at(var bytes : array<uint8>; off : int; v : uint) {
     var probe = fixed_array(v)
     unsafe {
-        let src = reinterpret<uint8 const?>(addr(probe[0]))
+        let src = addr<uint8 const?>(probe[0])
         for (b in range(4)) {
             bytes[off + b] = src[b]
         }

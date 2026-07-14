@@ -241,7 +241,7 @@ def private render_one_id(id : int) : array<uint8> {
             var pcf : VkShaderStageFlags
             pcf.fragment = true
             unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, reinterpret<void?>(addr(pushed[0])))
+                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, addr<void?>(pushed[0]))
             }
             cmd_draw(cmd, 3u)
         }

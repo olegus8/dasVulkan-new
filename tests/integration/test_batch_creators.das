@@ -131,7 +131,7 @@ def test_batch_creators(t : T?) {
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, boost_value_to_vk(memory), 0ul, buf_size, mf, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(values[0])), mapped, n * 4)
+        memcpy(addr<void?>(values[0]), mapped, n * 4)
     }
     vkUnmapMemory(dev, boost_value_to_vk(memory))
     var wrong = 0

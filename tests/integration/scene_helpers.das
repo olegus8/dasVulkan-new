@@ -175,7 +175,7 @@ def public run_compute(n : int) : array<uint> {
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(values[0])), mapped, n * 4)
+        memcpy(addr<void?>(values[0]), mapped, n * 4)
     }
     vkUnmapMemory(dev, memory)
     vkDestroyPipeline(dev, pipeline, null)
@@ -322,7 +322,7 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, boost_value_to_vk(memory), 0ul, buf_size, mf, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(values[0])), mapped, n * 4)
+        memcpy(addr<void?>(values[0]), mapped, n * 4)
     }
     vkUnmapMemory(dev, boost_value_to_vk(memory))
     vkDestroyPipeline(dev, pipeline, null)
@@ -897,7 +897,7 @@ def private upload(device : Device; memory : DeviceMemory; var data : array<auto
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
-        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+        memcpy(mapped, addr<void?>(data[0]), nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
 }
@@ -1092,7 +1092,7 @@ def public render_textured_quad() : array<uint8> {
             var pcf : VkShaderStageFlags
             pcf.fragment = true
             unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, push_size, reinterpret<void?>(addr(tint[0])))
+                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, push_size, addr<void?>(tint[0]))
             }
             cmd_draw(cmd, 6u)
         }

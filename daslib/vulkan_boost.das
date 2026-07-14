@@ -137,7 +137,7 @@ def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     var mf = VkPhysicalDeviceMeshShaderFeaturesEXT()   // sType pre-filled by the ctor
     var f2 = VkPhysicalDeviceFeatures2()
     unsafe {
-        f2.pNext = reinterpret<void?>(addr(mf))
+        f2.pNext = addr<void?>(mf)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return mf.meshShader != 0u && mf.taskShader != 0u
@@ -169,7 +169,7 @@ def public create_instance(application_name : string; api_version : uint; extens
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(exts[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
         }
     }
     var h : VkInstance
@@ -218,7 +218,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -249,12 +249,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(features13))
+        ci.pNext = addr<void?>(features13)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -284,12 +284,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(features12))
+        ci.pNext = addr<void?>(features12)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -342,7 +342,7 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
         ci.pEnabledFeatures = addr(base)
-        ci.pNext = reinterpret<void?>(addr(f11))
+        ci.pNext = addr<void?>(f11)
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -374,12 +374,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(meshFeatures))
+        ci.pNext = addr<void?>(meshFeatures)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -420,9 +420,9 @@ def public rt_supported(phys : VkPhysicalDevice) : bool {
     var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
     var f2 = VkPhysicalDeviceFeatures2()
     unsafe {
-        f2.pNext = reinterpret<void?>(addr(f12))
-        f12.pNext = reinterpret<void?>(addr(asf))
-        asf.pNext = reinterpret<void?>(addr(rtf))
+        f2.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(asf)
+        asf.pNext = addr<void?>(rtf)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return f12.bufferDeviceAddress != 0u && asf.accelerationStructure != 0u && rtf.rayTracingPipeline != 0u
@@ -463,10 +463,10 @@ def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uin
     unsafe {
         qci.pQueuePriorities = addr(prio)
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(f12))
-        f12.pNext = reinterpret<void?>(addr(asf))
-        asf.pNext = reinterpret<void?>(addr(rtf))
-        ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+        ci.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(asf)
+        asf.pNext = addr<void?>(rtf)
+        ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -485,7 +485,7 @@ def public create_shader_module(device : Device; var code : array<uint8>) : Shad
     var ci = VkShaderModuleCreateInfo()
     ci.codeSize = uint64(length(code))
     unsafe {
-        ci.pCode = reinterpret<uint?>(addr(code[0]))
+        ci.pCode = addr<uint?>(code[0])
     }
     var h : VkShaderModule
     vk_check(vkCreateShaderModule(boost_value_to_vk(device), ci, null, h), null)
@@ -1043,7 +1043,7 @@ def public create_graphics_pipeline_dyn(device : Device;
         }
         blend.pAttachments = addr(blend_att)
         dyn_render.pColorAttachmentFormats = addr(cf)
-        gp.pNext = reinterpret<void?>(addr(dyn_render))
+        gp.pNext = addr<void?>(dyn_render)
         gp.pStages = addr(stages[0])
         gp.pVertexInputState = addr(vinput)
         gp.pInputAssemblyState = addr(iasm)
@@ -1510,7 +1510,7 @@ def public upload_bytes(buf : HostBuffer; device : Device; var data : array<auto
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
-        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+        memcpy(mapped, addr<void?>(data[0]), nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
 }
@@ -1663,7 +1663,7 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
         g_push_staging |> resize(int(size))
     }
     unsafe {
-        invoke(blk, reinterpret<void?>(addr(g_push_staging[0])))
+        invoke(blk, addr<void?>(g_push_staging[0]))
     }
 }
 
@@ -1674,7 +1674,7 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
 def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
     unsafe {
         let dst = reinterpret<void?>(intptr(ptr) + uint64(offset))
-        memcpy(dst, reinterpret<void?>(addr(value)), typeinfo sizeof(type<TT>))
+        memcpy(dst, addr<void?>(value), typeinfo sizeof(type<TT>))
     }
 }
 
@@ -1688,7 +1688,7 @@ def public map_memory_to_array(device : Device; memory : DeviceMemory; size : ui
     var arr : array<uint8>
     arr |> resize(int(size))
     unsafe {
-        memcpy(reinterpret<void?>(addr(arr[0])), mapped, int(size))
+        memcpy(addr<void?>(arr[0]), mapped, int(size))
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
     invoke(blk, arr)
@@ -1708,7 +1708,7 @@ def public map_memory_to_array(device : Device; memory : DeviceMemory; size : ui
     let flags : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, uint64(nbytes), flags, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(out[0])), mapped, nbytes)
+        memcpy(addr<void?>(out[0]), mapped, nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
     return <- out
@@ -1778,7 +1778,7 @@ def public cmd_bind_vertex_buffer(cmd : CommandBuffer; binding : uint; buffer : 
 
 //! Typed push-constant upload: writes `sizeof<TT>` bytes from `value` into the pipeline's push
 //! block at `offset`, for shader stages `stages`. The size is derived from the daslang value, so
-//! the call site no longer carries a hand-counted byte size or a `reinterpret<void?>(addr(...))`.
+//! the call site no longer carries a hand-counted byte size or a `addr<void?>(...)`.
 //! TT's daslang layout must match the shader's std430 push-constant layout (true for scalar /
 //! vec4 / mat4 packs without vec3 padding surprises). Vulkan requires both `offset` and the
 //! resolved size to be multiples of 4 (VUID-vkCmdPushConstants-offset-00370 /
@@ -1791,7 +1791,7 @@ def public cmd_push_constants(cmd : CommandBuffer; layout : PipelineLayout; stag
     assert((sz & 3u) == 0u, "cmd_push_constants: sizeof<TT> must be a multiple of 4")
     unsafe {
         vkCmdPushConstants(boost_value_to_vk(cmd), boost_value_to_vk(layout), stages,
-            offset, sz, reinterpret<void?>(addr(value)))
+            offset, sz, addr<void?>(value))
     }
 }
 
@@ -1851,7 +1851,7 @@ def public create_address_buffer(device : Device; phys : VkPhysicalDevice; size 
     var mai = MemoryAllocateInfo(allocationSize = req.size,
         memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     unsafe {
-        mai.next = reinterpret<void?>(addr(flags_info))
+        mai.next = addr<void?>(flags_info)
     }
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
@@ -1873,7 +1873,7 @@ def public upload_bytes(buf : AddressBuffer; device : Device; var data : array<a
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
-        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+        memcpy(mapped, addr<void?>(data[0]), nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
 }
@@ -1884,7 +1884,7 @@ def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDevic
     var rtp = VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
     var p2 = VkPhysicalDeviceProperties2()
     unsafe {
-        p2.pNext = reinterpret<void?>(addr(rtp))
+        p2.pNext = addr<void?>(rtp)
     }
     vkGetPhysicalDeviceProperties2(phys, p2)
     rtp.pNext = null   // don't leak the dangling chain pointer to the caller
@@ -1901,7 +1901,7 @@ def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipe
     data |> resize(int(group_count * handle_size))
     unsafe {
         vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
-            first_group, group_count, uint64(length(data)), reinterpret<void?>(addr(data[0]))), null)
+            first_group, group_count, uint64(length(data)), addr<void?>(data[0])), null)
     }
     return <- data
 }
@@ -2185,7 +2185,7 @@ def public write_descriptor_acceleration_structure(device : Device; dset : Descr
     w.descriptorType = VkDescriptorType.ACCELERATION_STRUCTURE_KHR
     unsafe {
         was.pAccelerationStructures = addr(raw_as)
-        w.pNext = reinterpret<void?>(addr(was))
+        w.pNext = addr<void?>(was)
         vkUpdateDescriptorSets(boost_value_to_vk(device), 1u, addr(w), 0u, null)
     }
 }

@@ -487,7 +487,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
             if (cnt > 0) {
                 unsafe {
                     let d = reinterpret<void?>(intptr(dst) + off)
-                    memcpy(d, reinterpret<void?>(addr(cl.VtxBuffer[0])), cnt * VERT_SIZE)
+                    memcpy(d, addr<void?>(cl.VtxBuffer[0]), cnt * VERT_SIZE)
                 }
                 off += uint64(cnt * VERT_SIZE)
             }
@@ -501,7 +501,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
             if (cnt > 0) {
                 unsafe {
                     let d = reinterpret<void?>(intptr(dst) + off)
-                    memcpy(d, reinterpret<void?>(addr(cl.IdxBuffer[0])), cnt * IDX_SIZE)
+                    memcpy(d, addr<void?>(cl.IdxBuffer[0]), cnt * IDX_SIZE)
                 }
                 off += uint64(cnt * IDX_SIZE)
             }

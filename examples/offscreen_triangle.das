@@ -411,7 +411,7 @@ def main() : int {
     var pixels : array<uint8>
     pixels |> resize(WIDTH * HEIGHT * 4)
     unsafe {
-        memcpy(reinterpret<void?>(addr(pixels[0])), mapped, WIDTH * HEIGHT * 4)
+        memcpy(addr<void?>(pixels[0]), mapped, WIDTH * HEIGHT * 4)
     }
     vkUnmapMemory(device, buf_mem)
 
