@@ -77,7 +77,7 @@ def private run_compute_shared() : array<uint> {
     var zeros : array<uint> = [for (_k in range(2)); 0u]
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf0, addr(zero)), null)
-        memcpy(zero, reinterpret<void?>(addr(zeros[0])), int(buf_size))
+        memcpy(zero, addr<void?>(zeros[0]), int(buf_size))
     }
     vkUnmapMemory(dev, memory)
     delete zeros
@@ -160,7 +160,7 @@ def private run_compute_shared() : array<uint> {
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(values[0])), mapped, int(buf_size))
+        memcpy(addr<void?>(values[0]), mapped, int(buf_size))
     }
     vkUnmapMemory(dev, memory)
 

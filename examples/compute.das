@@ -164,7 +164,7 @@ def main() : int {
     var values : array<uint>
     values |> resize(N)
     unsafe {
-        memcpy(reinterpret<void?>(addr(values[0])), mapped, N * 4)
+        memcpy(addr<void?>(values[0]), mapped, N * 4)
     }
     vkUnmapMemory(dev, memory)
 

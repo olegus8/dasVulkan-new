@@ -225,7 +225,7 @@ def public draw_indirect_count_available() : bool {
     f12.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
     var f2 = VkPhysicalDeviceFeatures2()
     unsafe {
-        f2.pNext = reinterpret<void?>(addr(f12))
+        f2.pNext = addr<void?>(f12)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return f12.drawIndirectCount != 0u
@@ -252,13 +252,13 @@ def public create_device_gpu_driven(phys : VkPhysicalDevice; queue_family : uint
     var h : VkDevice
     unsafe {
         qci.pQueuePriorities = addr(prio)
-        f12.pNext = reinterpret<void?>(addr(f11))           // chain: ci -> f12 -> f11
-        ci.pNext = reinterpret<void?>(addr(f12))
+        f12.pNext = addr<void?>(f11)           // chain: ci -> f12 -> f11
+        ci.pNext = addr<void?>(f12)
         ci.pEnabledFeatures = addr(base)
         ci.pQueueCreateInfos = addr(qci)
         if (!empty(extensions)) {
             ci.enabledExtensionCount = uint(length(extensions))
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
         vk_check(vkCreateDevice(phys, ci, null, h), null)
     }

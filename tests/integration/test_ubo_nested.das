@@ -118,7 +118,7 @@ def private build_nested_ubo(id : int) : array<uint8> {
 def private write_float_at(var bytes : array<uint8>; off : int; v : float) {
     var probe = fixed_array(v)
     unsafe {
-        let src = reinterpret<uint8 const?>(addr(probe[0]))
+        let src = addr<uint8 const?>(probe[0])
         for (b in range(4)) {
             bytes[off + b] = src[b]
         }
@@ -128,7 +128,7 @@ def private write_float_at(var bytes : array<uint8>; off : int; v : float) {
 def private write_float4_at(var bytes : array<uint8>; off : int; v : float4) {
     var probe = fixed_array(v.x, v.y, v.z, v.w)
     unsafe {
-        let src = reinterpret<uint8 const?>(addr(probe[0]))
+        let src = addr<uint8 const?>(probe[0])
         for (b in range(16)) {
             bytes[off + b] = src[b]
         }
@@ -218,7 +218,7 @@ def private render_one_id(id : int) : array<uint8> {
             var pcf : VkShaderStageFlags
             pcf.fragment = true
             unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, reinterpret<void?>(addr(pushed[0])))
+                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, addr<void?>(pushed[0]))
             }
             cmd_draw(cmd, 3u)
         }
