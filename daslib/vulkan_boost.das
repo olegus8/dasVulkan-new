@@ -299,6 +299,103 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     return <- b
 }
 
+//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the
+//! multi-struct escape hatch: the single-struct overloads above carry exactly one feature
+//! struct, but e.g. 16-bit storage (``VkPhysicalDeviceVulkan11Features``) + 8-bit storage
+//! (``VkPhysicalDeviceVulkan12Features``) must be enabled together. Caller chains the structs
+//! rt_supported-style, sets the bits, and passes the head; ``pEnabledFeatures`` stays null —
+//! ``features2.features`` carries the base features per the Vulkan features2 contract.
+def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
+                         var features2 : VkPhysicalDeviceFeatures2) : Device {
+    var prio = 1.0f
+    var qci = VkDeviceQueueCreateInfo()
+    qci.queueFamilyIndex = queue_family
+    qci.queueCount = 1u
+    unsafe {
+        qci.pQueuePriorities = addr(prio)
+    }
+    features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = 1u
+    unsafe {
+        ci.pQueueCreateInfos = addr(qci)
+        ci.pNext = addr<void?>(features2)
+    }
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
+        }
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    return <- b
+}
+
+//! True iff ``phys`` supports the 8/16-bit SSBO storage feature set the dasSpirv storage wave
+//! emits: ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` +
+//! ``shaderFloat16`` + ``shaderInt8`` (Vulkan12Features). Gate 8/16-bit kernels with this —
+//! software renderers and old drivers can miss any of the four bits.
+def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return (f11.storageBuffer16BitAccess != 0u && f12.storageBuffer8BitAccess != 0u
+        && f12.shaderFloat16 != 0u && f12.shaderInt8 != 0u)
+}
+
+//! Create a device with the 8/16-bit SSBO storage set enabled (the four bits
+//! storage_8_16_supported probes), threaded as a Vulkan11Features -> Vulkan12Features chain
+//! through the features2 overload. Pairs with dasSpirv's ``float16``/``int8`` SSBO members and
+//! ``unpack8``/``pack32``. Gate with storage_8_16_supported first.
+def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device_storage_8_16(phys, queue_family, no_ext)
+}
+
+def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+    }
+    return <- create_device(phys, queue_family, extensions, f2)
+}
+
+//! The physical device's subgroup properties: lane count (``subgroupSize`` — 32 on NV, 32/64 on
+//! AMD, 8 on lavapipe), the stages subgroup ops work in, and the supported operation classes.
+def public subgroup_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceSubgroupProperties {
+    var sp = VkPhysicalDeviceSubgroupProperties()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(sp)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return sp
+}
+
+//! True iff compute-stage subgroups support the op classes dasSpirv emits: basic +
+//! arithmetic (subgroupAdd/Min/Max) + shuffle (subgroupShuffleXor) + ballot
+//! (subgroupBroadcastFirst). Gate subgroup kernels with this.
+def public subgroup_compute_ops_supported(phys : VkPhysicalDevice) : bool {
+    let sp = subgroup_properties(phys)
+    return (sp.supportedStages.compute && sp.supportedOperations.basic && sp.supportedOperations.arithmetic
+        && sp.supportedOperations.shuffle && sp.supportedOperations.ballot)
+}
+
 //! Create a device with the bindless feature set enabled: ``descriptorIndexing`` (the umbrella flag)
 //! plus ``shaderSampledImageArrayNonUniformIndexing`` (so a fragment can index a ``sampler2D[N]`` by
 //! a per-invocation value with ``nonuniformEXT``). Uses the Vulkan 1.2-core
@@ -1055,6 +1152,60 @@ def public create_graphics_pipeline_dyn(device : Device;
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete dyn_states
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+//! One specialization-constant override: ``id`` is the shader's SpecId (a dasSpirv
+//! ``@constant_id`` global or a ``local_size_*_id`` workgroup axis), ``value`` the 32-bit
+//! replacement as raw bits (float via ``reinterpret<uint>``, bool as 0/1 — every dasSpirv spec
+//! constant is 4 bytes).
+struct public SpecConstantValue {
+    id    : uint
+    value : uint
+}
+
+//! create_compute_pipeline with specialization-constant overrides: each entry rewrites the
+//! shader's ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``). One
+//! shader module can back many pipelines with different values — the [tune]-style GPU kernel
+//! family primitive. Same ownership as the base overload.
+def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
+                                   spec : array<SpecConstantValue>; entry : string = "main") : Pipeline {
+    var entries : array<VkSpecializationMapEntry>
+    var data : array<uint>
+    entries |> reserve(length(spec))
+    data |> reserve(length(spec))
+    for (i in range(length(spec))) {
+        var e = VkSpecializationMapEntry()
+        e.constantID = spec[i].id
+        e.offset = uint(i * 4)
+        e.size = 4ul
+        entries |> push(e)
+        data |> push(spec[i].value)
+    }
+    var si = VkSpecializationInfo()
+    si.mapEntryCount = uint(length(spec))
+    si.dataSize = uint64(length(spec) * 4)
+    var stage = VkPipelineShaderStageCreateInfo()
+    stage.stage.compute = true
+    stage.module_ = boost_value_to_vk(shader)
+    stage.pName = entry
+    var cp = VkComputePipelineCreateInfo()
+    cp.layout = boost_value_to_vk(layout)
+    var h : VkPipeline
+    unsafe {
+        if (!empty(spec)) {
+            si.pMapEntries = addr(entries[0])
+            si.pData = addr<void?>(data[0])
+            stage.pSpecializationInfo = addr(si)
+        }
+        cp.stage = stage
+        vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
+    }
+    delete entries
+    delete data
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
