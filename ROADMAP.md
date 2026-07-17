@@ -244,3 +244,13 @@ the irregular long tail: structs/commands whose params are flags-output, raw
 `PFN_*` function pointers, foreign/opaque types, or other shapes the uniform
 vk_view / classifier rules don't cover. Each is logged at generation time. Most
 are exotic extensions; revisit case-by-case if a consumer needs one.
+
+## Delete the GLSL compile helper (decided 2026-07-16, do ~2026-07-30)
+
+`cmake/DasVulkanCompileShader.cmake` (+ its `include` at `CMakeLists.txt:21`) is
+the last GLSL-era artifact: a consumer-facing glslangValidator/spirv-opt macro,
+unused by the repo itself since the dasSpirv migration ("ZERO GLSL, ZERO
+committed .spv" — dasSpirv MASTERPLAN). Decision (2026-07-16): shaders are
+always das-authored, the helper goes; deletion deferred ~2 weeks in case a
+consumer objects. Delete the file + the include line; nothing else references
+it.
