@@ -121,28 +121,15 @@ don't show up strongly in the rendered output. Known soft spots:
   Each will land the rail correctly first; the visual polish is the second
   pass.
 
-Two unresolved emitter / generator quirks the polish pass should clean up
-(currently worked around in tutorial 10's host code):
-
-- **Per-shader `bind_uniform` helper doesn't write the second `@uniform`
-  block.** When a module declares two `@uniform` UBO globals (e.g.
-  `xform` at set 0 + `scene` at set 1) and a single shader references both
-  or only the non-first one, the generated `<shader>_bind_uniform` helper
-  silently writes zero fields for the non-first UBO. Worked around in
-  `deferred_tut.das` with a manual `with_mapped_memory` + `write_field`
-  block (`write_scene_ubo_manual`). The `xform` UBO bound through the
-  helper works fine. Likely a `collect_dependencies` traversal that walks
-  only the first matched UBO; needs a look at
-  `daslib/spirv_vulkan_shader.das:generate_bind_uniform`.
-- **`@push_constant` struct's non-matrix fields don't propagate.**
-  Setting `op.model` (float4x4) host-side then calling the generated
-  push helper writes the matrix correctly, but a sibling `int material`
-  field reads as 0 in the fragment shader for every fragment. Worked
-  around in `gbuffer_fs` with a positional check (`world_pos.y < 0.5`
-  branches floor vs cube instead of the push-constant material tag).
-  Likely a push_constants codegen that walks fields by std140 offset and
-  skips small trailing scalars; needs `generate_push_constants` to be
-  audited for non-matrix field handling.
+Both former "unresolved emitter / generator quirks" here are RESOLVED:
+the push-constant trailing-scalar drop was fixed by staging pushes
+through the shared std140 walk (`std140_block_writes`; regression gate
+`tests/integration/test_push_std140.das`), and the second-`@uniform`
+silent-zero case now fails closed with a macro error (multi-UBO bind is
+an honest unimplemented limitation, not a corruption). Remaining polish:
+sweep tutorial 10's now-redundant workarounds (`write_scene_ubo_manual`,
+the `gbuffer_fs` positional material hack) and implement per-binding
+multi-UBO bind if a consumer needs it.
 
 ## p-prefix strip on boost field names
 
