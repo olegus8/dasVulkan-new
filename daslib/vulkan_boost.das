@@ -396,6 +396,48 @@ def public subgroup_compute_ops_supported(phys : VkPhysicalDevice) : bool {
         && sp.supportedOperations.shuffle && sp.supportedOperations.ballot)
 }
 
+//! True iff ``phys`` supports ``shaderIntegerDotProduct`` (VK_KHR_shader_integer_dot_product,
+//! core in Vulkan 1.3) — the packed OpSDot/OpUDot family dasSpirv's ``sdot4`` emits. Gate dp4a
+//! kernels with this; software renderers and pre-1.3 drivers can miss it.
+def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(fdot)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return fdot.shaderIntegerDotProduct != 0u
+}
+
+//! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` enabled
+//! (a Vulkan11Features -> Vulkan12Features -> ShaderIntegerDotProductFeatures chain through the
+//! features2 overload). On a pre-1.3 device the VK_KHR_shader_integer_dot_product extension
+//! string is added automatically. Pairs with dasSpirv's ``sdot4``; gate with
+//! storage_8_16_supported + integer_dot_product_supported first.
+def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    fdot.shaderIntegerDotProduct = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fdot)
+    }
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    var ext : array<string>
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        ext |> push("VK_KHR_shader_integer_dot_product")
+    }
+    return <- create_device(phys, queue_family, ext, f2)
+}
+
 //! Create a device with the bindless feature set enabled: ``descriptorIndexing`` (the umbrella flag)
 //! plus ``shaderSampledImageArrayNonUniformIndexing`` (so a fragment can index a ``sampler2D[N]`` by
 //! a per-invocation value with ``nonuniformEXT``). Uses the Vulkan 1.2-core

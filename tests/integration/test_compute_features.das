@@ -38,6 +38,16 @@ def sct_kernel {
     sct_local[gi] = gl_LocalInvocationID.x
 }
 
+var @ssbo @binding = 0 idp_a : array<uint>
+var @ssbo @binding = 1 idp_b : array<uint>
+var @ssbo @binding = 2 idp_y : array<int>
+
+[compute_shader(local_size_x=64, name="idp_spv")]
+def idp_kernel {
+    let gi = gl_GlobalInvocationID.x
+    idp_y[gi] = sdot4(idp_a[gi], idp_b[gi])
+}
+
 struct GBlockQ8 {
     d  : float16
     qs : int8[32]
@@ -61,10 +71,11 @@ def gq8_kernel {
 // ===== a multi-SSBO compute runner =====
 // One host-visible coherent STORAGE buffer per binding, contents uploaded from / read back into
 // `bufs` (byte arrays; bufs[i] -> binding i). `spec` empty = the plain pipeline path;
-// `storage_8_16` picks the feature-enabled device. Returns false when the DEVICE-side probe says
-// the caller should have skipped (defensive; tests gate first).
+// `storage_8_16` picks the feature-enabled device (`int_dot` additionally chains
+// shaderIntegerDotProduct). Callers gate on probe_support() first — requesting a feature the
+// device lacks fails loudly in device creation.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;
-              spec : array<SpecConstantValue>; storage_8_16 : bool) {
+              spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false) {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
@@ -73,7 +84,8 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    var inscope device <- (storage_8_16 ? create_device_storage_8_16(phys, gfx) : create_device(phys, gfx))
+    var inscope device <- (int_dot ? create_device_storage_8_16_int_dot(phys, gfx)
+                                   : (storage_8_16 ? create_device_storage_8_16(phys, gfx) : create_device(phys, gfx)))
     volkLoadDevice(boost_value_to_vk(device))
     let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
@@ -177,14 +189,15 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
 }
 
 // device-support probe with a throwaway instance (tests soft-skip on false)
-def probe_support() : tuple<subgroups : bool; storage : bool> {
+def probe_support() : tuple<subgroups : bool; storage : bool; int_dot : bool> {
     if (volkInitialize() != 0) {
-        return (subgroups = false, storage = false)
+        return (subgroups = false, storage = false, int_dot = false)
     }
     var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
-    return (subgroups = subgroup_compute_ops_supported(phys), storage = storage_8_16_supported(phys))
+    return (subgroups = subgroup_compute_ops_supported(phys), storage = storage_8_16_supported(phys),
+        int_dot = integer_dot_product_supported(phys))
 }
 
 def u32_of(buf : array<uint8>; i : int) : uint {
@@ -324,6 +337,47 @@ def test_storage_8_16_gpu(t : T?) {
         }
     }
     t |> success(bad == 0, "GPU dequant of host-packed block_q8_0 bytes == CPU ({bad} of {nblocks} wrong)")
+    delete words
+    delete bufs
+    delete expected
+}
+
+[test]
+def test_integer_dot_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.storage || !sup.int_dot) {
+        feint("device lacks 8/16-bit storage + shaderIntegerDotProduct; skipping\n")
+        return
+    }
+    let n = 256
+    // packed 4x int8 words, both signs in every lane position; expected via the SAME sdot4
+    // builtin's real CPU body (CPU == GPU exactly — integer math)
+    var wa : array<uint8>
+    var wb : array<uint8>
+    wa |> resize(n * 4)
+    wb |> resize(n * 4)
+    var expected : array<int>
+    expected |> resize(n)
+    for (i in range(n)) {
+        for (k in range(4)) {
+            wa[i * 4 + k] = uint8((i * 4 + k) * 37 + 11)
+            wb[i * 4 + k] = uint8((i * 4 + k) * 101 + 190)
+        }
+        expected[i] = sdot4(u32_of(wa, i), u32_of(wb, i))
+    }
+    var yb : array<uint8>
+    yb |> resize(n * 4)
+    var bufs <- [ <- wa, <- wb, <- yb]
+    var words <- clone_to_move(idp_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, uint(n / 64), no_spec, true, true)
+    var bad = 0
+    for (i in range(n)) {
+        if (int(u32_of(bufs[2], i)) != expected[i]) {
+            bad++
+        }
+    }
+    t |> success(bad == 0, "GPU sdot4 == CPU sdot4 on every packed word pair ({bad} of {n} wrong)")
     delete words
     delete bufs
     delete expected
