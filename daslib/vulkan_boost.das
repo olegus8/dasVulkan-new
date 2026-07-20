@@ -137,7 +137,7 @@ def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     var mf = VkPhysicalDeviceMeshShaderFeaturesEXT()   // sType pre-filled by the ctor
     var f2 = VkPhysicalDeviceFeatures2()
     unsafe {
-        f2.pNext = reinterpret<void?>(addr(mf))
+        f2.pNext = addr<void?>(mf)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return mf.meshShader != 0u && mf.taskShader != 0u
@@ -169,7 +169,7 @@ def public create_instance(application_name : string; api_version : uint; extens
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(exts[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
         }
     }
     var h : VkInstance
@@ -218,7 +218,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -249,12 +249,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(features13))
+        ci.pNext = addr<void?>(features13)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -284,12 +284,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(features12))
+        ci.pNext = addr<void?>(features12)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -297,6 +297,145 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     return <- b
+}
+
+//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the
+//! multi-struct escape hatch: the single-struct overloads above carry exactly one feature
+//! struct, but e.g. 16-bit storage (``VkPhysicalDeviceVulkan11Features``) + 8-bit storage
+//! (``VkPhysicalDeviceVulkan12Features``) must be enabled together. Caller chains the structs
+//! rt_supported-style, sets the bits, and passes the head; ``pEnabledFeatures`` stays null —
+//! ``features2.features`` carries the base features per the Vulkan features2 contract.
+def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
+                         var features2 : VkPhysicalDeviceFeatures2) : Device {
+    var prio = 1.0f
+    var qci = VkDeviceQueueCreateInfo()
+    qci.queueFamilyIndex = queue_family
+    qci.queueCount = 1u
+    unsafe {
+        qci.pQueuePriorities = addr(prio)
+    }
+    features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = 1u
+    unsafe {
+        ci.pQueueCreateInfos = addr(qci)
+        ci.pNext = addr<void?>(features2)
+    }
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
+        }
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    return <- b
+}
+
+//! True iff ``phys`` supports the 8/16-bit SSBO storage feature set the dasSpirv storage wave
+//! emits: ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` +
+//! ``shaderFloat16`` + ``shaderInt8`` (Vulkan12Features). Gate 8/16-bit kernels with this —
+//! software renderers and old drivers can miss any of the four bits.
+def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return (f11.storageBuffer16BitAccess != 0u && f12.storageBuffer8BitAccess != 0u
+        && f12.shaderFloat16 != 0u && f12.shaderInt8 != 0u)
+}
+
+//! Create a device with the 8/16-bit SSBO storage set enabled (the four bits
+//! storage_8_16_supported probes), threaded as a Vulkan11Features -> Vulkan12Features chain
+//! through the features2 overload. Pairs with dasSpirv's ``float16``/``int8`` SSBO members and
+//! ``unpack8``/``pack32``. Gate with storage_8_16_supported first.
+def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device_storage_8_16(phys, queue_family, no_ext)
+}
+
+def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+    }
+    return <- create_device(phys, queue_family, extensions, f2)
+}
+
+//! The physical device's subgroup properties: lane count (``subgroupSize`` — 32 on NV, 32/64 on
+//! AMD, 8 on lavapipe), the stages subgroup ops work in, and the supported operation classes.
+def public subgroup_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceSubgroupProperties {
+    var sp = VkPhysicalDeviceSubgroupProperties()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(sp)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return sp
+}
+
+//! True iff compute-stage subgroups support the op classes dasSpirv emits: basic +
+//! arithmetic (subgroupAdd/Min/Max) + shuffle (subgroupShuffleXor) + ballot
+//! (subgroupBroadcastFirst). Gate subgroup kernels with this.
+def public subgroup_compute_ops_supported(phys : VkPhysicalDevice) : bool {
+    let sp = subgroup_properties(phys)
+    return (sp.supportedStages.compute && sp.supportedOperations.basic && sp.supportedOperations.arithmetic
+        && sp.supportedOperations.shuffle && sp.supportedOperations.ballot)
+}
+
+//! True iff ``phys`` supports ``shaderIntegerDotProduct`` (VK_KHR_shader_integer_dot_product,
+//! core in Vulkan 1.3) — the packed OpSDot/OpUDot family dasSpirv's ``sdot4`` emits. Gate dp4a
+//! kernels with this; software renderers and pre-1.3 drivers can miss it.
+def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(fdot)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return fdot.shaderIntegerDotProduct != 0u
+}
+
+//! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` enabled
+//! (a Vulkan11Features -> Vulkan12Features -> ShaderIntegerDotProductFeatures chain through the
+//! features2 overload). On a pre-1.3 device the VK_KHR_shader_integer_dot_product extension
+//! string is added automatically. Pairs with dasSpirv's ``sdot4``; gate with
+//! storage_8_16_supported + integer_dot_product_supported first.
+def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    fdot.shaderIntegerDotProduct = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fdot)
+    }
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    var ext : array<string>
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        ext |> push("VK_KHR_shader_integer_dot_product")
+    }
+    return <- create_device(phys, queue_family, ext, f2)
 }
 
 //! Create a device with the bindless feature set enabled: ``descriptorIndexing`` (the umbrella flag)
@@ -342,7 +481,7 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
         ci.pEnabledFeatures = addr(base)
-        ci.pNext = reinterpret<void?>(addr(f11))
+        ci.pNext = addr<void?>(f11)
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -374,12 +513,12 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     ci.queueCreateInfoCount = 1u
     unsafe {
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(meshFeatures))
+        ci.pNext = addr<void?>(meshFeatures)
     }
     if (!empty(extensions)) {
         ci.enabledExtensionCount = uint(length(extensions))
         unsafe {
-            ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
         }
     }
     var h : VkDevice
@@ -420,9 +559,9 @@ def public rt_supported(phys : VkPhysicalDevice) : bool {
     var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
     var f2 = VkPhysicalDeviceFeatures2()
     unsafe {
-        f2.pNext = reinterpret<void?>(addr(f12))
-        f12.pNext = reinterpret<void?>(addr(asf))
-        asf.pNext = reinterpret<void?>(addr(rtf))
+        f2.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(asf)
+        asf.pNext = addr<void?>(rtf)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return f12.bufferDeviceAddress != 0u && asf.accelerationStructure != 0u && rtf.rayTracingPipeline != 0u
@@ -463,10 +602,10 @@ def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uin
     unsafe {
         qci.pQueuePriorities = addr(prio)
         ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = reinterpret<void?>(addr(f12))
-        f12.pNext = reinterpret<void?>(addr(asf))
-        asf.pNext = reinterpret<void?>(addr(rtf))
-        ci.ppEnabledExtensionNames = reinterpret<void?>(addr(extensions[0]))
+        ci.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(asf)
+        asf.pNext = addr<void?>(rtf)
+        ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -485,7 +624,7 @@ def public create_shader_module(device : Device; var code : array<uint8>) : Shad
     var ci = VkShaderModuleCreateInfo()
     ci.codeSize = uint64(length(code))
     unsafe {
-        ci.pCode = reinterpret<uint?>(addr(code[0]))
+        ci.pCode = addr<uint?>(code[0])
     }
     var h : VkShaderModule
     vk_check(vkCreateShaderModule(boost_value_to_vk(device), ci, null, h), null)
@@ -1043,7 +1182,7 @@ def public create_graphics_pipeline_dyn(device : Device;
         }
         blend.pAttachments = addr(blend_att)
         dyn_render.pColorAttachmentFormats = addr(cf)
-        gp.pNext = reinterpret<void?>(addr(dyn_render))
+        gp.pNext = addr<void?>(dyn_render)
         gp.pStages = addr(stages[0])
         gp.pVertexInputState = addr(vinput)
         gp.pInputAssemblyState = addr(iasm)
@@ -1055,6 +1194,60 @@ def public create_graphics_pipeline_dyn(device : Device;
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete dyn_states
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+//! One specialization-constant override: ``id`` is the shader's SpecId (a dasSpirv
+//! ``@constant_id`` global or a ``local_size_*_id`` workgroup axis), ``value`` the 32-bit
+//! replacement as raw bits (float via ``reinterpret<uint>``, bool as 0/1 — every dasSpirv spec
+//! constant is 4 bytes).
+struct public SpecConstantValue {
+    id    : uint
+    value : uint
+}
+
+//! create_compute_pipeline with specialization-constant overrides: each entry rewrites the
+//! shader's ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``). One
+//! shader module can back many pipelines with different values — the [tune]-style GPU kernel
+//! family primitive. Same ownership as the base overload.
+def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
+                                   spec : array<SpecConstantValue>; entry : string = "main") : Pipeline {
+    var entries : array<VkSpecializationMapEntry>
+    var data : array<uint>
+    entries |> reserve(length(spec))
+    data |> reserve(length(spec))
+    for (i in range(length(spec))) {
+        var e = VkSpecializationMapEntry()
+        e.constantID = spec[i].id
+        e.offset = uint(i * 4)
+        e.size = 4ul
+        entries |> push(e)
+        data |> push(spec[i].value)
+    }
+    var si = VkSpecializationInfo()
+    si.mapEntryCount = uint(length(spec))
+    si.dataSize = uint64(length(spec) * 4)
+    var stage = VkPipelineShaderStageCreateInfo()
+    stage.stage.compute = true
+    stage.module_ = boost_value_to_vk(shader)
+    stage.pName = entry
+    var cp = VkComputePipelineCreateInfo()
+    cp.layout = boost_value_to_vk(layout)
+    var h : VkPipeline
+    unsafe {
+        if (!empty(spec)) {
+            si.pMapEntries = addr(entries[0])
+            si.pData = addr<void?>(data[0])
+            stage.pSpecializationInfo = addr(si)
+        }
+        cp.stage = stage
+        vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
+    }
+    delete entries
+    delete data
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
@@ -1510,7 +1703,7 @@ def public upload_bytes(buf : HostBuffer; device : Device; var data : array<auto
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
-        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+        memcpy(mapped, addr<void?>(data[0]), nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
 }
@@ -1663,7 +1856,7 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
         g_push_staging |> resize(int(size))
     }
     unsafe {
-        invoke(blk, reinterpret<void?>(addr(g_push_staging[0])))
+        invoke(blk, addr<void?>(g_push_staging[0]))
     }
 }
 
@@ -1674,7 +1867,7 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
 def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
     unsafe {
         let dst = reinterpret<void?>(intptr(ptr) + uint64(offset))
-        memcpy(dst, reinterpret<void?>(addr(value)), typeinfo sizeof(type<TT>))
+        memcpy(dst, addr<void?>(value), typeinfo sizeof(type<TT>))
     }
 }
 
@@ -1688,7 +1881,7 @@ def public map_memory_to_array(device : Device; memory : DeviceMemory; size : ui
     var arr : array<uint8>
     arr |> resize(int(size))
     unsafe {
-        memcpy(reinterpret<void?>(addr(arr[0])), mapped, int(size))
+        memcpy(addr<void?>(arr[0]), mapped, int(size))
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
     invoke(blk, arr)
@@ -1708,7 +1901,7 @@ def public map_memory_to_array(device : Device; memory : DeviceMemory; size : ui
     let flags : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, uint64(nbytes), flags, addr(mapped)), null)
-        memcpy(reinterpret<void?>(addr(out[0])), mapped, nbytes)
+        memcpy(addr<void?>(out[0]), mapped, nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
     return <- out
@@ -1778,7 +1971,7 @@ def public cmd_bind_vertex_buffer(cmd : CommandBuffer; binding : uint; buffer : 
 
 //! Typed push-constant upload: writes `sizeof<TT>` bytes from `value` into the pipeline's push
 //! block at `offset`, for shader stages `stages`. The size is derived from the daslang value, so
-//! the call site no longer carries a hand-counted byte size or a `reinterpret<void?>(addr(...))`.
+//! the call site no longer carries a hand-counted byte size or a `addr<void?>(...)`.
 //! TT's daslang layout must match the shader's std430 push-constant layout (true for scalar /
 //! vec4 / mat4 packs without vec3 padding surprises). Vulkan requires both `offset` and the
 //! resolved size to be multiples of 4 (VUID-vkCmdPushConstants-offset-00370 /
@@ -1791,7 +1984,7 @@ def public cmd_push_constants(cmd : CommandBuffer; layout : PipelineLayout; stag
     assert((sz & 3u) == 0u, "cmd_push_constants: sizeof<TT> must be a multiple of 4")
     unsafe {
         vkCmdPushConstants(boost_value_to_vk(cmd), boost_value_to_vk(layout), stages,
-            offset, sz, reinterpret<void?>(addr(value)))
+            offset, sz, addr<void?>(value))
     }
 }
 
@@ -1851,7 +2044,7 @@ def public create_address_buffer(device : Device; phys : VkPhysicalDevice; size 
     var mai = MemoryAllocateInfo(allocationSize = req.size,
         memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
     unsafe {
-        mai.next = reinterpret<void?>(addr(flags_info))
+        mai.next = addr<void?>(flags_info)
     }
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
@@ -1873,7 +2066,7 @@ def public upload_bytes(buf : AddressBuffer; device : Device; var data : array<a
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory), 0ul, uint64(nbytes), mf, addr(mapped)), null)
-        memcpy(mapped, reinterpret<void?>(addr(data[0])), nbytes)
+        memcpy(mapped, addr<void?>(data[0]), nbytes)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
 }
@@ -1884,7 +2077,7 @@ def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDevic
     var rtp = VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
     var p2 = VkPhysicalDeviceProperties2()
     unsafe {
-        p2.pNext = reinterpret<void?>(addr(rtp))
+        p2.pNext = addr<void?>(rtp)
     }
     vkGetPhysicalDeviceProperties2(phys, p2)
     rtp.pNext = null   // don't leak the dangling chain pointer to the caller
@@ -1901,7 +2094,7 @@ def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipe
     data |> resize(int(group_count * handle_size))
     unsafe {
         vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
-            first_group, group_count, uint64(length(data)), reinterpret<void?>(addr(data[0]))), null)
+            first_group, group_count, uint64(length(data)), addr<void?>(data[0])), null)
     }
     return <- data
 }
@@ -2185,7 +2378,7 @@ def public write_descriptor_acceleration_structure(device : Device; dset : Descr
     w.descriptorType = VkDescriptorType.ACCELERATION_STRUCTURE_KHR
     unsafe {
         was.pAccelerationStructures = addr(raw_as)
-        w.pNext = reinterpret<void?>(addr(was))
+        w.pNext = addr<void?>(was)
         vkUpdateDescriptorSets(boost_value_to_vk(device), 1u, addr(w), 0u, null)
     }
 }

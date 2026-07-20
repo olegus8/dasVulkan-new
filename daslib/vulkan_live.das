@@ -225,7 +225,7 @@ def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear 
     submit.signalSemaphoreCount = 1u
     unsafe {
         submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = reinterpret<uint?>(addr(wait_stage))
+        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
         submit.pCommandBuffers = addr(raw_cmd)
         submit.pSignalSemaphores = addr(signal_sem)
         vk_check(vkQueueSubmit(g.queue, 1u, addr(submit), null), null)

@@ -276,7 +276,7 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
     submit.signalSemaphoreCount = 1u
     unsafe {
         submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = reinterpret<uint?>(addr(wait_stage))
+        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
         submit.pCommandBuffers = addr(raw_cmd)
         submit.pSignalSemaphores = addr(signal_sem)
         vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
@@ -341,7 +341,7 @@ def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool 
     submit.signalSemaphoreCount = 1u
     unsafe {
         submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = reinterpret<uint?>(addr(wait_stage))
+        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
         submit.pCommandBuffers = addr(raw_cmd)
         submit.pSignalSemaphores = addr(signal_sem)
         vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)

@@ -121,30 +121,19 @@ don't show up strongly in the rendered output. Known soft spots:
   Each will land the rail correctly first; the visual polish is the second
   pass.
 
-One resolved-by-design generator behavior and one still-open quirk
-(both surfaced by tutorial 10's host code):
+The push-constant trailing-scalar drop is RESOLVED: pushes are staged
+through the shared std140 walk (`std140_block_writes`; regression gate
+`tests/integration/test_push_std140.das`), so tutorial 10's `gbuffer_fs`
+positional material hack is now redundant and can be swept.
 
-- **Per-shader `bind_uniform` binds only the FIRST `@uniform` block --
-  by design.** When a shader reaches more than one `@uniform` UBO block
-  (e.g. `xform` at set 0 + `scene` at set 1), the generated
-  `<shader>_bind_uniform` writes the first reachable block's std140
-  fields through `with_mapped_memory` and leaves the rest to the host.
-  A `with_mapped_memory` write is valid only for host-visible memory, so
-  a host-coherent UBO must never be conflated with a device-local
-  (staged, NOT mappable) one -- the host owns each additional /
-  device-local block's upload. `deferred_tut.das`'s
-  `write_scene_ubo_manual` for the `scene` UBO is the sanctioned pattern,
-  not a workaround. (Earlier this case failed closed with a `macro_error`;
-  see `daslib/spirv_vulkan_shader.das:generate_bind_uniform`.)
-- **`@push_constant` struct's non-matrix fields don't propagate.**
-  Setting `op.model` (float4x4) host-side then calling the generated
-  push helper writes the matrix correctly, but a sibling `int material`
-  field reads as 0 in the fragment shader for every fragment. Worked
-  around in `gbuffer_fs` with a positional check (`world_pos.y < 0.5`
-  branches floor vs cube instead of the push-constant material tag).
-  Likely a push_constants codegen that walks fields by std140 offset and
-  skips small trailing scalars; needs `generate_push_constants` to be
-  audited for non-matrix field handling.
+Per-shader `bind_uniform` binds only the FIRST `@uniform` block -- by
+design, not a failure. A shader may legitimately reach more than one UBO
+block (e.g. `xform` at set 0 + `scene` at set 1); the host owns each
+additional one. A `with_mapped_memory` write is valid only for
+host-visible memory, so a host-coherent UBO must never be conflated with
+a device-local (staged, NOT mappable) one -- `deferred_tut.das`'s
+`write_scene_ubo_manual` is the sanctioned pattern, not a workaround.
+Per-binding multi-UBO auto-bind stays unimplemented.
 
 ## p-prefix strip on boost field names
 
@@ -246,3 +235,13 @@ the irregular long tail: structs/commands whose params are flags-output, raw
 `PFN_*` function pointers, foreign/opaque types, or other shapes the uniform
 vk_view / classifier rules don't cover. Each is logged at generation time. Most
 are exotic extensions; revisit case-by-case if a consumer needs one.
+
+## Delete the GLSL compile helper (decided 2026-07-16, do ~2026-07-30)
+
+`cmake/DasVulkanCompileShader.cmake` (+ its `include` at `CMakeLists.txt:21`) is
+the last GLSL-era artifact: a consumer-facing glslangValidator/spirv-opt macro,
+unused by the repo itself since the dasSpirv migration ("ZERO GLSL, ZERO
+committed .spv" — dasSpirv MASTERPLAN). Decision (2026-07-16): shaders are
+always das-authored, the helper goes; deletion deferred ~2 weeks in case a
+consumer objects. Delete the file + the include line; nothing else references
+it.
