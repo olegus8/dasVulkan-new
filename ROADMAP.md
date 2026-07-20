@@ -121,15 +121,19 @@ don't show up strongly in the rendered output. Known soft spots:
   Each will land the rail correctly first; the visual polish is the second
   pass.
 
-Both former "unresolved emitter / generator quirks" here are RESOLVED:
-the push-constant trailing-scalar drop was fixed by staging pushes
+The push-constant trailing-scalar drop is RESOLVED: pushes are staged
 through the shared std140 walk (`std140_block_writes`; regression gate
-`tests/integration/test_push_std140.das`), and the second-`@uniform`
-silent-zero case now fails closed with a macro error (multi-UBO bind is
-an honest unimplemented limitation, not a corruption). Remaining polish:
-sweep tutorial 10's now-redundant workarounds (`write_scene_ubo_manual`,
-the `gbuffer_fs` positional material hack) and implement per-binding
-multi-UBO bind if a consumer needs it.
+`tests/integration/test_push_std140.das`), so tutorial 10's `gbuffer_fs`
+positional material hack is now redundant and can be swept.
+
+Per-shader `bind_uniform` binds only the FIRST `@uniform` block -- by
+design, not a failure. A shader may legitimately reach more than one UBO
+block (e.g. `xform` at set 0 + `scene` at set 1); the host owns each
+additional one. A `with_mapped_memory` write is valid only for
+host-visible memory, so a host-coherent UBO must never be conflated with
+a device-local (staged, NOT mappable) one -- `deferred_tut.das`'s
+`write_scene_ubo_manual` is the sanctioned pattern, not a workaround.
+Per-binding multi-UBO auto-bind stays unimplemented.
 
 ## p-prefix strip on boost field names
 
