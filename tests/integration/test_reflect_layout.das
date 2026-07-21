@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Unit coverage for vulkan_reflect's layout builders: the neutral-enum mappers and the per-set

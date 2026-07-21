@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // GPU regression gate for std140-packed PUSH CONSTANTS (the push analogue of test_ubo_mat3). The
@@ -99,8 +100,7 @@ def private render_push() : array<uint8> {
     poolci.queueFamilyIndex = gfx
     var inscope pool <- create_command_pool(device, poolci)
 
-    // Decoys = 0.9; the three read values are hue.x=0.2, gain=0.4, rot column2.z=0.6 -> expected
-    // center (51, 102, 153). A wrong column / offset reads a 0.9 decoy (~230) or stale memory.
+    // Decoys = 0.9; read values hue.x=0.2, gain=0.4, rot column2.z=0.6 -> expected center (51,102,153), so a wrong column/offset reads a 0.9 decoy (~230) or stale memory.
     pc.rot[0] = float3(0.9f, 0.9f, 0.9f)
     pc.rot[1] = float3(0.9f, 0.9f, 0.9f)
     pc.rot[2] = float3(0.0f, 0.0f, 0.6f)

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // glTF 2.0 PBR renderer: uploads a backend-neutral GltfScene (daslang's modules/dasGLTF loader)
@@ -42,9 +43,8 @@ let public GLTF_VK_MAX_JOINTS = 64
 let public GLTF_VK_PALETTE_VECS = 256
 
 // ===== shaders =====
-// Vertex locations mirror gltf_gl's GltfGlVertex contract (0..7); rigid consumes 0..3, skinned
-// adds 6..7 (uv1/color0 at 4..5 are uploaded but not consumed — a pipeline may provide attributes
-// the shader ignores).
+// Vertex locations mirror gltf_gl's GltfGlVertex contract (0..7): rigid consumes 0..3, skinned adds
+// 6..7; uv1/color0 (4..5) are uploaded but unconsumed — a pipeline may provide attributes it ignores.
 
 var @in @location = 0 a_position : float3
 var @in @location = 1 a_normal : float3
@@ -423,10 +423,9 @@ def private create_gltf_pipeline(device : Device; render_pass : RenderPass; layo
 
 // ===== upload =====
 
-//! Upload `scene` onto Vulkan resources against a caller-owned (device, phys, queue, pool).
-//! `render_pass` must be a color+depth pass with a UNORM color format (the shader sRGB-encodes);
-//! pipelines are built with dynamic viewport/scissor, so any target size works. The pool's queue
-//! family must match `queue` (texture staging is recorded into it).
+//! Upload `scene` onto Vulkan resources against a caller-owned (device, phys, queue, pool). `render_pass`
+//! must be a color+depth pass with a UNORM color format (the shader sRGB-encodes); dynamic viewport/scissor
+//! means any target size works. The pool's queue family must match `queue` (texture staging records into it).
 def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool;
                           render_pass : RenderPass; scene : GltfScene) : GltfVkModel {
     let dev = boost_value_to_vk(device)
@@ -657,10 +656,9 @@ def private emplace_env_write(var writes : array<WriteDescriptorSet>; model : Gl
     writes |> emplace(w)
 }
 
-//! Attach an equirect (2:1 lat-long) HDR environment — e.g. vulkan_assets' load_texture_hdr,
-//! which builds the mip chain the roughness lookup uses. Takes ownership of `env`; call it
-//! between frames (the device is idle there). `GltfPbrLight.environment` scales the
-//! contribution per frame; without an environment the flat ambient is used.
+//! Attach an equirect (2:1 lat-long) HDR environment — e.g. vulkan_assets' load_texture_hdr, which builds
+//! the mip chain the roughness lookup needs. Takes ownership of `env`; call between frames (device idle).
+//! `GltfPbrLight.environment` scales it per frame; without an environment the flat ambient is used.
 def public gltf_vk_set_environment(var model : GltfVkModel; device : Device; var env : Texture) {
     unsafe {
         delete model.env_tex
@@ -750,10 +748,9 @@ def public gltf_vk_update(device : Device; model : GltfVkModel; scene : GltfScen
     }
 }
 
-//! Record every mesh instance in `scene` into `cmd` — call inside a color+depth render pass on a
-//! UNORM color target. A node with a skin draws through the skinned pipeline (palette carries
-//! `root`); rigid nodes push `root * node.world` + its normal matrix as push constants. Pipelines
-//! use dynamic viewport/scissor; (width, height) sets them for the whole scene.
+//! Record every mesh instance in `scene` into `cmd` — call inside a color+depth render pass on a UNORM
+//! color target. Skinned nodes draw through the skinned pipeline (palette carries `root`); rigid nodes
+//! push `root * node.world` + its normal matrix. Dynamic viewport/scissor: (width, height) sets both.
 def public gltf_vk_render(cmd : CommandBuffer; model : GltfVkModel; scene : GltfScene; root : float4x4;
                           width, height : int) {
     var vps : array<Viewport>

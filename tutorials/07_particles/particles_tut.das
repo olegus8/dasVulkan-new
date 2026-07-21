@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 07 render path: a compute-driven particle swarm. One ``VkBuffer`` (created with
@@ -62,10 +63,9 @@ def look_at_rh(eye, center, up : float3) : float4x4 {
 
 // ===== particle init =====
 
-//! Seed N_PARTICLES particles on a tilted ring of radius ~1.2 with tangential velocity. The orbit
-//! decays slowly under the gravity-toward-origin compute integrator, but the swarm stays bouncy for
-//! any practical recording length and the initial ring is visually instructive (you can see the
-//! integrator perturb the orbit over time).
+//! Seed N_PARTICLES on a tilted ring of radius ~1.2 with tangential velocity. The orbit decays slowly
+//! under the gravity-toward-origin compute integrator, but stays bouncy for any practical recording
+//! length -- and the initial ring is instructive: you can watch the integrator perturb it over time.
 def gen_initial_particles(n : int) : array<float> {
     var data : array<float>
     data |> resize(n * PARTICLE_FLOATS)
@@ -98,10 +98,9 @@ def gen_initial_particles(n : int) : array<float> {
 
 // ===== host helpers (local) =====
 
-//! POINT_LIST graphics pipeline (one vertex per point) -- v3d hardcodes TRIANGLE_LIST so this
-//! tutorial inlines its own. Same rasteriser / depth state defaults as v3d (depth test on, depth
-//! write on, LESS_OR_EQUAL), but cull mode is NONE (points have no winding) and topology is
-//! POINT_LIST so the rasteriser draws one screen-space pixel per input vertex.
+//! POINT_LIST graphics pipeline (one vertex per point) -- v3d hardcodes TRIANGLE_LIST, so this tutorial
+//! inlines its own. Same rasteriser/depth defaults as v3d (depth test + write on, LESS_OR_EQUAL), but
+//! cull mode is NONE (points have no winding) and the topology draws one screen-space point per vertex.
 def private build_points_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
                                   vert : ShaderModule; frag : ShaderModule; width, height : int;
                                   var vertex_bindings : array<VkVertexInputBindingDescription>;
@@ -149,9 +148,7 @@ def private build_points_pipeline(device : Device; render_pass : RenderPass; lay
     depthstate.minDepthBounds = 0.0f
     depthstate.maxDepthBounds = 1.0f
 
-    // Additive blending: each particle's premultiplied RGBA = base_colour * intensity + alpha=intensity
-    // accumulates onto the framebuffer with srcColor + dstColor. Overlapping splats stack into bright
-    // "core + halo" hot spots; isolated particles fade smoothly into the clear colour at their rim.
+    // Additive blend (ONE/ONE) of premultiplied RGBA: overlapping splats stack into bright core+halo hot spots, isolated ones fade into the clear colour at the rim.
     var blend_att : VkPipelineColorBlendAttachmentState
     blend_att.blendEnable = VK_TRUE
     blend_att.srcColorBlendFactor = VkBlendFactor.ONE
@@ -265,10 +262,9 @@ def public finalize(var ctx : ParticlesContext) {
     }
 }
 
-//! Build the offscreen render targets, the two pipelines (compute + graphics), and the particle
-//! buffer (seeded once) against a caller-owned (device, phys, queue, pool). The particle buffer is
-//! marked USAGE_STORAGE_BUFFER | USAGE_VERTEX_BUFFER so the SAME VkBuffer can bind as a compute
-//! SSBO and as a per-instance vertex stream.
+//! Build the offscreen targets, the two pipelines (compute + graphics), and the once-seeded particle
+//! buffer against a caller-owned (device, phys, queue, pool). That buffer carries STORAGE_BUFFER |
+//! VERTEX_BUFFER usage, so the SAME VkBuffer binds as a compute SSBO and as a vertex stream.
 def public build_particles_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : ParticlesResources {
     let _q = queue
     let _p = pool
@@ -474,10 +470,9 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
     cmd_push_constants(cmd, res.cpipe_layout, cstage, 0u, cpc)
     cmd_dispatch(cmd, uint(N_PARTICLES / 64), 1u, 1u)
 
-    // 2) Compute -> graphics barrier: the integrator's last write (SHADER_WRITE in COMPUTE_SHADER)
-    //    must be visible to the vertex-input fetch (VERTEX_ATTRIBUTE_READ in VERTEX_INPUT) before
-    //    the graphics dispatch reads particles[i].pos as a vertex attribute. Without this barrier
-    //    the graphics pipeline can race the compute one and read stale values.
+    // 2) Compute -> graphics barrier: the integrator's last write (SHADER_WRITE in COMPUTE_SHADER) must
+    //    be visible to the vertex-input fetch (VERTEX_ATTRIBUTE_READ in VERTEX_INPUT) before graphics
+    //    reads particles[i].pos. Without it the graphics pipeline races compute and reads stale values.
     var bmb : VkBufferMemoryBarrier
     bmb.srcAccessMask.shader_write = true
     bmb.dstAccessMask.vertex_attribute_read = true

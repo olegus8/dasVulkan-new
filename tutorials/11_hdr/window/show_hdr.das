@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed HDR + bloom: the tutorial 11 pipeline rendered into the same offscreen LDR target the

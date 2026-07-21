@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Shared asset loaders for the tutorials: file textures (via dasStbImage) and OBJ models (via the

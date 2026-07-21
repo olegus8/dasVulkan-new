@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // #52: the default debug-utils callback binding. Install vk_debug_callback()

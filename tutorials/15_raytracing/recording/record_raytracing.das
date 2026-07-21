@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 15 recording driver (manual, local-only). One full camera orbit of the hardware

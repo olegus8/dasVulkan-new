@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // A Dear ImGui renderer backend (the dasVulkan<->dasImgui bridge), written entirely in daslang -- no
@@ -295,11 +296,9 @@ def private make_texture_set(r : ImguiVkRenderer; device : Device; view : ImageV
     return raw_set
 }
 
-//! Stage `nbytes` of RGBA8 `pixels` and copy them into `image` (extent w x h), leaving it in
-//! SHADER_READ_ONLY_OPTIMAL. `from_layout` is the image's current layout: UNDEFINED for a freshly
-//! created image, SHADER_READ_ONLY_OPTIMAL when re-uploading an already-sampled atlas (the 1.92
-//! on-demand-glyph WantUpdates path). Runs as its own submit (run_cmd_sync) -- the caller has
-//! already idled the queue for the frame, so a re-upload doesn't race in-flight sampling.
+//! Stage `nbytes` of RGBA8 `pixels` into `image` (extent w x h), leaving it SHADER_READ_ONLY_OPTIMAL.
+//! `from_layout` is its current layout: UNDEFINED when freshly created, SHADER_READ_ONLY_OPTIMAL when
+//! re-uploading a sampled atlas. Own submit -- the caller already idled the queue, so no in-flight race.
 def private upload_pixels_to_image(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool;
                                    image : Image; w, h : int; nbytes : uint64; pixels : void?; from_layout : VkImageLayout) {
     var staging_usage : VkBufferUsageFlags
@@ -474,6 +473,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
         r.ibuf_cap = cap
     }
 
+    // nolint:STYLE014
     // upload the per-command-list vertex/index data back to back into the mapped GPU buffers.
     // NOTE the intptr arithmetic (mirrors write_field): `reinterpret<uint8?>(dst) + off` parses as
     // `reinterpret<uint8?>((dst) + off)` — cast syntax is juxtaposition, the parens are NOT call

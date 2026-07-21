@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Shared offscreen scenes for the integration tests: render the triangle and
@@ -192,11 +193,9 @@ def public px(pixels : array<uint8>; x, y : int) : int3 {
     return int3(int(pixels[p]), int(pixels[p + 1]), int(pixels[p + 2]))
 }
 
-//! Exact-analytic image oracle: assert EVERY pixel of a w*h RGBA8 buffer equals the value the
-//! `expected` block computes for (x,y) -> int4(r,g,b,a). Reports the FIRST mismatch (coords + got/want)
-//! as a single dastest success — far stronger than the loose per-channel spot-checks `px` enables, and
-//! the right fit for procedurally-generated content (gradients, NEAREST-sampled solid texels) where the
-//! expected pixel is CPU-computable. One assert per frame keeps the output readable.
+//! Exact-analytic image oracle: assert EVERY pixel of a w*h RGBA8 buffer equals `expected(x,y)`.
+//! Reports the FIRST mismatch (coords + got/want) as one dastest success — stronger than the `px`
+//! spot-checks, and the right fit for CPU-computable content (gradients, NEAREST-sampled texels).
 def public assert_pixels_exact(t : T?; pixels : array<uint8>; w, h : int; lbl : string;
                                expected : block<(x, y : int) : int4>) {
     let need = uint64(w) * uint64(h) * 4ul   // uint64 so the w*h*4 byte count can't overflow int
@@ -222,12 +221,9 @@ def public assert_pixels_exact(t : T?; pixels : array<uint8>; w, h : int; lbl : 
     t |> success(ok, msg)
 }
 
-//! the dasSpirv GPU gate: run an arbitrary emitted SPIR-V compute blob (`words`) over `n`
-//! elements and return the result, with descriptor layout / pool / update all through the
-//! BOOST path. The storage-buffer binding has descriptorCount = 1 with no immutable samplers
-//! -- the independent-count case the erasure model got wrong (would yield 0, so the shader
-//! would not see the buffer and out[i] would not equal i*i). run_compute_boost feeds the
-//! daslang-emitted `square_spv` through here; any future [compute_shader] blob reuses it.
+//! the dasSpirv GPU gate: run an emitted SPIR-V compute blob (`words`) over `n` elements, descriptor
+//! layout / pool / update all through the BOOST path. The storage-buffer binding is descriptorCount=1
+//! with no immutable samplers -- the independent-count case erasure got wrong (0 => out[i] != i*i).
 def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
@@ -335,9 +331,8 @@ def public run_compute_boost(n : int) : array<uint> {
 }
 
 //! the dasSpirv storage-image GPU gate: run a compute blob (`words`) that writes a w*h RGBA8 storage
-//! image at set=0/binding=0, then read the image back as RGBA8 bytes. The image analog of
-//! run_compute_spirv (which reads a buffer); reused by every image phase. STORAGE usage + GENERAL
-//! layout for the compute write, then TRANSFER_SRC for the readback copy.
+//! image at set=0/binding=0, then read it back as RGBA8 bytes. The image analog of run_compute_spirv.
+//! STORAGE usage + GENERAL layout for the compute write, then TRANSFER_SRC for the readback copy.
 def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint8> {
     // delegates to the public boost rail (daslib/vulkan_boost.das); kept as a named test entry point so
     // the image-phase tests read cleanly. The storage-image + descriptor + dispatch + readback path now
@@ -346,10 +341,8 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
 }
 
 //! the dasSpirv texelFetch GPU gate: upload `src` (w*h RGBA8) as a sampled texture at set=0/binding=0,
-//! run a compute blob (`words`) that texelFetch-copies it into a storage image at binding=1, and read
-//! the storage image back. Exact-analytic: the caller asserts the readback equals `src`, proving
-//! texelFetch reads the right texel by integer coordinate. (textureLod's GPU exactness needs a mip/
-//! filter setup and is deferred; its validity is covered by spirv-val + the main-tree opcode test.)
+//! run a compute blob (`words`) that texelFetch-copies it into a storage image at binding=1, read back.
+//! Exact-analytic: the caller asserts readback == `src`, proving texelFetch indexes the right texel.
 def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>; w, h : int) : array<uint8> {
     // the dispatch is w/8 x h/8 (8x8 local size); require exact multiples so no texels are silently
     // skipped and extents are never 0/negative -- a misuse fails deterministically here.
@@ -534,11 +527,9 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     return <- pixels
 }
 
-//! the dasSpirv sampler2DArray GPU gate: render a fullscreen quad whose fragment samples a 4-layer 2D
-//! array texture, the layer chosen per screen quadrant. Each layer is a distinct solid color, so each
-//! quadrant renders exactly that layer's color -- proving the Arrayed image + the layer (.z) coordinate
-//! select the right layer on a real driver. Returns the RGBA pixels (TRI_W*TRI_H*4). The four layer
-//! colors are red / green / blue / yellow (layers 0..3).
+//! the dasSpirv sampler2DArray GPU gate: render a fullscreen quad sampling a 4-layer 2D array texture,
+//! the layer chosen per screen quadrant -- proving the Arrayed image + layer (.z) coordinate select
+//! the right layer. Layer colors are red/green/blue/yellow (0..3). Returns RGBA (TRI_W*TRI_H*4).
 def public render_sampler2darray() : array<uint8> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
@@ -699,11 +690,9 @@ def public render_sampler2darray() : array<uint8> {
     return <- pixels
 }
 
-//! the dasSpirv separate-image+sampler GPU gate: render a fullscreen quad whose fragment samples a
-//! standalone texture2D (binding 0, SAMPLED_IMAGE) combined with a standalone sampler (binding 1,
-//! SAMPLER) via sampleTexture. The texture is a 2x2 checkerboard (red/green/blue/yellow), so each
-//! screen quadrant renders exactly one texel -- proving the split image/sampler descriptors bind and
-//! combine (OpSampledImage) correctly on a real driver. Returns the RGBA pixels (TRI_W*TRI_H*4).
+//! the dasSpirv separate-image+sampler GPU gate: a fullscreen quad sampling a standalone texture2D
+//! (binding 0, SAMPLED_IMAGE) + standalone sampler (binding 1, SAMPLER) via sampleTexture. The 2x2
+//! checkerboard (red/green/blue/yellow) puts one texel per quadrant. Returns RGBA (TRI_W*TRI_H*4).
 def public render_separate_image_sampler() : array<uint8> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
@@ -902,13 +891,9 @@ def private upload(device : Device; memory : DeviceMemory; var data : array<auto
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
 }
 
-//! Phase-4 GPU gate: render a textured quad transformed by a UBO MVP and modulated by a
-//! push-constant tint; returns the RGBA pixels (TRI_W*TRI_H*4). Exercises the dasSpirv Phase-4
-//! surface end to end on a real driver -- @uniform float4x4 (uploaded column-major), a combined
-//! image sampler, and a push constant -- the parts spirv-val cannot verify semantically. The MVP
-//! scales by 0.6 and translates x by +0.4: the translation lives in matrix column 3, so a correct
-//! render (quad shifted right) proves daslang's column-major float4x4 matches the emitter's ColMajor
-//! decoration. tint=(1,1,0) zeroes blue: a white texel rendering yellow proves the push constant.
+//! Phase-4 GPU gate: a textured quad transformed by a UBO MVP and tinted by a push constant; returns
+//! RGBA (TRI_W*TRI_H*4). MVP scales 0.6 and translates x by +0.4 -- that translation lives in matrix
+//! column 3, so a right-shifted quad proves ColMajor; tint=(1,1,0) zeroes blue (white texel -> yellow).
 def public render_textured_quad() : array<uint8> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
@@ -989,10 +974,8 @@ def public render_textured_quad() : array<uint8> {
         addressModeW = VkSamplerAddressMode.CLAMP_TO_EDGE, maxLod = 1.0f)
     var inscope sampler <- create_sampler(device, sci)
 
-    // Descriptor + pipeline layouts come straight from the shaders' own dasSpirv reflection (the
-    // single source of truth) instead of being hand-declared: the quad_vert UBO @set0/@binding0
-    // (vertex) and the quad_frag sampler @set0/@binding1 (fragment) and the fragment push-constant
-    // range are all derived from quad_vert_spv_reflect / quad_frag_spv_reflect.
+    // Descriptor + pipeline layouts come from the shaders' own dasSpirv reflection (the single source
+    // of truth), not hand-declared: UBO @set0/@binding0, sampler @set0/@binding1, fragment push range.
     var reflections <- [decode_reflection(quad_vert_spv_reflect), decode_reflection(quad_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 

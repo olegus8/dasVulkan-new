@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 require daslib/clargs
@@ -77,10 +78,9 @@ def private print_section(f : FILE const?; title : string; var lines : array<str
     fprint(f, "\n")
 }
 
-//! The skip-ratchet report: every struct / command the generator could not emit, with its reason,
-//! sorted for determinism. The committed copy (generator/skip_report.txt) is the golden baseline;
-//! CI regenerates into a scratch path and diffs against it, so an emitter change that silently
-//! GROWS the skip tail (drops surface) fails the gate instead of shipping unnoticed.
+//! Every struct / command the generator could not emit, with its reason, sorted for determinism.
+//! Committed generator/skip_report.txt is the golden baseline: CI regenerates into a scratch path
+//! and diffs, so an emitter change that silently GROWS the skip tail (drops surface) fails the gate.
 def write_skip_report(path : string; em : EmitModel;
                       var raw_cmd_skips, boost_struct_skips, boost_cmd_skips : array<string>) {
     var raw_struct_skips : array<string>

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Vulkan-specific dasSpirv shader subclass + annotations. Mirrors the dasGlsl/dasOpenGL split:
@@ -56,10 +57,9 @@ class SpirvVulkanFragmentShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.Fragment
 }
 
-// VK_EXT_mesh_shader stages. The base SpirvShader.apply reads the mesh output config
-// (max_vertices / max_primitives / output_topology) from the annotation args when shader_stage()
-// is Mesh, so [vulkan_mesh_shader(max_vertices=3, ...)] works exactly like [mesh_shader(...)] but
-// also gets the Vulkan uniform/push-constant bind helpers. Pairs with create_device_mesh_shader.
+// VK_EXT_mesh_shader stages. SpirvShader.apply reads the mesh output config (max_vertices /
+// max_primitives / output_topology) from the annotation args when shader_stage() is Mesh, so these
+// behave as [mesh_shader(...)] plus the Vulkan bind helpers. Pairs with create_device_mesh_shader.
 [function_macro(name="vulkan_mesh_shader")]
 class SpirvVulkanMeshShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.Mesh
@@ -70,10 +70,9 @@ class SpirvVulkanTaskShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.Task
 }
 
-// VK_KHR_ray_tracing_pipeline stages. Same one-liner shape as mesh/task: the base SpirvShader
-// handles @ray_payload / @incoming_ray_payload / @hit_attribute globals, the accelerationStructureEXT
-// descriptor, and traceRayEXT; these mirrors add the Vulkan uniform/push-constant bind helpers.
-// Pairs with create_device_ray_tracing + build_shader_binding_table.
+// VK_KHR_ray_tracing_pipeline stages. SpirvShader handles @ray_payload / @incoming_ray_payload /
+// @hit_attribute globals, the accelerationStructureEXT descriptor, and traceRayEXT; these add the
+// Vulkan bind helpers. Pairs with create_device_ray_tracing + build_shader_binding_table.
 [function_macro(name="vulkan_raygen_shader")]
 class SpirvVulkanRayGenShader : SpirvVulkanShader {
     def override shader_stage() : ShaderStage => ShaderStage.RayGen
@@ -111,15 +110,9 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
     }
 }
 
-// Opaque shader-resource markers (combined samplers, storage / separate images, the separate
-// sampler, subpass input). dasSpirv recognizes these by NAME (sampler_info / is_subpass_input_type
-// / classify_global) and binds them via descriptor-set writes, NOT mapped-memory UBO uploads — so
-// the @uniform / @push_constant collection walks below MUST skip them. We key off the type name
-// rather than an empty field list: the shared `sampler2D` / `sampler3D` / `image2D` carry a
-// GL-superset `texture2D : uint` handle for the dasOpenGL rail (daslib/shader_lingua_franca), so
-// "struct with zero fields" is no longer a reliable marker test (a non-empty sampler would be
-// miscollected as a UBO, corrupting the bind). Keep this set in sync with dasSpirv's
-// sampler_info / classify_global marker list.
+// Opaque resource markers (samplers, images, subpass input) bind via descriptor-set writes, not mapped-memory
+// UBO uploads, so the @uniform / @push_constant walks MUST skip them. Keyed by NAME, not "zero fields" — shared
+// sampler2D/image2D carry a GL-superset texture2D field. Keep in sync with dasSpirv's sampler_info/classify_global.
 [macro_function]
 def private is_opaque_resource_struct(st : Structure?) : bool {
     if (st == null) return false
@@ -129,11 +122,9 @@ def private is_opaque_resource_struct(st : Structure?) : bool {
             n == "texture2D" || n == "sampler" || n == "subpassInput")
 }
 
-// Fill the dummy bind_uniform function body: for every @uniform struct global reachable from
-// fnMain, walk its std140 field layout and emit one write_field call per field. The whole body
-// is wrapped in `with_mapped_memory(device, memory) <| $(ptr : void?) { ... }` so each call to
-// the generated function does exactly one map/unmap cycle. Samplers/images are skipped here —
-// they bind via descriptor-set writes, not via mapped memory.
+// Fill the dummy bind_uniform body: one write_field per std140 field of every @uniform struct global
+// reachable from fnMain, all wrapped in `with_mapped_memory(device, memory) <| $(ptr : void?)` so each
+// call does exactly one map/unmap cycle. Samplers/images bind via descriptor writes, not here.
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     var inner = new ExprBlock(at = fn.at)
@@ -144,26 +135,15 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
         baseType = Type.tPointer,
         firstType = new TypeDecl(at = fn.at, baseType = Type.tVoid)
     )
-    // Mark the parameter type as const so the block sig matches `block<(ptr : void?) : void>` —
-    // block params default to const in source, but a macro-built Variable defaults to mutable.
+    // Macro-built Variables default to mutable; block params are const, so the sig must match.
     ptr_arg._type.flags.constant = true
     inner.arguments |> emplace(ptr_arg)
 
-    // First pass: collect reachable @uniform struct globals. The generated function takes ONE
-    // (device, memory) pair, so it can only write fields belonging to ONE UBO allocation -- if
-    // a shader reaches >1 @uniform struct (different set/binding => different memory), writing
-    // them all into the same allocation would corrupt the upload. Fail-closed at >1 until the
-    // macro grows per-binding bind functions.
+    // Fail-closed below: one (device, memory) pair per function, so >1 @uniform block corrupts the upload.
     var ubo_globals : array<Variable?>
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
-            // Only struct-typed @uniform globals that are real std140 interface blocks. Sampler /
-            // image markers (sampler2D, sampler2DShadow, image2D, subpassInput …) are also
-            // `tStructure` at the AST level but bind via descriptor-set writes, not mapped memory —
-            // skip them by NAME (is_opaque_resource_struct), since the shared sampler2D/3D/image2D
-            // now carry a GL-superset field and are no longer empty. The empty() check stays as
-            // defence-in-depth. Standalone scalars under @uniform are rejected by the SPIR-V emitter,
-            // so they never reach this point.
+            // Sampler/image markers are tStructure too but bind via descriptors; skip by name (empty() = belt-and-braces).
             if (!(vv.annotation |> find_arg("uniform") is tBool) ||
                 vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null ||
                 is_opaque_resource_struct(vv._type.structType) ||
@@ -183,10 +163,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
         var fields : array<BlockField>
         let layout = compute_block_layout(string(vv.name), st, fields, layout_errors)
         if (!layout.ok) {
-            // Fail-closed: a UBO that can't lay out (e.g. a bool field) silently producing a
-            // no-op bind_uniform would write garbage at runtime. Surface the compute_block_layout
-            // diagnostic through macro_error so the shader fails to compile. compute_block_layout
-            // pushes exactly one error on the failure path; take the first.
+            // Fail-closed: a no-op bind_uniform writes garbage at runtime. layout_errors holds exactly one entry here.
             let msg = empty(layout_errors) ? "(no diagnostic)" : layout_errors[0]
             macro_error(compiling_program(), vv.at,
                 "[vulkan_*_shader]: @uniform '{vv.name}' std140 layout failed: {msg}")
@@ -195,10 +172,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             unsafe { delete ubo_globals; }
             return
         }
-        // Decompose the block into leaf writes via the shared std140 walk (shader_block_layout) — the
-        // SAME walk the OpenGL binder drives, so both rails pack byte-identically. This is what gives
-        // float3x3 / float3x4 their per-column std140 padding and arrays / nested structs their correct
-        // strides; a flat write_field per top-level field (the old loop) mis-packed those shapes.
+        // Shared std140 walk — the SAME one the OpenGL binder drives, so both rails pack byte-identically.
         var writes : array<Std140Write>
         std140_block_writes(st, new ExprVar(at = vv.at, name := vv.name), 0, writes)
         for (w in writes) {
@@ -225,10 +199,9 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     fn.body = body
 }
 
-// Map ShaderStage to the underlying VkShaderStageFlagBits integer. The push-constants codegen
-// emits VkShaderStageFlags(<this_value>) as a const bitfield-from-uint construction -- field-name
-// assignment (e.g. `flags.vertex = true`) doesn't work through qmacro $i splicing, but the integer
-// ctor is straightforward. Values from VK_SHADER_STAGE_*_BIT in the Vulkan spec.
+// Map ShaderStage to the underlying VkShaderStageFlagBits integer. The push-constants codegen emits
+// VkShaderStageFlags(<value>) as a const bitfield-from-uint ctor because field-name assignment
+// (`flags.vertex = true`) doesn't work through qmacro $i splicing. Values from VK_SHADER_STAGE_*_BIT.
 def private stage_to_uint(stage : ShaderStage) : uint {
     if (stage == ShaderStage.Vertex) return 0x1u
     if (stage == ShaderStage.Fragment) return 0x10u
@@ -248,8 +221,7 @@ def private generate_push_constants_dummy(fnMain : FunctionPtr) {
     fn.flags.generated = true
     fn.flags.exports = true
     fn.result = new TypeDecl(at = fnMain.at, baseType = Type.tVoid)
-    // cb and layout are taken const -- block-captured `cmd` is naturally const, and the function
-    // never mutates either handle; reads through boost_value_to_vk are const.
+    // const cb/layout: block-captured `cmd` is naturally const, and neither handle is ever mutated.
     var cb_type <- new TypeDecl(at = fnMain.at, baseType = Type.alias, alias := "CommandBuffer")
     cb_type.flags.constant = true
     fn.arguments |> emplace_new() <| new Variable(at = fnMain.at, name := "cb", _type <- cb_type)
@@ -262,25 +234,18 @@ def private generate_push_constants_dummy(fnMain : FunctionPtr) {
     }
 }
 
-// Fill the push_constants function body: for every @push_constant struct global reachable from
-// fnMain, emit one vkCmdPushConstants(cb, layout, stage_flags, 0u, sizeof_struct, addr(pc_var)).
-// stage_flags is the shader's own stage -- if a push constant is read by multiple stages, the
-// caller will run each stage's push function. Vulkan accepts updates from any subset of the
-// declared range's stages.
+// Fill the push_constants body: one vkCmdPushConstants(cb, layout, stage_flags, 0u, size, ptr) per
+// @push_constant struct global reachable from fnMain. stage_flags is this shader's own stage — if
+// several stages read it, each stage's push function runs (Vulkan accepts any declared subset).
 [macro_function]
 def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; stage : ShaderStage) {
     let stage_uint = stage_to_uint(stage)
     var body = new ExprBlock(at = fn.at)
-    // First pass: collect reachable @push_constant struct globals. Vulkan allows at most ONE
-    // push-constant block per stage, and the current macro hard-codes offset=0 for all writes --
-    // emitting two pushes at offset=0 would overlap and corrupt. Fail-closed at >1 until per-range
-    // pushing (offset + size per block) is wired up.
+    // One push-constant block per stage in Vulkan, and offset is hard-coded 0 here, so >1 overlaps: fail closed.
     var pc_globals : array<Variable?>
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
-            // Same shape filter as the @uniform walk above. The marker-name + empty() checks are
-            // defence-in-depth — sampler / image markers can't be @push_constant today, but the
-            // symmetry matches the @uniform guard and protects against a future leak.
+            // Same shape filter as the @uniform walk; the marker-name + empty() checks are defence-in-depth here.
             if (!(vv.annotation |> find_arg("push_constant") is tBool) ||
                 vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null ||
                 is_opaque_resource_struct(vv._type.structType) ||
@@ -300,9 +265,7 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
         var fields : array<BlockField>
         let layout_info = compute_block_layout(string(vv.name), st, fields, errs)
         if (!layout_info.ok) {
-            // Fail-closed: a @push_constant whose std140 size can't be computed would silently
-            // skip the vkCmdPushConstants update, leaving stale push state and a corrupt frame.
-            // Same rule as the @uniform path -- surface and abort.
+            // Fail-closed: a silently skipped vkCmdPushConstants leaves stale push state and a corrupt frame.
             let msg = empty(errs) ? "(no diagnostic)" : errs[0]
             macro_error(compiling_program(), vv.at,
                 "[vulkan_*_shader]: @push_constant '{vv.name}' std140 layout failed: {msg}")
@@ -314,12 +277,10 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
         delete fields
         delete errs
 
-        // Stage into a std140 buffer, then push the staged bytes. Decompose the block with the SAME
-        // shared walk (shader_block_layout) the @uniform bind + the OpenGL binder drive, so push
-        // constants pack byte-identically to UBOs. The old path uploaded reinterpret(addr(pc_var))
-        // raw, which mis-packed float3x3 / float3x4 / composites and a float3-immediately-before-scalar
-        // (daslang's struct image != std140 there). Body shape mirrors generate_bind_uniform: a block
-        // taking the staging pointer, one write_field per leaf, then the upload while the pointer is live.
+        // nolint:STYLE015
+        // Stage via the shared std140 walk, not a raw addr(pc_var) upload — daslang's struct image
+        // != std140. Shapes the raw path mis-packed, i.e. what to suspect when push data arrives
+        // garbled: float3x3, float3x4, nested composites, and a float3 immediately before a scalar.
         var inner = new ExprBlock(at = fn.at)
         inner.blockFlags.isClosure = true
         inner.returnType = new TypeDecl(at = fn.at, baseType = Type.tVoid)
@@ -344,9 +305,7 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
 
         let size_expr <- new ExprConstUInt(at = vv.at, value = uint(layout_info.size))
         let stage_expr <- new ExprConstUInt(at = vv.at, value = stage_uint)
-        // Upload the staged bytes while the staging pointer is live. ptr is the block arg; cb / layout
-        // are the function's params (captured by the closure). No unsafe wrap: vkCmdPushConstants is a
-        // plain extern and ptr is already void? (the old path needed unsafe only for reinterpret+addr).
+        // Upload while the staging pointer is live; no unsafe wrap needed since ptr is already void?.
         var push_stmt = qmacro(vkCmdPushConstants(boost_value_to_vk(cb), boost_value_to_vk(layout),
             VkShaderStageFlags($e(stage_expr)), 0u, $e(size_expr), $i("ptr")))
         inner.list |> emplace(push_stmt)

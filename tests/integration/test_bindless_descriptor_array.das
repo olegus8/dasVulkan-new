@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv PR-C GPU regression gate): a fragment shader bound to a sampler2D[4] descriptor
@@ -74,9 +75,7 @@ struct private Tex {
 }
 
 def private finalize(var t : Tex) {
-    // Vulkan teardown order: image views first (they reference the image), then the image itself
-    // (still attached to memory), then the memory it was bound to. Reversing image/memory hits the
-    // validation layer for "memory still in use by image".
+    // Teardown order: views (they reference the image), then image, then its memory -- reversing image/memory trips "memory still in use by image".
     delete t.view
     delete t.image
     delete t.memory
@@ -154,8 +153,7 @@ def private render_one_id(id : int) : array<uint8> {
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    // The bindless device path: descriptorIndexing + sampledImage array non-uniform indexing on a
-    // 1.2 core feature struct. Required for the sampler2D[N] descriptor binding.
+    // The sampler2D[N] binding needs descriptorIndexing + sampledImage array non-uniform indexing (1.2 core).
     var inscope device <- create_device_descriptor_indexing(phys, gfx)
     volkLoadDevice(boost_value_to_vk(device))
     let dev = boost_value_to_vk(device)
@@ -209,9 +207,7 @@ def private render_one_id(id : int) : array<uint8> {
         vk_check(vkAllocateDescriptorSets(dev, dsai, addr(raw_set)), null)
     }
 
-    // ONE WriteDescriptorSet at binding 0, descriptorCount = N_DESC, with N image-infos -- the
-    // bindless-write shape. PR-C's reflection emits this binding with count = N already, so
-    // build_descriptor_set_layouts allocates the right slot width.
+    // ONE WriteDescriptorSet at binding 0, descriptorCount = N_DESC, N image-infos -- the bindless-write shape PR-C's reflection already emits at count N.
     var writes : array<WriteDescriptorSet>
     var w = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
         descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = uint(N_DESC))

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 02 - the Mandelbrot set, computed entirely on the GPU. A [compute_shader] runs one

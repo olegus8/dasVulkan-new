@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 14 recording driver (manual, local-only). Spins the GPU-tessellated teapot through two

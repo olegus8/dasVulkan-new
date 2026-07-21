@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed cube: the tutorial 04 graphics pipeline (cube_vert_spv + cube_frag_spv) rendered into

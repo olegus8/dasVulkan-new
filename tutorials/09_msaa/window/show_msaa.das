@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed MSAA + dynamic-rendering tutorial: the offscreen scene blitted onto a GLFW swapchain

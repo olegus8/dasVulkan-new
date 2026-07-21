@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Build Vulkan descriptor-set + pipeline layouts directly from dasSpirv shader reflection
@@ -82,10 +83,9 @@ def private max_set(reflections : array<SpirvReflection>) : int {
     return m
 }
 
-//! Merge the bindings of all reflections for one descriptor set into Vk bindings, OR-ing stage flags
-//! for a (set, binding) slot used by more than one stage. Returns the exact pBindings list
-//! build_descriptor_set_layouts feeds to the driver — exposed so a host (or test) can inspect a set's
-//! layout without creating the opaque Vk object.
+//! Merge all reflections' bindings for one descriptor set into Vk bindings, OR-ing stage flags where a
+//! (set, binding) slot is used by more than one stage. Returns the exact pBindings list
+//! build_descriptor_set_layouts feeds the driver — lets a host or test inspect a set without the Vk object.
 def merge_set_bindings(reflections : array<SpirvReflection>; set : int) : array<DescriptorSetLayoutBinding> {
     var merged : array<MergedBinding>
     for (refl in reflections) {
@@ -124,10 +124,9 @@ def merge_set_bindings(reflections : array<SpirvReflection>; set : int) : array<
     return <- result
 }
 
-//! Build one DescriptorSetLayout per descriptor set referenced across all reflections. Bindings are
-//! merged by (set, binding) with stage flags OR-ed. The result is indexed by set number (0..maxSet);
-//! a set with no bindings gets an empty layout so the index lines up with the pipeline-layout set
-//! index. The caller owns the layouts (`var inscope sl <- build_descriptor_set_layouts(...)`).
+//! Build one DescriptorSetLayout per descriptor set across all reflections, bindings merged by
+//! (set, binding) with stage flags OR-ed. Indexed by set number 0..maxSet — a set with no bindings gets
+//! an empty layout so indices line up with the pipeline layout. Caller owns them (`var inscope sl <- ...`).
 def build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
     var layouts : array<DescriptorSetLayout>
     let topSet = max_set(reflections)

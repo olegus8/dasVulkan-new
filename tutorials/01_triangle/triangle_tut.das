@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 01 render path: draw the rotating RGB triangle offscreen at a given angle and return the

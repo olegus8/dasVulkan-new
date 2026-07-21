@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 options persistent_heap = true
 
@@ -621,8 +622,7 @@ def private field_override_text(reg : VkRegistry; em : EmitModel; s : VkStructDe
             }
         }
     }
-    // pointer fields -- strip const (the C decl is usually `const X*`, which decltype binds
-    // as a const, non-assignable field). Bind as a writable typed pointer / string / void*.
+    // pointer fields: strip const -- decltype on the C decl's `const X*` binds a non-assignable field
     if (np >= 1) {
         // foreign / void / ptr-to-ptr (string arrays, out-arrays): raw void*; boost types it
         if (!empty(FOREIGN_MAP?[tn] ?? "") || tn == "void" || np >= 2) {
@@ -769,8 +769,7 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
     let cst = p.is_const
     let has_len = !empty(p.len)
     let optional_true = p.optional_attr == "true"
-    // C-array parameter (const Elem name[N]): pass a pointer to the element; it decays
-    // to the C array param. tn is the real C type name from the header (float, an enum, ...).
+    // C-array param (const Elem name[N]): pass an element pointer; it decays to the array param
     if (!empty(p.arr_dims)) {
         r.cpp_param = cst ? "const {tn} * {n}" : "{tn} * {n}"
         r.call_arg = n
@@ -910,9 +909,7 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
             return <- r
         }
         if (np == 2 && cst) {
-            // const T* const* (jagged array of T): bind the double pointer NON-const so
-            // das sees a plain T?? matching array_addr of an array<T?>; the boost wrapper
-            // builds the pointer-of-pointers, the C call casts the const back on.
+            // const T* const*: bind NON-const so das sees a plain T?? matching array_addr of array<T?>
             r.cpp_param = "{tn} ** {n}"
             r.call_arg = "(const {tn} * const *){n}"
             return <- r

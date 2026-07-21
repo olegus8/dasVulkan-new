@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv Phase 10.5 GPU regression gate): the compute tier -- @workgroup shared memory

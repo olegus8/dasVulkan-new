@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // GPU gates for the dasSpirv compute-tier wave (daslang #3493 + #3494): subgroup reduce/shuffle
@@ -69,11 +70,10 @@ def gq8_kernel {
 }
 
 // ===== a multi-SSBO compute runner =====
-// One host-visible coherent STORAGE buffer per binding, contents uploaded from / read back into
-// `bufs` (byte arrays; bufs[i] -> binding i). `spec` empty = the plain pipeline path;
-// `storage_8_16` picks the feature-enabled device (`int_dot` additionally chains
-// shaderIntegerDotProduct). Callers gate on probe_support() first — requesting a feature the
-// device lacks fails loudly in device creation.
+
+// One host-visible coherent STORAGE buffer per binding, uploaded from / read back into `bufs`
+// (bufs[i] -> binding i). `spec` empty = plain pipeline path; `storage_8_16` picks the feature-enabled
+// device (`int_dot` also chains shaderIntegerDotProduct). Gate on probe_support() — else device creation fails.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;
               spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false) {
     if (volkInitialize() != 0) {

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 04 pixel-oracle gate (lavapipe in CI, real GPU locally). The synthwave cube has no
@@ -49,10 +50,9 @@ def test_cube_oracle(t : T?) {
     }
     t |> success(cube_hits >= 380, "central 200x200 box is dominantly cube, not background ({cube_hits}/400)")
 
-    // the synthwave palette shows up: at least one magenta-dominant pixel (sky band of the texture)
-    // and at least one cyan-dominant pixel (perspective grid) inside the cube's silhouette.
-    // Thresholds are calibrated for LINEAR sampling + the key+rim lighting (cyan grid lines, 1 texel
-    // wide on the 256-pixel texture, average ~50% into the dark indigo background under LINEAR).
+    // the synthwave palette shows up: >= 1 magenta-dominant pixel (texture sky band) and >= 1 cyan-dominant
+    // one (perspective grid) inside the cube's silhouette. Thresholds are calibrated for LINEAR sampling +
+    // key/rim lighting -- the 1-texel cyan grid lines average ~50% into the dark indigo under LINEAR.
     var saw_magenta = false
     var saw_cyan = false
     for (j in range(50)) {
