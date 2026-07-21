@@ -139,8 +139,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     ptr_arg._type.flags.constant = true
     inner.arguments |> emplace(ptr_arg)
 
-    // Collect the @uniform struct globals reachable from fnMain; the FIRST is bound below and the
-    // host owns the rest, so this no longer fails closed on a multi-UBO shader.
+    // Collect the @uniform struct globals reachable from fnMain; only the first is auto-bound (see below).
     var ubo_globals : array<Variable?>
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
@@ -152,13 +151,12 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             ubo_globals |> push(vv)
         }
     }
-    // The generated <shader>_bind_uniform maps ONE (device, memory) allocation and writes ONE UBO
-    // block's std140 fields into it, so it binds the FIRST reachable @uniform block. A shader may
-    // legitimately reach more than one UBO block (e.g. a per-frame block plus a shared lookup table);
-    // the additional blocks are deliberately NOT auto-bound. A UBO's allocation is the host's call,
-    // and host-coherent (mappable) memory must never be conflated with device-local (staged, NOT
-    // mappable) memory — a with_mapped_memory write is valid only for host-visible memory. The host
-    // binds each additional / device-local block through its own upload path.
+    // nolint:STYLE015
+    // Binds the FIRST reachable @uniform block only: one (device, memory) pair maps ONE allocation.
+    // A shader may legitimately reach several blocks (a per-frame block plus a shared lookup table);
+    // the rest are deliberately the host's. with_mapped_memory is valid ONLY for host-visible memory,
+    // so host-coherent must never be conflated with device-local (staged, NOT mappable) — the host
+    // uploads those through its own path.
     if (!empty(ubo_globals)) {
         let vv = ubo_globals[0]
         let st = vv._type.structType
