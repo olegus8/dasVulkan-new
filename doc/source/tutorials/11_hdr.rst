@@ -89,7 +89,7 @@ upsample -> composite.
 .. literalinclude:: ../../../tutorials/11_hdr/hdr_tut.das
    :language: das
    :start-at: def public record_hdr_frame
-   :end-before: //! Per-frame work
+   :end-before: //! Per-frame:
 
 Self-verifying
 --------------
