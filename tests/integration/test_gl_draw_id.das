@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv PR-A GPU regression gate): a vertex shader reading gl_DrawID (BuiltIn DrawIndex)
@@ -101,8 +102,7 @@ def private render_draw_id() : array<uint8> {
     var indirect_bytes : array<uint8>
     indirect_bytes |> resize(int(buf_bytes))
     for (k in range(N_DRAW)) {
-        // every draw: 6 vertices, 1 instance, firstVertex=0 (the shader keys off gl_DrawID and
-        // gl_VertexIndex; firstVertex unused but kept zero for clarity), firstInstance=0.
+        // every draw: 6 vertices, 1 instance; the shader keys off gl_DrawID + gl_VertexIndex, so first{Vertex,Instance} stay 0.
         write_u32_at(indirect_bytes, k * int(stride) + 0,  6u)    // vertexCount
         write_u32_at(indirect_bytes, k * int(stride) + 4,  1u)    // instanceCount
         write_u32_at(indirect_bytes, k * int(stride) + 8,  0u)    // firstVertex

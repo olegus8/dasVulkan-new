@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Phase-7 storage-image GPU gate shader: a compute shader writes a coordinate-derived gradient into a

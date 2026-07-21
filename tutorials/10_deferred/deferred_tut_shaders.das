@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 10 -- deferred shading "putting it all together". Four shader pairs sharing one cube +
@@ -47,6 +48,7 @@ require math
 let NUM_LIGHTS = 3
 
 // ===== shared UBO data structures =====
+
 // Point lights are unrolled into pos0/col0..pos2/col2 float4 fields rather than a struct-array,
 // because dasSpirv's compute_block_layout currently rejects fixed-array and nested-struct fields
 // in @uniform/@push_constant blocks (only scalars/vectors/matrices on the leaves).
@@ -158,10 +160,9 @@ def gbuffer_fs {
     var spec_intensity = 0.0
     var perturbed_normal = float3(0.0, 1.0, 0.0)
 
-    // Material branch by the per-draw tag. f_material is the @flat int varying routed from the push
-    // constant (0 = the cat statue, 1 = the floor). dasSpirv emits the Flat decoration on int
-    // varyings, so this is reliable — and unlike the old `world_pos.y < 0.5` hack it lets the cat
-    // sit ON the floor (its paws at y=0) without the lower body picking up the brick material.
+    // Material branch on the per-draw tag: f_material is the @flat int varying routed from the push
+    // constant (0 = cat statue, 1 = floor), reliable because dasSpirv emits the Flat decoration. Unlike
+    // the old `world_pos.y < 0.5` hack, the cat can sit ON the floor without picking up brick material.
     if (f_material == 1) {
         // Floor: real ambientCG Bricks031 maps, tiled by world XZ. Texture AO baked into the albedo;
         // the normal map gives mortar relief via the derivative TBN. Brick is matte -> low spec.
@@ -176,10 +177,9 @@ def gbuffer_fs {
         let tn = normalize(float3(tn_raw.x * 3.0, tn_raw.y * 3.0, tn_raw.z))
         perturbed_normal = perturb_normal(n, f_world_pos, uv, tn)
     } else {
-        // Cat: real concrete-statue PBR maps, UV-mapped. ARM packs AO/Roughness/Metallic; the diff is
-        // the albedo and nor_gl perturbs the geometric normal via the derivative TBN. Texture AO is
-        // baked into the albedo; roughness drives the specular intensity (so the HDR env reflection is
-        // stronger on the smoother, less-rough regions).
+        // Cat: real concrete-statue PBR maps, UV-mapped. ARM packs AO/Roughness/Metallic, diff is the
+        // albedo, nor_gl perturbs the geometric normal via the derivative TBN. AO bakes into the albedo;
+        // roughness drives specular intensity, so the HDR env reflection is stronger where it's smoother.
         let alb = texture(cat_albedo, f_uv).rgb
         let arm = texture(cat_arm, f_uv).rgb
         let tex_ao = arm.x
@@ -196,13 +196,12 @@ def gbuffer_fs {
 }
 
 // ===== SSAO pass (real screen-space ambient occlusion) =====
-// The G-buffer normal + world-position are SAMPLED images here (not subpass inputs), so this pass can
-// read NEIGHBOUR texels -- the thing input attachments cannot do. For each fragment we sample a small
-// hemisphere of points around its world position, project each back to screen, and compare the stored
-// surface depth there against the sample's depth: points that fall behind nearby geometry are
-// occluded. occlusion = occluded / K darkens crevices and the cat-floor contact, which is what grounds
-// the cat. A production AO would add a noise texture + a separable blur; we keep a per-pixel hash
-// rotation + a 16-sample spiral for tutorial clarity.
+
+// The G-buffer normal + world-position are SAMPLED images here, not subpass inputs, so this pass can read
+// NEIGHBOUR texels -- what input attachments cannot do. Per fragment: sample a hemisphere around its world
+// position, reproject each, count points hidden behind geometry; crevices + the cat-floor contact darken.
+
+// A production AO adds a noise texture + separable blur; this keeps a per-pixel hash rotation + 16-sample spiral.
 
 var @out @location = 0 v_uv_ssao : float2
 

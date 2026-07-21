@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 05 -- a thousand cubes from one draw call. Two vertex bindings: per-vertex (pos + normal)

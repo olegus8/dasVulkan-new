@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // The animated viewer shader (live windows only -- the headless render + CI oracle use the static

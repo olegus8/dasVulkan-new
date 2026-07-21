@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // A Dear ImGui renderer backend (the dasVulkan<->dasImgui bridge), written entirely in daslang -- no

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Phase-7.2 texelFetch GPU gate: upload a known 64x64 source texture (texel (x,y) = (x,y,0,255)), run a

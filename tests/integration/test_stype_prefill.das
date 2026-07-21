@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // #57: generated get_*/enumerate wrappers construct their out-structs through the

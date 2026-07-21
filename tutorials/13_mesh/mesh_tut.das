@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 13 render path: the GPU-driven mesh-shader pipeline (VK_EXT_mesh_shader). No vertex
@@ -16,10 +17,9 @@ require mesh_tut_shaders
 let public MESH_W = 256
 let public MESH_H = 256
 
-//! Probe whether this machine's Vulkan device supports VK_EXT_mesh_shader -- both the extension string
-//! and the meshShader/taskShader feature bits (mesh_shader_supported) -- so the pixel-oracle gate can
-//! skip cleanly on a driver that lacks it (e.g. a Mesa lavapipe older than 24.1) instead of crashing
-//! vkCreateDevice. Creates and tears down a throwaway instance + physical device.
+//! Probe for VK_EXT_mesh_shader -- both the extension string and the meshShader/taskShader feature bits
+//! (mesh_shader_supported) -- so the pixel-oracle gate skips cleanly on a driver that lacks it (e.g. Mesa
+//! lavapipe < 24.1) instead of crashing vkCreateDevice. Creates and tears down a throwaway instance.
 def public mesh_shader_available() : bool {
     if (volkInitialize() != 0) {
         return false

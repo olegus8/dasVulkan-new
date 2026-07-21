@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 03 render path: build the resident Vulkan resources for the SDF compute shader once, then

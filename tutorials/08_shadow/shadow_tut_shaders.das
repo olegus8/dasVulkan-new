@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 08 -- the canonical two-pass shadow-map dance. The same depth image flows through both
@@ -118,24 +119,9 @@ var @in @location = 3 f_obj_pos      : float3
 var @in @location = 4 f_obj_normal   : float3
 var @out @location = 0 frag_color    : float4
 
-//! Pass 2 fragment shader: PCF-softened shadow + Blinn-Phong on the cube + procedural polished
-//! tiles on the floor + hemisphere ambient. The headline lighting rails:
-//!
-//!   1. **5x5 PCF soft shadows.** Single `textureCompare` is binary per-fragment; averaging 25
-//!      taps over a small radius gives a soft penumbra. Each tap is hardware-PCF'd already so the
-//!      effective sample count is ~100 — silky shadow edges with minimal cost.
-//!   2. **Hemisphere ambient.** Instead of one flat ambient color, blend warm sky (overhead) with
-//!      cool ground bounce (under) using `n.y` — surfaces facing up pick up sky tint, surfaces
-//!      facing the ground pick up bounce. Much richer than a single ambient term.
-//!   3. **Procedural polished tiles on the floor.** Checker-on-tile pattern from `world_pos.xz`,
-//!      tile edges as soft lines, a fresnel-like grazing-angle term that brightens the floor into
-//!      a "polished" look, and a subtle warm tint where the cube sits (fake one-sample bounce).
-//!   4. **Blinn-Phong specular on the cube.** Half-vector specular with a tight exponent so the
-//!      cube reads as a glossy material against the matte floor; specular is multiplied by the
-//!      shadow factor so the highlight disappears in shadow.
-//!
-//! Material branch is by `f_world_pos.y` — floor sits at y = 0 (post-scale), cube hovers at y ≈
-//! 1.0-2.0, so a y < 0.5 test cleanly separates them with no extra push-constant plumbing.
+//! Pass 2 fragment shader. Four lighting rails, each written up in doc/source/tutorials/08_shadow.rst:
+//! 5x5 PCF soft shadows, hemisphere ambient, procedural polished tiles on the floor, Blinn-Phong specular
+//! on the cube. Material branch is `f_world_pos.y < 0.5` — floor sits at y = 0, cube hovers at y ~ 1-2.
 
 let SHADOW_MAP_PX = 1024.0
 
@@ -275,6 +261,7 @@ def main_fs {
         frag_color = float4(col.x, col.y, col.z, 1.0)
     } else {
         // ===== cube =====
+
         // OBJECT-space tri-planar brick: the cube is rotated, so sampling in object space keeps the
         // courses aligned to the faces (world-space tri-planar would swirl across the seams). The
         // perturbed object normal is rotated into world space via the model matrix for lighting.

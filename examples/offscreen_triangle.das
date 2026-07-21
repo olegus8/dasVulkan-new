@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 require vulkan
 require triangle_example_shaders
@@ -418,14 +419,9 @@ def main() : int {
     write_ppm("triangle.ppm", pixels, WIDTH, HEIGHT)
     print("wrote triangle.ppm\n")
 
-    // Structural verification. The shader places three vertices in NDC:
-    //   v0 (0.0,-0.6)=top, v1 (0.6,0.6)=bottom-right, v2 (-0.6,0.6)=bottom-left,
-    //   colored red / green / blue. In a 256x256 framebuffer that is
-    //   top (128,51) red, bottom-right (204,204) green, bottom-left (51,204) blue.
-    // Sample well inside each colored region and assert the matching channel
-    // dominates; the centroid must show all three (the interpolated blend);
-    // the corners must still hold the clear color. This proves geometry AND
-    // color interpolation, not just "something non-blank rendered".
+    // Structural verification. NDC verts v0(0,-0.6) v1(0.6,0.6) v2(-0.6,0.6), colored red/green/blue,
+    // land at (128,51) / (204,204) / (51,204) in a 256x256 framebuffer. Assert the matching channel
+    // dominates inside each region, the centroid blends all three, and the corners keep the clear color.
     var rc = 0
     var fails = 0
 

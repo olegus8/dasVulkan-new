@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed skybox: the tutorial 06 graphics pipeline (skybox_vert_spv + skybox_frag_spv) rendered

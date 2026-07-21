@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 require dastest/testing_boost public
@@ -24,10 +25,9 @@ def test_shadow_oracle(t : T?) {
         let sky = px(pixels, 16, 16)
         t |> success(luminance(sky) < 80, "sky is dark clear color")
 
-        // Find a SHADOWED point on the floor (in the cube's shadow). The sun is roughly along +x
-        // at time=0 (sun_yaw = 0); shadow falls toward -x of the cube on the floor. Floor occupies
-        // a large area near the bottom of the frame. Sample a few points around where the shadow
-        // is expected and check at least one is dark.
+        // Find a SHADOWED floor point. At time=0 (sun_yaw = 0) the sun is roughly along +x, so the
+        // shadow falls toward -x of the cube, and the floor covers a large area near the frame bottom.
+        // Sample around where the shadow is expected and require at least one dark hit.
         var any_shadow = false
         var min_floor = 255
         var max_floor = 0

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 // Boost twin of compute.das: the same "square each index" compute dispatch, but
 // driven entirely through the vulkan_boost layer — buffer, memory (+ requirements

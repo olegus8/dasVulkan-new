@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed tutorial 12: the GPU-driven frame blitted onto a GLFW swapchain image. Reuses

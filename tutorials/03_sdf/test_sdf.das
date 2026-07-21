@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 03 pixel-oracle gate. The SDF scene is deterministic at a fixed time, so we sample a few

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // GPU regression gate for the SHARED std140 walk (daslang's daslib/shader_block_layout): a UBO with a
@@ -76,9 +77,7 @@ def private render_mat3() : array<uint8> {
         width = uint(TEX_W), height = uint(TEX_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
-    // Host-visible UBO. Set the daslang @uniform fields, then upload them std140-packed via the
-    // GENERATED bind (the path under test). Decoys = 0.9; the three read values are arr[1].x=0.2,
-    // tint.y=0.4, rot column2.z=0.6 -> expected center (51, 102, 153).
+    // Host-visible UBO uploaded std140-packed via the GENERATED bind (the path under test). Decoys = 0.9; read values arr[1].x=0.2, tint.y=0.4, rot column2.z=0.6 -> expected center (51,102,153).
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
     var inscope ubo <- create_host_buffer(device, phys, 96ul, ubo_usage)

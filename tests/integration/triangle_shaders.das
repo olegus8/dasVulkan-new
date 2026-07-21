@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Triangle shaders authored in daslang and lowered to SPIR-V at compile time by dasSpirv's

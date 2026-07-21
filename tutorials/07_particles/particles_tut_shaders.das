@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 07 -- a compute-driven particle swarm. The same storage buffer flows through both
@@ -74,10 +75,9 @@ def particles_compute {
 
 // ===== vertex shader -- point sprite per particle =====
 
-//! View + projection. POINT_LIST topology means each particle is a single GL point; the rasteriser
-//! draws it as a screen-space splat ``PARTICLE_PX`` pixels wide. ``gl_PointSize`` is a vertex-stage
-//! Output builtin (BuiltIn PointSize) that the rasteriser reads when the topology is POINT_LIST;
-//! values > 1 require the ``largePoints`` device feature, which the host enables on the device.
+//! View + projection. POINT_LIST topology makes each particle one GL point, rasterised as a screen-space
+//! splat ``PARTICLE_PX`` pixels wide. ``gl_PointSize`` is a vertex-stage Output builtin (BuiltIn PointSize)
+//! read only under POINT_LIST; values > 1 need the ``largePoints`` feature, which the host enables.
 struct Camera {
     view : float4x4
     proj : float4x4
