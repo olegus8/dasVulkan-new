@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 05 pixel oracle (lavapipe in CI, real GPU locally). 1000 instanced cubes scattered on a

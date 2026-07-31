@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 09 -- MSAA + dynamic rendering on the synthwave cube. Pedagogically the cube is the same

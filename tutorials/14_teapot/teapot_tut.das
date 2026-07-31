@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 14 render path: the GPU-tessellated Utah teapot. No vertex buffer, no index buffer -- a
@@ -128,10 +129,9 @@ def build_floor_vertices() : array<float> {
     ]
 }
 
-//! Fullscreen triangle for the env sky: 3 vertices, each (clip.x, clip.y, ray.x, ray.y, ray.z). The
-//! clip corners (-1,-1),(-1,3),(3,-1) cover the screen with one triangle (front-facing under back-cull).
-//! The world-space view ray for each corner is reconstructed from the camera basis so the fragment can
-//! evaluate env_color in the same world frame the teapot + floor reflect.
+//! Fullscreen triangle for the env sky: 3 vertices of (clip.xy, ray.xyz). Corners (-1,-1),(-1,3),(3,-1)
+//! cover the screen with one triangle, front-facing under back-cull. Each corner's world-space view ray
+//! comes from the camera basis, so the fragment evaluates env_color in the frame teapot + floor reflect.
 def build_sky_vertices() : array<float> {
     let f = v3_norm(v3_sub(CAM_TARGET, CAM_EYE))      // forward
     let r = v3_norm(v3_cross(f, CAM_UP))              // right
@@ -228,9 +228,8 @@ def public finalize(var ctx : TeapotContext) {
 }
 
 //! Depth-only mesh-shader pipeline for the shadow pass: task + mesh stages, NO fragment, NO color
-//! attachment (mesh pipelines ignore vertex-input + input-assembly). Slope-scaled depth bias keeps the
-//! teapot from self-shadowing into acne on the floor. Hand-rolled because create_mesh_pipeline always
-//! attaches a fragment stage + a color blend attachment.
+//! attachment (mesh pipelines ignore vertex-input + input-assembly). Slope-scaled depth bias stops the
+//! teapot self-shadowing into acne. Hand-rolled: create_mesh_pipeline always adds fragment + blend.
 def private build_mesh_shadow_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
                                        task, mesh : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
@@ -345,10 +344,9 @@ def public build_teapot_resources(device : Device; phys : VkPhysicalDevice) : Te
     var inscope sky_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, sverts)
     delete sverts
 
-    // Reflection-driven descriptor + pipeline layout. ALL shaders that touch the shared UBO are
-    // reflected so binding 0 picks up every stage flag (task|mesh|fragment for the teapot, vertex|
-    // fragment for the floor + sky) — a fragment shader reading binding 0 off a vertex-only layout
-    // would read zero.
+    // Reflection-driven descriptor + pipeline layout. EVERY shader touching the shared UBO is reflected,
+    // so binding 0 collects all stage flags (task|mesh|fragment for the teapot, vertex|fragment for floor
+    // + sky) -- a fragment shader reading binding 0 off a vertex-only layout would just read zero.
     var reflections <- [decode_reflection(teapot_task_spv_reflect),
                         decode_reflection(teapot_mesh_spv_reflect),
                         decode_reflection(teapot_frag_spv_reflect),

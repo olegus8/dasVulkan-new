@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 10 -- deferred shading "putting it all together". Reuses the shadow rail from tutorial
@@ -67,10 +68,10 @@ let public DBG_LIGHT     = 5
 let public DBG_MODE_COUNT = 6
 
 // ===== cat statue geometry (loaded from an OBJ; stride 32 = pos + normal + uv, uint32 indices) =====
+
 // The concrete-cat-statue model (CC0, tutorials/_assets/cat) replaces the old cube: organic geometry
-// shows off deferred shading, shadows, AO and IBL far better than a box. load_obj_mesh is a plain text
-// reader (no stbimage), so the GEOMETRY is CI-safe; the HDR + textures pull in stbimage. The cat
-// carries OBJ UVs, so pos + normal + uv are uploaded (the floor uses a dummy uv at the same stride).
+// shows off deferred shading, shadows, AO and IBL far better than a box. load_obj_mesh is plain text
+// (CI-safe geometry; only HDR + textures need stbimage), and OBJ UVs ride along (the floor pads one).
 
 let CAT_HEIGHT = 2.2f       // fitted height in world units; base sits at y=0, centred in x/z
 
@@ -327,12 +328,9 @@ def public finalize(var ctx : DeferredContext) {
 
 // ===== build =====
 
-// build_deferred_resources is by far the largest builder in the tutorials (8 images + 8
-// textures/samplers + 4 render passes + 4 framebuffers + 4 pipelines + descriptors). Holding every
-// resource in ONE stack frame overflows the interpreter's default per-context stack on the smaller
-// contexts CI creates per test (`dastest --isolated-mode`, ~16KB), and the frame is larger on Linux
-// (struct packing) than Windows. So the build is split into phase helpers, each filling `r` by
-// reference in its own (small) frame -- no `options stack` bump needed on any consuming root.
+// The largest builder in the tutorials (8 images + 8 textures/samplers + 4 render passes + 4 framebuffers
+// + 4 pipelines + descriptors). One stack frame for all of it overflows the ~16KB per-context stack CI
+// gives each test (worse on Linux), so phase helpers fill `r` by reference -- no `options stack` bump.
 
 def public build_deferred_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : DeferredResources {
     var r : DeferredResources
@@ -390,8 +388,7 @@ def private build_df_textures(var r : DeferredResources; device : Device; phys :
         path_join(cat_tex_dir, "concrete_cat_statue_nor_gl_2k.jpg"), false)
     r.cat_arm <- load_texture_2d(device, phys, queue, pool,
         path_join(cat_tex_dir, "concrete_cat_statue_arm_2k.jpg"), false)
-    // Anisotropic filtering keeps the floor brick relief crisp at grazing angles (the tiled map
-    // minifies hard there). Feature-gated: lavapipe (CI) reports it unsupported -> this no-ops.
+    // Anisotropy keeps the floor brick crisp at grazing angles, where the tiled map minifies hard; feature-gated because lavapipe (CI) lacks it.
     var dev_feats : VkPhysicalDeviceFeatures
     vkGetPhysicalDeviceFeatures(phys, dev_feats)
     let csci = SamplerCreateInfo(
@@ -417,8 +414,7 @@ def private build_df_textures(var r : DeferredResources; device : Device; phys :
     r.floor_roughness <- load_texture_2d(device, phys, queue, pool,
         path_join(brick_dir, "Bricks031_1K-JPG_Roughness.jpg"), false)
 
-    // NEAREST/clamp sampler for the deferred G-buffer reads: the ssao + lighting passes need exact
-    // texels — linear filtering would smear world-pos / normals across silhouettes. No mips.
+    // NEAREST/clamp for the G-buffer reads: ssao + lighting need exact texels, since linear would smear world-pos / normals across silhouettes. No mips.
     let gsci = SamplerCreateInfo(
         magFilter = VkFilter.NEAREST,
         minFilter = VkFilter.NEAREST,
@@ -639,6 +635,7 @@ def private write_image_sampler(set : VkDescriptorSet; binding : uint; view : Im
 }
 
 // ===== G-buffer render pass (3 MRT color + depth, single subpass) =====
+
 // The 3 color attachments STORE + transition to SHADER_READ_ONLY so the ssao + lighting passes can
 // SAMPLE them. No input attachments, no explicit subpass deps -- the cross-pass handoff rides the
 // attachment finalLayouts, the same pattern the shadow pass uses.
@@ -1030,10 +1027,9 @@ def public update_deferred_uniforms(res : DeferredResources; device : Device; ti
     scene.light_vp = light_vp
     scene.light_dir = float4(sun_dir.x, sun_dir.y, sun_dir.z, 0.0f)
     scene.camera_pos = float4(cam_pos.x, cam_pos.y, cam_pos.z, time)
-    // Three colored point lights orbit at radius 2.5, height 1.2 (just above the floor, below the cat's
-    // centre). Range 6, falloff 1.5 -- a wide, soft coloured pool. Kept as ACCENTS (~1.6 peak) so the
-    // sun + ambient stay the base and the scene keeps dynamic-range headroom (the old 4x bump blew the
-    // concrete/brick out to flat colour and removed the dark contact that grounds the cat).
+    // Three colored point lights orbit at radius 2.5, height 1.2 (above the floor, below the cat's centre),
+    // range 6 / falloff 1.5 -- a wide soft pool. Kept as ACCENTS (~1.6 peak) so sun + ambient stay the base:
+    // a 4x bump blew the concrete/brick out to flat colour and killed the dark contact that grounds the cat.
     let lt = time * 0.5f
     let lr = 2.5f
     let lh = 1.2f
@@ -1108,8 +1104,7 @@ def public record_deferred_render(res : DeferredResources; cmd : CommandBuffer) 
 //! Draw cube + floor with the appropriate ObjectPush per object. Used by BOTH the shadow pass and
 //! the gbuffer pass; the only difference is the bound pipeline.
 def private draw_casters(res : DeferredResources; cmd : CommandBuffer; pipe_layout : PipelineLayout) {
-    // Cat: sits on the floor (base at y=0, baked into the verts), stationary -- only the camera orbits
-    // (a spinning cat under an orbiting camera reads as confusing double motion).
+    // Cat stays put (base y=0, baked into the verts) -- only the camera orbits; both moving reads as double motion.
     op.model = identity_m4()
     op.material = 0
     let cube_vbufs <- [weak_copy(res.cube_vb.buffer)]
@@ -1133,8 +1128,7 @@ def private draw_casters(res : DeferredResources; cmd : CommandBuffer; pipe_layo
 }
 
 def private push_object_pc(cmd : CommandBuffer; pipe_layout : PipelineLayout) {
-    // ObjectPush is in shadow_vs + gbuffer_vs; daslang reflection gives us the per-pipeline range.
-    // Use the gbuffer-derived helper (which writes the full 68-byte range covering both fields).
+    // ObjectPush is in shadow_vs + gbuffer_vs; the gbuffer-derived helper writes the full 68-byte range covering both.
     gbuffer_vs_push_constants(cmd, pipe_layout)
 }
 

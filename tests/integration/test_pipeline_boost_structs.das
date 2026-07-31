@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // A graphics pipeline built ENTIRELY from #53's boost view structs -- every

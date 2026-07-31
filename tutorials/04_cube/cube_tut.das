@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 04 render path: draw the synthwave neon cube at `time` (seconds, controls the breathing
@@ -197,11 +198,9 @@ def gen_synthwave_texture(w, h : int) : array<uint8> {
 
 // ===== reusable per-frame context =====
 
-//! All cube rendering state that depends only on (device, phys, queue, pool) -- offscreen targets,
-//! render pass, framebuffer, geometry/UBO buffers, procedural texture + sampler + descriptors, the
-//! graphics pipeline, and a host-visible readback buffer. The driver owns instance/device/queue/pool
-//! and passes them into build_cube_resources, so the same resources work behind either an offscreen
-//! oracle (the [test]) or a swapchain blit (window/show_cube.das).
+//! All cube rendering state depending only on (device, phys, queue, pool): offscreen targets, render
+//! pass, framebuffer, geometry/UBO buffers, procedural texture + sampler + descriptors, pipeline and a
+//! host-visible readback. The driver passes those in, so one bundle serves the oracle or a swapchain blit.
 struct public CubeResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
@@ -248,9 +247,8 @@ def public finalize(var r : CubeResources) {
 }
 
 //! Self-contained one-shot context for the offscreen oracle + recording driver: owns its own
-//! instance/device/queue/pool plus the full CubeResources bundle. Windowed drivers don't use this
-//! type -- they build their own instance (with surface extensions) + device (with VK_KHR_swapchain),
-//! then call build_cube_resources directly.
+//! instance/device/queue/pool plus the full CubeResources bundle. Windowed drivers skip it -- they build
+//! an instance (surface extensions) + device (VK_KHR_swapchain) themselves, then build_cube_resources.
 struct public CubeContext {
     instance : Instance
     device   : Device
@@ -268,10 +266,9 @@ def public finalize(var ctx : CubeContext) {
     }
 }
 
-//! Build the cube's render resources against a caller-owned (device, phys, queue, pool). Used by
-//! both build_cube_context (offscreen test/recording) and window/show_cube.das (swapchain blit).
-//! The pool's queue family must equal the family `queue` came from -- the texture upload is recorded
-//! into pool and submitted on queue.
+//! Build the cube's render resources against a caller-owned (device, phys, queue, pool). Used by both
+//! build_cube_context (offscreen test/recording) and window/show_cube.das (swapchain blit). The pool's
+//! queue family must match `queue`'s -- the texture upload is recorded into pool and submitted on queue.
 def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : CubeResources {
     let dev = boost_value_to_vk(device)
 
@@ -519,11 +516,9 @@ def public update_cube_uniforms(res : CubeResources; device : Device; time, came
     pc.model = model_matrix(spin, breathe)
 }
 
-//! Record the cube's render pass + draw into the given command buffer. The render pass ends with
-//! the color attachment in TRANSFER_SRC_OPTIMAL (create_render_pass_color_depth default), so the
-//! windowed driver can blit res.color.image straight into the swap target without an extra
-//! transition. Caller must have run update_cube_uniforms first so the UBO + push-constant globals
-//! carry the desired frame data.
+//! Record the cube's render pass + draw. The pass ends with the color attachment in TRANSFER_SRC_OPTIMAL
+//! (create_render_pass_color_depth's default), so a windowed driver blits res.color.image straight into
+//! the swap target. Caller must run update_cube_uniforms first to load the UBO + push-constant globals.
 def public record_cube_render_pass(res : CubeResources; cmd : CommandBuffer) {
     var clears <- [clear_color(0.02f, 0.0f, 0.06f, 1.0f), clear_depth(1.0f)]
     record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(CUBE_W, CUBE_H), clears) {

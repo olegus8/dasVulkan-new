@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv PR-G GPU regression gate): a UBO whose top-level fields cover the three composite
@@ -81,17 +82,13 @@ def ubo_nested_frag {
 let TEX_W = 256
 let TEX_H = 256
 
-// Build the 144-byte std140 image of NestedUBO with the exact offsets published by
+// Build the 144-byte std140 image of NestedUBO at the exact offsets published by
 // compute_block_layout. `palette[k] = (k==id ? 1 : 0, ...)` lets the fragment for that id resolve
-// to red/green/blue cleanly; material is small + zero light contribution. The UBO bytes are
-// uploaded raw -- no bind_uniform recursion needed since PR-G's downstream bind-rail extension
-// is queued separately.
+// to red/green/blue cleanly; material is small and the light contributes ~zero.
 def private build_nested_ubo(id : int) : array<uint8> {
     var bytes : array<uint8>
     bytes |> resize(144)
-    // palette[id] = (1, 0.2, 0.2, 1) when id==0 (red-ish), (0.2,1,0.2,1) when id==1 (green-ish),
-    // (0.2,0.2,1,1) when id==2 (blue-ish). Other palette entries are dark grey so a wrong-index
-    // pick lands at a clearly different color than the right one.
+    // Non-selected entries stay dark grey, so a wrong-index pick lands at a clearly different color.
     let dark : float4 = float4(0.05f, 0.05f, 0.05f, 1.0f)
     let red  : float4 = float4(1.0f, 0.2f, 0.2f, 1.0f)
     let green : float4 = float4(0.2f, 1.0f, 0.2f, 1.0f)
@@ -108,8 +105,7 @@ def private build_nested_ubo(id : int) : array<uint8> {
     write_float4_at(bytes, 48, float4(0.05f, 0.05f, 0.05f, 1.0f))
     write_float_at(bytes, 48 + 16, 1.0f)
     write_float_at(bytes, 48 + 20, 0.0f)
-    // lights[0] is unused; zero. lights[1] @ 80 + 32 = 112: pos zero, color tiny but nonzero so it
-    // proves the array-of-struct chain reads the SECOND element (not the first).
+    // lights[0] unused/zero; lights[1] @ 80+32=112 has tiny nonzero color, proving the array-of-struct chain reads the SECOND element.
     write_float4_at(bytes, 112, float4(0.0f, 0.0f, 0.0f, 1.0f))
     write_float4_at(bytes, 112 + 16, float4(0.02f, 0.02f, 0.02f, 1.0f))   // glow nudges the output
     return <- bytes
@@ -231,11 +227,10 @@ def private render_one_id(id : int) : array<uint8> {
 }
 
 // ===== Pixel oracle =====
-// The fragment writes  color = palette[id] + material(0.05,0.05,0.05)*1.0 + lights[1].color(0.02,0.02,0.02)
-//   id=0 -> red palette (1, 0.2, 0.2)   -> approx (1.07, 0.27, 0.27)   -> sRGB-quantized red-dominant
-//   id=1 -> green palette (0.2,1,0.2)   -> approx (0.27, 1.07, 0.27)   -> green-dominant
-//   id=2 -> blue palette (0.2,0.2,1)    -> approx (0.27, 0.27, 1.07)   -> blue-dominant
-// "Wrong index" picks dark grey -> a wash that does NOT show the corresponding dominance.
+
+// color = palette[id] + material(0.05) + lights[1].color(0.02), so id 0/1/2 give approx
+// (1.07,0.27,0.27) / (0.27,1.07,0.27) / (0.27,0.27,1.07) -- red / green / blue-dominant.
+// A wrong index picks dark grey instead: a wash with no dominance.
 [test]
 def test_ubo_nested_palette_red(t : T?) {
     var pixels <- render_one_id(0)

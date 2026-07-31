@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Generated from teapotCGA.bpt (original Newell 32-patch Utah teapot, public domain) by

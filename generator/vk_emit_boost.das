@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 options persistent_heap = true
 
@@ -31,7 +32,7 @@ def private emit_ctors(reg : VkRegistry; em : EmitModel; out_dir : string) {
     fopen("{out_dir}/vulkan_ctors.das", "wb") $(f) {
         panic("can't write vulkan_ctors.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_ctors shared\n\nrequire vulkan public\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_ctors shared\n\nrequire vulkan public\n\n")
         for (s in reg.structs) {
             continue if (!empty(s.alias) || !key_exists(em.struct_emit, s.name) || !empty(s.protect))
             // find the sType member (always named "sType" with a values= attribute)
@@ -156,11 +157,10 @@ def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
     fopen("{out_dir}/vulkan_handles.das", "wb") $(f) {
         panic("can't write vulkan_handles.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_handles shared\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_handles shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_runtime public\n\n")
         for (oi in owners) {
-            // wrapper struct -- handles stored as uint64 (their ABI form) so wrapper
-            // copies are friction-free; reinterpret to the typed handle at the boundary.
+            // handles stored as uint64 (their ABI form) so wrapper copies are friction-free
             fprint(f, "struct {oi.boost} \{\n")
             fprint(f, "    _vk : uint64\n")
             fprint(f, "    _needs_delete : bool\n")
@@ -249,12 +249,9 @@ def private arr_scalar_elem(reg : VkRegistry; tn : string) : string {
     return DAS_SCALAR_MAP?[bt] ?? ""
 }
 
-//! pX (const T*) and ppX (const T* const*) members are a mutually-exclusive union sharing
-//! one count (geometryCount governs both pGeometries and ppGeometries).  We bind the
-//! single-pointer form as array<T> and erase the double-pointer alternative; the single
-//! pointer then carries the authoritative count.  The pair is matched by element type
-//! across the two pointer depths, the double's len naming the single's len first
-//! ("geometryCount,1" vs "geometryCount").
+//! pX (const T*) and ppX (const T* const*) are a mutually-exclusive union sharing one count.
+//! Bind the single-pointer form as array<T> and erase the double; the single carries the count.
+//! Matched by element type across depths, the double's len naming the single's first ("X,1" vs "X").
 def private has_double_ptr_alt(s : VkStructDef; m : VkMember) : bool {
     if (m.num_ptrs != 1 || !m.is_const || empty(m.len)) {
         return false
@@ -291,8 +288,7 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         return <- bf
     }
     if (m.name == "pNext") {
-        // only plain `const void* pNext` becomes the `next` escape; typed self-pointers
-        // (VkBaseInStructure/VkBaseOutStructure) are meta-structs -> skip
+        // only plain `const void* pNext` becomes `next`; typed self-pointers are meta-structs -> skip
         if (tn == "void") {
             bf.kind = FieldKind.next_ptr
             bf.name = "next"
@@ -312,14 +308,12 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         return <- bf
     }
     if (!empty(m.arr_dims)) {
-        // a fixed array of handles is a fixed array of pointers, which das will not
-        // whole-array-copy (`vk.x = b.x`) -> defer the whole struct to raw-only
+        // das will not whole-array-copy a fixed array of pointers -> defer the whole struct to raw-only
         if (elem_is_handle(em, tn)) {
             bf.kind = FieldKind.hard
             return <- bf
         }
-        // inline fixed-array member -> scalar direct copy: the raw struct holds
-        // the same fixed array, so `vk.x = b.x` copies it element-wise.
+        // inline fixed array -> scalar: the raw struct holds the same array, so `vk.x = b.x` copies it
         bf.kind = FieldKind.scalar
         bf.boost_type = build_string() $(writer) {
             writer |> write(scalar_field_type(reg, em, m))
@@ -333,9 +327,7 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
     let hasvkcount = !empty(m.len) && key_exists(counts, m.len)
     if (hasvkcount && m.num_ptrs == 1 && tn != "void" && tn != "char") {
         bf.count_member = m.len
-        // "optional" here means this array's length is NOT the authoritative count:
-        // optional="true" (may be null) or noautovalidity="true" (mutually-exclusive
-        // arrays / imageless framebuffer -- the count member is primary, not the length).
+        // "optional" here = this array's length is NOT authoritative; the count member is primary
         bf.is_optional = ((m.optional_attr == "true" || m.noautovalidity == "true") &&
             !has_double_ptr_alt(s, m))
         if (elem_is_handle(em, tn)) {
@@ -356,15 +348,12 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
                 bf.elem_boost = boost_name(tn)
                 bf.boost_type = "array<{bf.elem_boost}>"
             } elif (!key_exists(em.struct_emit, tn)) {
-                // array of enum / flags / scalar-typedef -> arr_scalar (the
-                // element is a value type; scalar_field_type resolves it)
+                // array of enum / flags / scalar-typedef -> arr_scalar (element is a value type)
                 let de = scalar_field_type(reg, em, m)
                 bf.kind = FieldKind.arr_scalar
                 bf.boost_type = "array<{de}>"
                 bf.elem_vktype = de
-                // a Flags-TYPEDEF member (VkXxxFlags) binds its raw pointer as
-                // uint?/uint64?, but a FlagBits-ENUM member (VkXxxFlagBits) binds it
-                // as the bitfield itself -> reinterpret only the typedef case
+                // a Flags-TYPEDEF raw ptr is uint?/uint64?, a FlagBits-ENUM is the bitfield itself
                 let mfi = em.flags_lookup?[tn] ?? FlagsInfo()
                 if (mfi.kind == FlagsKind.flags64) {
                     bf.arr_raw_ptr = "uint64?"
@@ -383,9 +372,7 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         bf.boost_type = "string"
         return <- bf
     }
-    // optional single const ptr to a mappable struct (e.g., VkRenderingInfo.pDepthAttachment)
-    // -> boost field is `T?`; caller passes `null` or `unsafe(addr(local))`; vk_view clones
-    // the pointee into scratch so the caller's local only has to live across the view call.
+    // optional const ptr to a mappable struct -> `T?`; vk_view clones the pointee into scratch, so the caller's local need only outlive the view call
     if (m.num_ptrs == 1 && m.is_const && empty(m.len) && key_exists(mappable, tn)) {
         bf.kind = FieldKind.opt_struct_ptr
         bf.elem_vktype = tn
@@ -394,16 +381,12 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
         bf.is_optional = true
         return <- bf
     }
-    // an OPTIONAL remaining pointer (void*, scalar ptr, ptr to a non-mappable
-    // struct) -> omit the boost field; the raw slot stays null, which is exactly
-    // what optional="true" permits.  Lets a struct emit when its only blockers
-    // are optional raw pointers (e.g. pSampleMask, pSpecializationInfo).
+    // optional remaining pointer -> omit the boost field; a null raw slot is what optional="true" permits
     if (m.num_ptrs >= 1 && m.is_const && m.optional_attr == "true") {
         bf.kind = FieldKind.erase
         return <- bf
     }
-    // a pX/ppX array union's double-pointer alternative -> erase; its single-pointer
-    // sibling (bound as array<T>) carries the data and the raw `pp` slot stays null.
+    // pX/ppX union's double-ptr alternative -> erase; the single-ptr sibling carries the data
     if (is_double_ptr_alt(s, m)) {
         bf.kind = FieldKind.erase
         return <- bf
@@ -527,10 +510,9 @@ def private view_has_scratch(vs : ViewStruct) : bool {
     return false
 }
 
-//! Promote count members whose referencing arrays are ALL optional to settable boost
-//! fields: such a count has independent meaning when its array is empty (descriptorCount
-//! of a non-sampler binding, viewportCount under dynamic state). Counts with at least one
-//! non-optional array stay erased (derived from that array's length).
+//! Promote count members whose referencing arrays are ALL optional to settable boost fields:
+//! such a count has independent meaning when its array is empty (descriptorCount of a
+//! non-sampler binding). Counts with a non-optional array stay erased (derived from its length).
 def private promote_independent_counts(var vs : ViewStruct) {
     for (i in range(length(vs.fields))) {
         continue if (vs.fields[i].kind != FieldKind.erase)
@@ -590,7 +572,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
     fopen("{out_dir}/vulkan_structs.das", "wb") $(f) {
         panic("can't write vulkan_structs.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_structs shared\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_structs shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_ctors public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_runtime public\nrequire math\n\n")
         for (vs in views) {
             let s & = unsafe(reg.structs[vs.s_index])
@@ -612,9 +594,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    _vk_view_{bf.name} : array<{bf.elem_vktype}>\n")
                 }
             }
-            // scratch slots for opt_struct_ptr fields: a boost-side clone of the pointee + its
-            // raw-struct view + a `_present` flag so vk_view_destroy only tears the clone down
-            // when it was actually populated
+            // opt_struct_ptr scratch: pointee clone + raw view + `_present` so vk_view_destroy only tears down what was populated
             for (bf in vs.fields) {
                 if (bf.kind == FieldKind.opt_struct_ptr) {
                     fprint(f, "    _vk_view_{bf.name}_value : {bf.elem_boost}\n")
@@ -623,11 +603,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                 }
             }
             fprint(f, "\}\n")
-            // vk_view_create_unsafe. Raw struct das field names are das_safe_name'd (same
-            // as the boost field name). Array pointers are set here (null when empty); counts
-            // are set afterwards so a shared/independent count sees every array's length.
-            // `b` is only mutated (its scratch fields) when the struct has array/opt-ptr fields;
-            // a read-only view drops `var` so the generated code is LINT014-clean.
+            // counts are set after the arrays so a shared count sees every length; `b` drops `var` when the view has no scratch (LINT014-clean)
             let b_create = view_has_scratch(vs) ? "var b" : "b"
             fprint(f, "def vk_view_create_unsafe({b_create} : {vs.boost}) : {s.name} \{\n")
             fprint(f, "    var vk = {s.name}()\n")
@@ -639,12 +615,9 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                 } elif (bf.kind == FieldKind.next_ptr) {
                     fprint(f, "    vk.pNext = b.next\n")
                 } elif (bf.kind == FieldKind.arr_scalar) {
-                    // array_addr returns null for an empty array, so an optional empty array
-                    // becomes a null pointer (with its count left to the count pass below)
+                    // array_addr returns null for an empty array -> an optional empty array becomes a null pointer
                     fprint(f, "    b._vk_view_{bf.name} := b.{bf.name}\n")
-                    // a Flags-typedef array's raw pointer is uint?/uint64? but the boost
-                    // scratch holds the bitfield alias -> reinterpret to match (set at
-                    // classify time; "" for FlagBits-enum / plain-scalar arrays that match)
+                    // a Flags-typedef array's raw ptr is uint?/uint64? but the scratch holds the bitfield alias -> reinterpret
                     if (!empty(bf.arr_raw_ptr)) {
                         fprint(f, "    vk.{bf.name} = unsafe(reinterpret<{bf.arr_raw_ptr}>(array_addr(b._vk_view_{bf.name})))\n")
                     } else {
@@ -661,11 +634,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    {CB}\n")
                     fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
                 } elif (bf.kind == FieldKind.opt_struct_ptr) {
-                    // clone the caller's pointee into our scratch (decoupling lifetime), then
-                    // recursively view it; the raw vk pointer goes to the raw scratch slot.
-                    // The boost field holds the caller's non-owning addr (a local), so once
-                    // it is cloned we null it: the default finalize deletes a populated T?
-                    // field, and freeing a borrowed local is not a heap chunk.
+                    // clone the pointee into scratch, then null the borrowed field: the default finalize deletes a populated T? and a borrowed local is not a heap chunk
                     fprint(f, "    unsafe {OB}\n")
                     fprint(f, "        if (b.{bf.name} != null) {OB}\n")
                     fprint(f, "            b._vk_view_{bf.name}_value := *b.{bf.name}\n")
@@ -677,8 +646,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    {CB}\n")
                 }
             }
-            // counts: derived (authoritative array length) or independent (caller's value,
-            // falling back to the largest referencing-array length when left 0)
+            // counts: derived (authoritative array length), or independent (caller's value, 0 -> largest referencing length)
             for (bf in vs.fields) {
                 let cm = das_safe_name(bf.raw_name)
                 if (bf.kind == FieldKind.count_independent) {
@@ -693,8 +661,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             }
             fprint(f, "    return <- vk\n")
             fprint(f, "\}\n")
-            // vk_view_destroy: free the scratch arrays. A scratch-free view has nothing to tear
-            // down, so its `b` is unused -> `_b` (LINT012-clean) and the body is a bare `pass`.
+            // a scratch-free view has nothing to tear down -> `_b` (LINT012-clean) and a bare `pass` body
             let b_destroy = view_has_scratch(vs) ? "var b" : "_b"
             fprint(f, "def vk_view_destroy({b_destroy} : {vs.boost}) \{\n")
             var any_scratch = false
@@ -798,9 +765,7 @@ def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<Own
     for (c in reg.commands) {
         continue if (!empty(c.alias) || !key_exists(reg.enabled_commands, c.name) || !empty(c.protect) ||
             (!(c.name |> starts_with("vkCreate")) && !(c.name |> starts_with("vkAllocate"))))
-        // the out-handle (a `len` -> it produces an array -> batch); the create-info struct
-        // (its OWN len decides array-of-CreateInfos vs a single AllocateInfo); the leading
-        // np==0 handle parents (device, pipelineCache, ...).
+        // out-handle `len` -> batch; the create-info's OWN len picks array-of-CreateInfos vs single AllocateInfo
         var out_handle = ""
         var out_len = ""
         var ci_vk = ""
@@ -893,12 +858,9 @@ def private batch_call_arg(a : BatchArg) : string {
     return "null"   // allocator
 }
 
-//! Emit a batch creator (array-producing Create/Allocate) -> array<Boost>. Shape A is an
-//! array of CreateInfos sized by createInfoCount (create_graphics_pipelines /
-//! create_compute_pipelines); shape B is a single AllocateInfo whose count member sizes the
-//! result (allocate_descriptor_sets / allocate_command_buffers). Mirrors the single-creator
-//! and the in_array_struct/out_array idioms (vk_view per element, addr() pointers, owning
-//! wrappers with stored parents).
+//! Emit a batch creator (array-producing Create/Allocate) -> array<Boost>. Shape A is an array
+//! of CreateInfos sized by createInfoCount; shape B is a single AllocateInfo whose count member
+//! sizes the result. Mirrors the single-creator and in_array_struct/out_array idioms.
 def private emit_batch_creator(f : file; ci : CreatorInfo; scratch_types : table<string>) {
     let ci_var = key_exists(scratch_types, ci.create_info_boost) ? "var " : ""
     fprint(f, "def {ci.fn_name}(")
@@ -965,7 +927,7 @@ def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : stri
     fopen("{out_dir}/vulkan_commands.das", "wb") $(f) {
         panic("can't write vulkan_commands.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_commands shared\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_commands shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
         for (ci in creators) {
             if (ci.is_batch) {
@@ -1006,10 +968,10 @@ def private emit_commands_boost(reg : VkRegistry; em : EmitModel; out_dir : stri
 }
 
 // ===== plain commands (vkCmd* / vkGet* / vkQueue* / vkWait* / ...) =====
-// Every non-create, non-destroy command: boost handle params, boost vk_view struct
-// params, array<T> for count+ptr pairs, a single out-param -> return value, the
-// two-call enumerate idiom -> return array<T>. Conservative: any unmappable param
-// skips the whole command (logged); the raw vk* call always stays available.
+
+// Every non-create, non-destroy command: boost handles, vk_view structs, array<T> for count+ptr
+// pairs, a single out-param -> return value, two-call enumerate -> array<T>. Conservative: any
+// unmappable param skips the whole command (logged); the raw vk* call always stays available.
 
 enum CmdArgKind {
     in_handle       //! boost handle by value -> boost_value_to_vk(x)
@@ -1104,8 +1066,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
     for (p in c.params) {
         param_names |> insert(p.name)
     }
-    // detect the two-call enumerate: a non-const uint32_t*/size_t* count whose name is
-    // the len= of another non-const, non-void pointer param (the output array)
+    // two-call enumerate: a non-const count param whose name is the len= of a non-const out-array param
     var enum_count = -1
     var enum_array = -1
     for (p, i in c.params, range(n)) {
@@ -1146,8 +1107,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             plan.args |> emplace(a)
             continue
         }
-        // jagged const T* const* of a mappable struct -> array<array<Boost>> (the inner
-        // length is per-element, carried by the owning struct; no count param to erase)
+        // jagged const T* const* -> array<array<Boost>>; inner length is per-element, no count param to erase
         if (p.num_ptrs == 2 && p.is_const && !empty(p.len) && key_exists(view_set, p.type_name)) {
             a.kind = CmdArgKind.in_array2_struct
             a.elem_boost = boost_name(p.type_name)
@@ -1168,9 +1128,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             plan.args |> emplace(a)
             continue
         }
-        // single non-const pointer (by-ref out) with no len -> out value. The raw binding
-        // ref-promotes it only when !optional, and only mappable value types work
-        // (flags out-params are raw uint* pointers, foreign/void types skip).
+        // by-ref out value: the raw binding ref-promotes only when !optional, and only for mappable value types
         if (p.num_ptrs == 1 && !p.is_const && empty(p.len) && p.type_name != "void") {
             if (p.optional_attr == "true" || boost_is_flags(em, p.type_name) || !mappable_value_type(reg, em, p.type_name)) {
                 plan.emittable = false
@@ -1187,10 +1145,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             plan.args |> emplace(a)
             continue
         }
-        // const array: len either names a count param (count derived from length and
-        // that param erased) or is a member of another struct param
-        // ("pBuildInfo::geometryCount") -- the latter has no count param to erase, the raw
-        // call takes only the array pointer and the caller matches the owning struct's count.
+        // const array: len names a count param (erased, derived from length) or another struct's member ("pBuildInfo::geometryCount") -- the latter has no count param to erase
         let len_is_param = !empty(p.len) && key_exists(param_names, p.len)
         let hasvkcount = len_is_param && p.is_const && p.num_ptrs == 1
         let member_len = !empty(p.len) && !len_is_param && p.is_const && p.num_ptrs == 1
@@ -1340,7 +1295,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
     fopen("{out_dir}/vulkan_cmds.das", "wb") $(f) {
         panic("can't write vulkan_cmds.das") if (f == null)
         fprint(f, GEN_HEADER)
-        fprint(f, "options gen2\noptions indenting = 4\n\nmodule vulkan_cmds shared\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_cmds shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_handles public\nrequire vulkan/vulkan_structs public\nrequire vulkan/vulkan_runtime public\nrequire daslib/defer\n\n")
         for (plan in plans) {
             // --- signature ---
@@ -1356,8 +1311,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "; ")
                 }
                 first = false
-                // in_array_scalar always needs var (array_addr); a view / struct-array needs var only
-                // when its vk_view mutates `b` (scratch fields) -- scratch-free views forward read-only.
+                // in_array_scalar always needs var (array_addr); views need it only when their vk_view has scratch
                 var needs_var = (a.kind == CmdArgKind.in_array_scalar ||
                     a.kind == CmdArgKind.in_array2_struct)
                 if (a.kind == CmdArgKind.in_view) {
@@ -1395,10 +1349,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "        vkraw_{a.pname}[vki] = vk_view_create_unsafe({a.pname}[vki])\n")
                     fprint(f, "    {CB}\n")
                 } elif (a.kind == CmdArgKind.in_array2_struct) {
-                    // jagged: raw inner arrays kept in vkraw2_, a data pointer per inner
-                    // in vkptr_; array_addr(vkptr_) is the const T* const* the raw call wants.
-                    // vkptr_ holds void? (not T?): a T? array would have das free each
-                    // interior pointer on delete (double-free), so keep it non-owning.
+                    // vkptr_ holds void?, not T?: a T? array would have das free each interior pointer on delete (double-free)
                     fprint(f, "    var vkraw2_{a.pname} : array<array<{a.elem_vktype}>>\n")
                     fprint(f, "    vkraw2_{a.pname} |> resize(length({a.pname}))\n")
                     fprint(f, "    var vkptr_{a.pname} : array<void?>\n")
@@ -1414,9 +1365,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
             }
             // --- the call(s) ---
             if (plan.has_out_array) {
-                // two-call enumerate. Both calls return VkResult when is_result: wrap
-                // each in vk_check so OOM / VK_INCOMPLETE surfaces through `result` and
-                // doesn't silently produce a truncated array.
+                // both enumerate calls go through vk_check so OOM / VK_INCOMPLETE surfaces instead of truncating the array
                 fprint(f, "    var vkcount = {plan.count_is_64 ? "0ul" : "0u"}\n")
                 let result_arg = plan.is_result ? ", result" : ""
                 let lhs_open = plan.is_result ? "vk_check(" : ""
@@ -1448,9 +1397,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "    var vkout : {out_vt}\n")
                 }
                 if (plan.is_result) {
-                    // VkResult-returning out-value call: wrap in vk_check so callers can
-                    // see failures (OOM, device-lost) via `result` and don't silently
-                    // get an uninitialized vkout.
+                    // vk_check so failures surface via `result` instead of silently yielding an uninitialized vkout
                     fprint(f, "    vk_check({plan.command}(")
                     emit_call_args(f, plan, "")
                     fprint(f, "), result)\n")
@@ -1556,7 +1503,7 @@ def private emit_lint_data(creators : array<CreatorInfo>; plans : array<CmdPlan>
         if (f == null) {
             panic("cannot write vulkan_lint_data.das")
         }
-        fprint(f, "options gen2\noptions indenting = 4\n\n")
+        fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\n")
         fprint(f, "// DO NOT EDIT - generated by generator/vk_emit_boost.das\n")
         fprint(f, "// raw Vulkan call -> boost wrapper name; consumed by vulkan_lint (VK001).\n")
         fprint(f, "module vulkan_lint_data shared\n\n")

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Hand-written ergonomic top of the boost: selection helpers, block brackets,
@@ -15,6 +16,7 @@ require vulkan/vulkan_handles public
 require vulkan/vulkan_structs public
 require vulkan/vulkan_commands public
 require vulkan/vulkan_cmds public
+require strings
 require daslib/defer
 
 // ===== selection =====
@@ -126,10 +128,9 @@ def public device_extension_available(phys : VkPhysicalDevice; name : string) : 
     return found
 }
 
-//! True iff ``phys`` both advertises ``VK_EXT_mesh_shader`` AND reports the ``meshShader`` and
-//! ``taskShader`` feature bits as supported (queried via ``vkGetPhysicalDeviceFeatures2``). The
-//! extension string alone is not sufficient: a driver can list the extension yet report a feature
-//! bit as 0, which would still fail ``vkCreateDevice``. Use this to gate mesh-pipeline setup.
+//! True iff ``phys`` advertises ``VK_EXT_mesh_shader`` AND reports the ``meshShader`` + ``taskShader``
+//! feature bits (via ``vkGetPhysicalDeviceFeatures2``). The extension string alone is not enough — a
+//! driver can list it yet report a bit as 0, still failing ``vkCreateDevice``. Gate mesh setup with this.
 def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_EXT_mesh_shader")) {
         return false
@@ -153,10 +154,9 @@ def public create_instance(application_name : string; api_version : uint; extens
     unsafe {
         ci.pApplicationInfo = addr(ai)
     }
-    // On portability drivers (MoltenVK on macOS) the loader rejects vkCreateInstance
-    // with ERROR_INCOMPATIBLE_DRIVER unless VK_KHR_portability_enumeration is enabled
-    // and the matching create flag is set. Add it transparently when the loader
-    // advertises it, so the same user code runs unchanged on every platform.
+    // Portability drivers (MoltenVK on macOS) reject vkCreateInstance with ERROR_INCOMPATIBLE_DRIVER
+    // unless VK_KHR_portability_enumeration is enabled and the matching create flag is set. Added
+    // transparently when the loader advertises it, so the same user code runs unchanged everywhere.
     var exts <- [for (e in extensions); e]
     if (instance_extension_available("VK_KHR_portability_enumeration")) {
         if (find_index(exts, "VK_KHR_portability_enumeration") < 0) {
@@ -195,12 +195,9 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint) : Device 
     return <- create_device(phys, queue_family, no_ext, no_features)
 }
 
-//! Create a device with a caller-supplied ``VkPhysicalDeviceFeatures`` block. Use this when the
-//! pipeline needs an opt-in feature -- e.g. ``largePoints`` so a vertex shader's ``gl_PointSize``
-//! takes effect (POINT_LIST topology), or ``wideLines`` for line-list topology. Verify the device
-//! actually advertises the feature via ``vkGetPhysicalDeviceFeatures`` before passing it in;
-//! enabling an unsupported feature fails ``vkCreateDevice``. The other two overloads pass a
-//! zero-initialised features block, identical to the prior behaviour.
+//! Create a device with a caller-supplied ``VkPhysicalDeviceFeatures`` block — for opt-in features like
+//! ``largePoints`` (so a vertex shader's ``gl_PointSize`` takes effect under POINT_LIST) or ``wideLines``.
+//! Verify support via ``vkGetPhysicalDeviceFeatures`` first: an unsupported bit fails ``vkCreateDevice``.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>; var features : VkPhysicalDeviceFeatures) : Device {
     var prio = 1.0f
     var qci = VkDeviceQueueCreateInfo()
@@ -228,13 +225,9 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     return <- b
 }
 
-//! Create a device with Vulkan 1.3 features (e.g. ``dynamicRendering``, ``synchronization2``).
-//! Vulkan 1.3 promoted KHR_dynamic_rendering and KHR_synchronization2 to core, but the device
-//! still has to *opt in* via ``VkPhysicalDeviceVulkan13Features`` -- the 1.3 API doesn't enable
-//! anything automatically. Caller sets the needed flags (e.g. ``f13.dynamicRendering = 1u``),
-//! this helper threads the struct in via the pNext chain of ``VkDeviceCreateInfo``. The instance
-//! must be at api version 1.3; otherwise ``vkCreateDevice`` rejects the chain with
-//! ``ERROR_FEATURE_NOT_PRESENT``.
+//! Create a device with Vulkan 1.3 features (``dynamicRendering``, ``synchronization2``, …). 1.3
+//! promoted these to core but the device must still *opt in* — caller sets the flags, this threads
+//! ``VkPhysicalDeviceVulkan13Features`` through pNext. Instance must be api 1.3 or vkCreateDevice fails.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features13 : VkPhysicalDeviceVulkan13Features) : Device {
     var prio = 1.0f
@@ -264,12 +257,9 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     return <- b
 }
 
-//! Create a device with Vulkan 1.2 features (e.g. ``descriptorIndexing``,
-//! ``shaderSampledImageArrayNonUniformIndexing``, ``runtimeDescriptorArray``). VK_EXT_descriptor_indexing
-//! was promoted to core in 1.2, so a 1.2+ instance can opt into bindless via this struct in the pNext
-//! chain of ``VkDeviceCreateInfo``; no extension string is required. The instance must be at api
-//! version 1.2 (or higher); otherwise ``vkCreateDevice`` rejects the chain with
-//! ``VK_ERROR_FEATURE_NOT_PRESENT``. Caller sets the needed flags; this helper threads the struct in.
+//! Create a device with Vulkan 1.2 features (``descriptorIndexing``, ``runtimeDescriptorArray``,
+//! ``shaderSampledImageArrayNonUniformIndexing``, …). VK_EXT_descriptor_indexing is 1.2 core, so a 1.2+
+//! instance opts into bindless through this pNext struct with no extension string; api < 1.2 fails.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features12 : VkPhysicalDeviceVulkan12Features) : Device {
     var prio = 1.0f
@@ -299,12 +289,9 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     return <- b
 }
 
-//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the
-//! multi-struct escape hatch: the single-struct overloads above carry exactly one feature
-//! struct, but e.g. 16-bit storage (``VkPhysicalDeviceVulkan11Features``) + 8-bit storage
-//! (``VkPhysicalDeviceVulkan12Features``) must be enabled together. Caller chains the structs
-//! rt_supported-style, sets the bits, and passes the head; ``pEnabledFeatures`` stays null —
-//! ``features2.features`` carries the base features per the Vulkan features2 contract.
+//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the multi-struct
+//! escape hatch, since the single-struct overloads carry only one (16-bit Vulkan11Features + 8-bit
+//! Vulkan12Features must go together). ``pEnabledFeatures`` stays null; ``features2.features`` is base.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features2 : VkPhysicalDeviceFeatures2) : Device {
     var prio = 1.0f
@@ -334,10 +321,53 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     return <- b
 }
 
-//! True iff ``phys`` supports the 8/16-bit SSBO storage feature set the dasSpirv storage wave
-//! emits: ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` +
-//! ``shaderFloat16`` + ``shaderInt8`` (Vulkan12Features). Gate 8/16-bit kernels with this —
-//! software renderers and old drivers can miss any of the four bits.
+//! The features2 overload with MULTIPLE queue families — one queue per listed (distinct) family.
+//! The compute-tier creators use it to add a dedicated transfer queue beside the main one.
+def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; extensions : array<string>;
+                         var features2 : VkPhysicalDeviceFeatures2) : Device {
+    // Vulkan requires each queueFamilyIndex at most once in pQueueCreateInfos, and an empty list
+    // would leave pQueueCreateInfos dangling — assert rather than dedupe, so a caller bug surfaces
+    assert(!empty(queue_families), "create_device: queue_families is empty")
+    for (i in range(length(queue_families))) {
+        for (j in range(i + 1, length(queue_families))) {
+            assert(queue_families[i] != queue_families[j], "create_device: duplicate queue family")
+        }
+    }
+    var prio = 1.0f
+    var qcis : array<VkDeviceQueueCreateInfo>
+    qcis |> resize(length(queue_families))
+    for (i in range(length(queue_families))) {
+        qcis[i] = VkDeviceQueueCreateInfo()
+        qcis[i].queueFamilyIndex = queue_families[i]
+        qcis[i].queueCount = 1u
+        unsafe {
+            qcis[i].pQueuePriorities = addr(prio)
+        }
+    }
+    features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = uint(length(queue_families))
+    unsafe {
+        ci.pQueueCreateInfos = addr(qcis[0])
+        ci.pNext = addr<void?>(features2)
+    }
+    if (!empty(extensions)) {
+        ci.enabledExtensionCount = uint(length(extensions))
+        unsafe {
+            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
+        }
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    delete qcis
+    return <- b
+}
+
+//! True iff ``phys`` supports the 8/16-bit SSBO storage set the dasSpirv storage wave emits:
+//! ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` + ``shaderFloat16`` +
+//! ``shaderInt8`` (Vulkan12Features). Gate 8/16-bit kernels — old/software drivers can miss any bit.
 def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -351,10 +381,9 @@ def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
         && f12.shaderFloat16 != 0u && f12.shaderInt8 != 0u)
 }
 
-//! Create a device with the 8/16-bit SSBO storage set enabled (the four bits
-//! storage_8_16_supported probes), threaded as a Vulkan11Features -> Vulkan12Features chain
-//! through the features2 overload. Pairs with dasSpirv's ``float16``/``int8`` SSBO members and
-//! ``unpack8``/``pack32``. Gate with storage_8_16_supported first.
+//! Create a device with the 8/16-bit SSBO storage set enabled (the four bits storage_8_16_supported
+//! probes), threaded as a Vulkan11Features -> Vulkan12Features chain through the features2 overload.
+//! Pairs with dasSpirv's ``float16``/``int8`` SSBO members and ``unpack8``/``pack32``; gate first.
 def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_ext : array<string>
     return <- create_device_storage_8_16(phys, queue_family, no_ext)
@@ -373,6 +402,98 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
         f11.pNext = addr<void?>(f12)
     }
     return <- create_device(phys, queue_family, extensions, f2)
+}
+
+//! True iff ``phys`` advertises the cooperative-matrix feature (VK_KHR_cooperative_matrix — Tensor-Core
+//! MMA); lavapipe and non-Tensor-Core GPUs miss it. Exact tile shapes come from
+//! get_physical_device_cooperative_matrix_properties_k_h_r; every Tensor-Core GPU has the f16 16x16x16 tile.
+def public cooperative_matrix_supported(phys : VkPhysicalDevice) : bool {
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(fcm)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return fcm.cooperativeMatrix != 0u
+}
+
+//! Create a device with the cooperative-matrix feature + its prerequisites: storageBuffer16BitAccess +
+//! shaderFloat16 (the f16 tiles) and vulkanMemoryModel (the emitted SPIR-V uses the Vulkan memory model),
+//! plus the VK_KHR_cooperative_matrix extension. Gate with ``cooperative_matrix_supported``.
+def public create_device_cooperative_matrix(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    f11.storageBuffer16BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.vulkanMemoryModel = 1u
+    fcm.cooperativeMatrix = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fcm)
+    }
+    var ext <- ["VK_KHR_cooperative_matrix"]
+    var dev <- create_device(phys, queue_family, ext, f2)
+    delete ext
+    return <- dev
+}
+
+//! True iff ``phys`` advertises VK_KHR_pipeline_executable_properties AND its ``pipelineExecutableInfo``
+//! feature bit — drivers can list the extension with the feature off, and enabling both then fails vkCreateDevice.
+def public pipeline_exec_props_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_KHR_pipeline_executable_properties")) return false
+    var fpe = VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(fpe)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return fpe.pipelineExecutableInfo != 0u
+}
+
+//! create_device_cooperative_matrix PLUS the Vulkan 1.3 subgroup-size-control pair so pipelines can pin
+//! ``requiredSubgroupSize``; each bit is enabled only when the device reports it (degrades to the plain
+//! coopmat device). Instance must be api 1.3; opportunistically enables VK_KHR_pipeline_executable_properties.
+def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    var q13 = VkPhysicalDeviceVulkan13Features()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(q13)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var f13 = VkPhysicalDeviceVulkan13Features()
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    var fpe = VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR()
+    f11.storageBuffer16BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.vulkanMemoryModel = 1u
+    // optional 1.3 bits: request only what the queried features report
+    f13.subgroupSizeControl = q13.subgroupSizeControl
+    f13.computeFullSubgroups = q13.computeFullSubgroups
+    fcm.cooperativeMatrix = 1u
+    fpe.pipelineExecutableInfo = 1u
+    let with_exec_props = pipeline_exec_props_supported(phys)
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(f13)
+        f13.pNext = addr<void?>(fcm)
+        if (with_exec_props) {
+            fcm.pNext = addr<void?>(fpe)
+        }
+    }
+    var ext <- ["VK_KHR_cooperative_matrix"]
+    if (with_exec_props) {
+        ext |> push("VK_KHR_pipeline_executable_properties")
+    }
+    var dev <- create_device(phys, queue_family, ext, f2)
+    delete ext
+    return <- dev
 }
 
 //! The physical device's subgroup properties: lane count (``subgroupSize`` — 32 on NV, 32/64 on
@@ -409,11 +530,9 @@ def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
     return fdot.shaderIntegerDotProduct != 0u
 }
 
-//! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` enabled
-//! (a Vulkan11Features -> Vulkan12Features -> ShaderIntegerDotProductFeatures chain through the
-//! features2 overload). On a pre-1.3 device the VK_KHR_shader_integer_dot_product extension
-//! string is added automatically. Pairs with dasSpirv's ``sdot4``; gate with
-//! storage_8_16_supported + integer_dot_product_supported first.
+//! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` (a Vulkan11 ->
+//! Vulkan12 -> ShaderIntegerDotProduct chain through features2); pre-1.3 devices get the
+//! VK_KHR_shader_integer_dot_product string automatically. Pairs with ``sdot4``; gate with both probes.
 def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -438,15 +557,298 @@ def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_fam
     return <- create_device(phys, queue_family, ext, f2)
 }
 
-//! Create a device with the bindless feature set enabled: ``descriptorIndexing`` (the umbrella flag)
-//! plus ``shaderSampledImageArrayNonUniformIndexing`` (so a fragment can index a ``sampler2D[N]`` by
-//! a per-invocation value with ``nonuniformEXT``). Uses the Vulkan 1.2-core
-//! `VkPhysicalDeviceVulkan12Features` path — no `VK_EXT_descriptor_indexing` extension string
-//! required on a 1.2+ instance. Pairs with the dasSpirv bindless track (PR-B `nonuniformEXT`, PR-C
-//! `sampler2D[N]`); the GPU regression tests under `tests/integration/test_bindless_*.das` and
-//! `test_nonuniform_ext.das` use this entry point. **`runtimeDescriptorArray` is deliberately NOT
-//! enabled** — runtime-sized descriptor arrays (`sampler2D[]`) are a follow-up scope; enable it
-//! explicitly via the `create_device` features12 overload when that lands.
+//! Superset of create_device_storage_8_16_int_dot that ALSO enables cooperative matrix, and OPPORTUNISTICALLY:
+//! memory_priority + pageable (residency), timelineSemaphore, external_memory_host. ``transfer_family`` >= 0
+//! adds a second queue (pair ``select_transfer_queue_family`` + a timeline semaphore to overlap uploads).
+def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {
+    var q12 = VkPhysicalDeviceVulkan12Features()
+    var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
+    var qpg = VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(q12)
+        q12.pNext = addr<void?>(qmp)
+        qmp.pNext = addr<void?>(qpg)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    let with_memprio = device_extension_available(phys, "VK_EXT_memory_priority") && qmp.memoryPriority != 0u
+    let with_pageable = (with_memprio && device_extension_available(phys, "VK_EXT_pageable_device_local_memory")
+        && qpg.pageableDeviceLocalMemory != 0u)
+    let with_extmemhost = device_extension_available(phys, "VK_EXT_external_memory_host")
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    var fmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
+    var fpg = VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    f12.vulkanMemoryModel = 1u
+    f12.timelineSemaphore = q12.timelineSemaphore
+    fdot.shaderIntegerDotProduct = 1u
+    fcm.cooperativeMatrix = 1u
+    fmp.memoryPriority = 1u
+    fpg.pageableDeviceLocalMemory = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fdot)
+        fdot.pNext = addr<void?>(fcm)
+        if (with_memprio) {
+            fcm.pNext = addr<void?>(fmp)
+        }
+        if (with_pageable) {
+            fmp.pNext = addr<void?>(fpg)
+        }
+    }
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    var ext <- ["VK_KHR_cooperative_matrix"]
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        ext |> push("VK_KHR_shader_integer_dot_product")
+    }
+    if (with_memprio) {
+        ext |> push("VK_EXT_memory_priority")
+    }
+    if (with_pageable) {
+        ext |> push("VK_EXT_pageable_device_local_memory")
+    }
+    if (with_extmemhost) {
+        ext |> push("VK_EXT_external_memory_host")
+    }
+    var fams <- [queue_family]
+    if (transfer_family >= 0 && uint(transfer_family) != queue_family) {
+        fams |> push(uint(transfer_family))
+    }
+    var dev <- create_device(phys, fams, ext, f2)
+    delete fams
+    delete ext
+    return <- dev
+}
+
+//! True iff ``phys`` exposes VK_EXT_memory_priority with its feature bit — the exact gate the
+//! opportunistic creator blocks use, so a caller may chain ``VkMemoryPriorityAllocateInfoEXT``
+//! into its allocations exactly when a creator above enabled the extension.
+def public memory_priority_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_EXT_memory_priority")) {
+        return false
+    }
+    var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(qmp)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return qmp.memoryPriority != 0u
+}
+
+//! True iff ``phys`` can create the cm2 device: VK_NV_cooperative_matrix2 (+ its VK_KHR_cooperative_matrix
+//! dependency), the cm2 feature set the dasSpirv rails emit (wg scope, flexible dims, tensor addressing, block
+//! loads), and every bit create_device_storage_8_16_int_dot_coopmat2 enables (``cooperativeMatrix``, ``bufferDeviceAddress``).
+def public cooperative_matrix2_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_NV_cooperative_matrix2")
+            || !device_extension_available(phys, "VK_KHR_cooperative_matrix")) {
+        return false
+    }
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    var fcm2 = VkPhysicalDeviceCooperativeMatrix2FeaturesNV()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fcm)
+        fcm.pNext = addr<void?>(fcm2)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    if (fcm.cooperativeMatrix == 0u || f12.bufferDeviceAddress == 0u) return false
+    return (fcm2.cooperativeMatrixWorkgroupScope != 0u && fcm2.cooperativeMatrixFlexibleDimensions != 0u
+        && fcm2.cooperativeMatrixTensorAddressing != 0u && fcm2.cooperativeMatrixBlockLoads != 0u)
+}
+
+//! The device's cm2 limits: workgroup-scope max workgroup size, max flexible dimension, and the
+//! shared memory the driver reserves for workgroup-scope staging (subtract from the 48KB budget).
+def public cooperative_matrix2_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceCooperativeMatrix2PropertiesNV {
+    var cp = VkPhysicalDeviceCooperativeMatrix2PropertiesNV()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(cp)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return cp
+}
+
+//! True iff ``phys`` has VK_NV_cooperative_vector with its base feature bit — the Tensor-Core
+//! MATVEC path (f16, packed-s8, and fp8-matrix combos come from
+//! get_physical_device_cooperative_vector_properties_n_v).
+def public cooperative_vector_supported(phys : VkPhysicalDevice) : bool {
+    if (!device_extension_available(phys, "VK_NV_cooperative_vector")) return false
+    var fcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(fcv)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, f2)
+    return fcv.cooperativeVector != 0u
+}
+
+//! The first DEDICATED transfer queue family (transfer set, graphics+compute clear — the DMA copy
+//! engines), or -1 when the device exposes none. Pair with a timeline semaphore to overlap uploads
+//! with compute; fall back to the main queue on -1.
+def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
+    var qcount = 0u
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, null)
+    if (qcount == 0u) return -1
+    var qprops : array<VkQueueFamilyProperties>
+    qprops |> resize(int(qcount))
+    unsafe {
+        vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, addr(qprops[0]))
+    }
+    var found = -1
+    for (q, qi in qprops, count()) {
+        if (found < 0 && q.queueFlags.transfer && !q.queueFlags.graphics && !q.queueFlags.compute) {
+            found = qi
+        }
+    }
+    delete qprops
+    return found
+}
+
+//! Superset of create_device_storage_8_16_int_dot_coopmat that ALSO enables VK_NV_cooperative_matrix2 +
+//! ``bufferDeviceAddress`` (gate with ``cooperative_matrix2_supported``), plus the same opportunistic set
+//! (coopvec, residency levers, timelineSemaphore, external_memory_host) and ``transfer_family`` second queue.
+def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {
+    // query the optional feature bits first — a pNext struct may only join the chain when its
+    // extension is actually enabled, so each optional block is gated on ext + reported bit
+    var q12q = VkPhysicalDeviceVulkan12Features()
+    var qcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
+    var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
+    var qpg = VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(q12q)
+        q12q.pNext = addr<void?>(qcv)
+        qcv.pNext = addr<void?>(qmp)
+        qmp.pNext = addr<void?>(qpg)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    let with_coopvec = device_extension_available(phys, "VK_NV_cooperative_vector") && qcv.cooperativeVector != 0u
+    let with_memprio = device_extension_available(phys, "VK_EXT_memory_priority") && qmp.memoryPriority != 0u
+    let with_pageable = (with_memprio && device_extension_available(phys, "VK_EXT_pageable_device_local_memory")
+        && qpg.pageableDeviceLocalMemory != 0u)
+    let with_extmemhost = device_extension_available(phys, "VK_EXT_external_memory_host")
+    var f11 = VkPhysicalDeviceVulkan11Features()
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
+    var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
+    var fcm2 = VkPhysicalDeviceCooperativeMatrix2FeaturesNV()
+    var fcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
+    var fmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
+    var fpg = VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT()
+    f11.storageBuffer16BitAccess = 1u
+    f12.storageBuffer8BitAccess = 1u
+    f12.shaderFloat16 = 1u
+    f12.shaderInt8 = 1u
+    f12.vulkanMemoryModel = 1u
+    f12.bufferDeviceAddress = 1u
+    f12.timelineSemaphore = q12q.timelineSemaphore
+    fdot.shaderIntegerDotProduct = 1u
+    fcm.cooperativeMatrix = 1u
+    fcm2.cooperativeMatrixWorkgroupScope = 1u
+    fcm2.cooperativeMatrixFlexibleDimensions = 1u
+    fcm2.cooperativeMatrixTensorAddressing = 1u
+    fcm2.cooperativeMatrixBlockLoads = 1u
+    fcv.cooperativeVector = 1u
+    fmp.memoryPriority = 1u
+    fpg.pageableDeviceLocalMemory = 1u
+    var f2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        f2.pNext = addr<void?>(f11)
+        f11.pNext = addr<void?>(f12)
+        f12.pNext = addr<void?>(fdot)
+        fdot.pNext = addr<void?>(fcm)
+        fcm.pNext = addr<void?>(fcm2)
+        if (with_coopvec) {
+            fcm2.pNext = addr<void?>(fcv)
+        }
+        if (with_memprio) {
+            if (with_coopvec) {
+                fcv.pNext = addr<void?>(fmp)
+            } else {
+                fcm2.pNext = addr<void?>(fmp)
+            }
+        }
+        if (with_pageable) {
+            fmp.pNext = addr<void?>(fpg)
+        }
+    }
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    var ext <- ["VK_KHR_cooperative_matrix", "VK_NV_cooperative_matrix2"]
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        ext |> push("VK_KHR_shader_integer_dot_product")
+    }
+    if (with_coopvec) {
+        ext |> push("VK_NV_cooperative_vector")
+    }
+    if (with_memprio) {
+        ext |> push("VK_EXT_memory_priority")
+    }
+    if (with_pageable) {
+        ext |> push("VK_EXT_pageable_device_local_memory")
+    }
+    if (with_extmemhost) {
+        ext |> push("VK_EXT_external_memory_host")
+    }
+    var fams <- [queue_family]
+    if (transfer_family >= 0 && uint(transfer_family) != queue_family) {
+        fams |> push(uint(transfer_family))
+    }
+    var dev <- create_device(phys, fams, ext, f2)
+    delete fams
+    delete ext
+    return <- dev
+}
+
+//! True iff ``phys`` reports the core-1.2 timelineSemaphore feature — the compute-tier creators
+//! enable it when present; gate transfer-queue overlap schemes on this.
+def public timeline_semaphore_supported(phys : VkPhysicalDevice) : bool {
+    var q12 = VkPhysicalDeviceVulkan12Features()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(q12)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return q12.timelineSemaphore != 0u
+}
+
+//! True iff ``phys`` exposes VK_EXT_external_memory_host (the compute-tier creators enable it
+//! opportunistically) — host-pointer imports (e.g. a file mapping) become possible.
+def public external_memory_host_supported(phys : VkPhysicalDevice) : bool
+    => device_extension_available(phys, "VK_EXT_external_memory_host")
+
+//! ``minImportedHostPointerAlignment`` for host-pointer imports, or 0 when unsupported.
+def public external_memory_host_min_alignment(phys : VkPhysicalDevice) : uint64 {
+    if (!external_memory_host_supported(phys)) {
+        return 0ul
+    }
+    var emh = VkPhysicalDeviceExternalMemoryHostPropertiesEXT()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(emh)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return emh.minImportedHostPointerAlignment
+}
+
+//!@nolint
+//! Create a device with the bindless feature set: ``descriptorIndexing`` plus
+//! ``shaderSampledImageArrayNonUniformIndexing`` (index a ``sampler2D[N]`` with ``nonuniformEXT``), via
+//! the 1.2-core features12 path. **``runtimeDescriptorArray`` deliberately NOT enabled** — use features12.
+//! The GPU regression tests under ``tests/integration/test_bindless_*.das`` and
+//! ``test_nonuniform_ext.das`` drive this entry point.
 def public create_device_descriptor_indexing(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_ext : array<string>
     var f12 : VkPhysicalDeviceVulkan12Features
@@ -455,14 +857,11 @@ def public create_device_descriptor_indexing(phys : VkPhysicalDevice; queue_fami
     return <- create_device(phys, queue_family, no_ext, f12)
 }
 
-//! Create a device with the GPU-driven-rendering feature set enabled: ``multiDrawIndirect`` (so
-//! ``vkCmdDrawIndirect`` can dispatch more than one draw in a single command) and
-//! ``shaderDrawParameters`` (so a vertex shader can read ``gl_DrawID`` -- BuiltIn DrawIndex -- to
-//! key per-draw state). multiDrawIndirect rides on the base ``VkPhysicalDeviceFeatures``;
-//! shaderDrawParameters was promoted to Vulkan 1.1 core via VkPhysicalDeviceVulkan11Features, so a
-//! 1.1+ instance can opt into it without an extension string. Both are threaded into pNext
-//! together. Pairs with the dasSpirv PR-A `gl_DrawID` surface; used by
-//! `tests/integration/test_gl_draw_id.das`.
+//!@nolint
+//! Create a device with the GPU-driven-rendering set: ``multiDrawIndirect`` (>1 draw per
+//! ``vkCmdDrawIndirect``) on the base ``VkPhysicalDeviceFeatures``, plus ``shaderDrawParameters``
+//! (``gl_DrawID`` / BuiltIn DrawIndex) via Vulkan11Features — 1.1 core, so no extension string.
+//! Exercised by ``tests/integration/test_gl_draw_id.das``.
 def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var prio = 1.0f
     var qci = VkDeviceQueueCreateInfo()
@@ -490,15 +889,9 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     return <- b
 }
 
-//! Create a device with ``VK_EXT_mesh_shader`` enabled. Caller sets the wanted feature flags (e.g.
-//! ``mf.meshShader = 1u``, ``mf.taskShader = 1u``); this helper threads
-//! ``VkPhysicalDeviceMeshShaderFeaturesEXT`` into the ``VkDeviceCreateInfo`` pNext chain. The caller
-//! MUST also pass the ``"VK_EXT_mesh_shader"`` device-extension string in ``extensions`` (the feature
-//! flags alone are not enough). Mesh/task shaders execute SPIR-V 1.4, which is core in Vulkan 1.2, so
-//! the instance must be at api version >= 1.2. Pairs with the dasSpirv mesh emitter and
-//! ``cmd_draw_mesh_tasks_e_x_t``. Verify the device advertises the features via a
-//! ``VkPhysicalDeviceMeshShaderFeaturesEXT`` queried through ``VkPhysicalDeviceFeatures2`` before
-//! enabling them; an unsupported flag fails ``vkCreateDevice``.
+//! Create a device with ``VK_EXT_mesh_shader``: caller sets the flags (``mf.meshShader``,
+//! ``mf.taskShader``) and MUST also pass the ``"VK_EXT_mesh_shader"`` string in ``extensions`` — the
+//! flags alone are not enough. Instance must be api >= 1.2 (SPIR-V 1.4); verify the bits or create fails.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var meshFeatures : VkPhysicalDeviceMeshShaderFeaturesEXT) : Device {
     var prio = 1.0f
@@ -541,13 +934,9 @@ def public create_device_mesh_shader(phys : VkPhysicalDevice; queue_family : uin
     return <- create_device(phys, queue_family, ["VK_EXT_mesh_shader"], mf)
 }
 
-//! True iff ``phys`` advertises the three device extensions hardware ray tracing needs
-//! (``VK_KHR_acceleration_structure``, ``VK_KHR_ray_tracing_pipeline``,
-//! ``VK_KHR_deferred_host_operations``) AND reports the ``accelerationStructure``,
-//! ``rayTracingPipeline`` and ``bufferDeviceAddress`` feature bits as supported. The extension
-//! strings alone are not sufficient: a driver can list an extension yet report its feature bit
-//! as 0, which still fails ``vkCreateDevice``. Use this to gate RT setup — CI software renderers
-//! (Mesa lavapipe) typically fail this probe, so RT tests soft-skip there.
+//! True iff ``phys`` advertises the three RT device extensions (``VK_KHR_acceleration_structure``,
+//! ``VK_KHR_ray_tracing_pipeline``, ``VK_KHR_deferred_host_operations``) AND reports the matching
+//! feature bits plus ``bufferDeviceAddress``. Gate RT setup — lavapipe fails this, so RT tests skip.
 def public rt_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_KHR_acceleration_structure") ||
             !device_extension_available(phys, "VK_KHR_ray_tracing_pipeline") ||
@@ -567,12 +956,12 @@ def public rt_supported(phys : VkPhysicalDevice) : bool {
     return f12.bufferDeviceAddress != 0u && asf.accelerationStructure != 0u && rtf.rayTracingPipeline != 0u
 }
 
-//! Create a device with the hardware ray-tracing stack enabled in one call: ``bufferDeviceAddress``
-//! (Vulkan 1.2 core), ``accelerationStructure`` and ``rayTracingPipeline`` features threaded through
-//! the pNext chain, plus the three device-extension strings. The instance must be at api version
-//! >= 1.2 (RT shaders are SPIR-V 1.4). Pairs with the [vulkan_raygen_shader] /
-//! [vulkan_miss_shader] / [vulkan_closest_hit_shader] annotations, build_blas / build_tlas,
-//! build_shader_binding_table, and cmd_trace_rays_k_h_r. Gate with rt_supported first.
+//!@nolint
+//! Create a device with the hardware ray-tracing stack in one call: ``bufferDeviceAddress`` (1.2 core),
+//! ``accelerationStructure`` and ``rayTracingPipeline`` through pNext, plus the three extension strings.
+//! Instance must be api >= 1.2 (RT shaders are SPIR-V 1.4). Gate with rt_supported first.
+//! Pairs with the [vulkan_raygen_shader] / [vulkan_miss_shader] / [vulkan_closest_hit_shader]
+//! annotations, build_blas / build_tlas, build_shader_binding_table, and cmd_trace_rays_k_h_r.
 def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_extra : array<string>
     return <- create_device_ray_tracing(phys, queue_family, no_extra)
@@ -622,7 +1011,7 @@ def public get_device_queue(device : Device; queue_family, index : uint) : VkQue
 
 def public create_shader_module(device : Device; var code : array<uint8>) : ShaderModule {
     var ci = VkShaderModuleCreateInfo()
-    ci.codeSize = uint64(length(code))
+    ci.codeSize = uint64(long_length(code))
     unsafe {
         ci.pCode = addr<uint?>(code[0])
     }
@@ -692,10 +1081,9 @@ def public create_render_pass_single_color(device : Device; format : VkFormat;
     return <- b
 }
 
-//! Depth-only render pass for the shadow-mapping pattern. One attachment: depth, loadOp=CLEAR,
-//! storeOp=STORE, finalLayout=DEPTH_STENCIL_READ_ONLY_OPTIMAL so the main pass can sample the
-//! produced depth without a manual barrier. Vertex-only pipelines (no fragment) are valid against
-//! this pass — there are no color attachments to write.
+//! Depth-only render pass for shadow mapping. One depth attachment: loadOp=CLEAR, storeOp=STORE,
+//! finalLayout=DEPTH_STENCIL_READ_ONLY_OPTIMAL so the main pass samples it without a manual barrier.
+//! Vertex-only pipelines (no fragment) are valid here — there are no color attachments to write.
 def public create_render_pass_depth_only(device : Device; depth_format : VkFormat;
                                          final_layout : VkImageLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL) : RenderPass {
     var depth : VkAttachmentDescription
@@ -869,12 +1257,9 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
     return <- b
 }
 
-//! Graphics pipeline for the VK_EXT_mesh_shader pipeline: a task -> mesh -> fragment stage chain with
-//! NO vertex input and NO input-assembly state (a mesh pipeline amplifies geometry on the GPU; those
-//! two states are ignored, so they are left null). Everything else — viewport, rasterizer, MSAA-off,
-//! opaque color blend — matches `create_graphics_pipeline_simple`. The device must have been created
-//! with `create_device_mesh_shader` (or equivalent) and the shaders authored with `[vulkan_task_shader]`
-//! / `[vulkan_mesh_shader]` / `[vulkan_fragment_shader]`. Draw with `cmd_draw_mesh_tasks_e_x_t`.
+//! Graphics pipeline for VK_EXT_mesh_shader: a task -> mesh -> fragment chain with NO vertex-input and
+//! NO input-assembly state (a mesh pipeline amplifies geometry on the GPU, so both are ignored/null);
+//! rest matches create_graphics_pipeline_simple. Needs a mesh-shader device; draw cmd_draw_mesh_tasks_e_x_t.
 def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
                                 task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
                                 width, height : int; dynamic_viewport : bool = false;
@@ -969,12 +1354,9 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
     return <- b
 }
 
-//! Graphics pipeline for textured / lit 3D meshes: takes vertex-input bindings + attributes (so a
-//! vertex buffer with pos+uv+normal etc. flows in instead of `gl_VertexIndex` fabrication) and
-//! enables depth test + write by default (LESS_OR_EQUAL, the standard z-buffer comparison). Other
-//! state — rasterizer, blend, msaa — matches `create_graphics_pipeline_simple`; the render pass
-//! must have a depth attachment when `depth_test_enable` is true. Pass `dynamic_viewport=true` to
-//! leave viewport/scissor out of the pipeline for swapchain-resize windowing.
+//! Graphics pipeline for textured / lit 3D meshes: vertex-input bindings + attributes (a real vertex
+//! buffer, not `gl_VertexIndex` fabrication) and depth test + write on by default (LESS_OR_EQUAL) — the
+//! render pass MUST have a depth attachment then. `dynamic_viewport=true` for swapchain-resize windowing.
 def public create_graphics_pipeline_v3d(device : Device; render_pass : RenderPass; layout : PipelineLayout;
                                         vert : ShaderModule; frag : ShaderModule; width, height : int;
                                         var vertex_bindings : array<VkVertexInputBindingDescription>;
@@ -1078,12 +1460,11 @@ def public create_graphics_pipeline_v3d(device : Device; render_pass : RenderPas
     return <- b
 }
 
-//! `create_graphics_pipeline_v3d` parallel for the dynamic-rendering path (Vulkan 1.3 core).
-//! No `RenderPass` -- instead the pipeline carries a `VkPipelineRenderingCreateInfo` in its
-//! pNext chain with the color/depth format and view mask. `samples` flows into both the
-//! multisample state and the rendering create info (the spec doesn't require it in the rendering
-//! info, but matching it makes the layout self-documenting). Tutorial 09 uses this with 4x MSAA;
-//! tutorial 10 will reuse it with `samples._1 = true` + multiple color formats.
+//!@nolint
+//! `create_graphics_pipeline_v3d` parallel for the dynamic-rendering path (Vulkan 1.3 core). No
+//! `RenderPass` — the pipeline carries a `VkPipelineRenderingCreateInfo` in pNext with the color/depth
+//! format and view mask. `samples` flows into both the multisample state and the rendering info.
+//! Tutorial 09 drives this with 4x MSAA.
 def public create_graphics_pipeline_dyn(device : Device;
                                         color_format, depth_format : VkFormat;
                                         samples : VkSampleCountFlags;
@@ -1200,19 +1581,17 @@ def public create_graphics_pipeline_dyn(device : Device;
     return <- b
 }
 
-//! One specialization-constant override: ``id`` is the shader's SpecId (a dasSpirv
-//! ``@constant_id`` global or a ``local_size_*_id`` workgroup axis), ``value`` the 32-bit
-//! replacement as raw bits (float via ``reinterpret<uint>``, bool as 0/1 — every dasSpirv spec
-//! constant is 4 bytes).
+//! One specialization-constant override: ``id`` is the shader's SpecId (a dasSpirv ``@constant_id``
+//! global or a ``local_size_*_id`` axis), ``value`` the 32-bit replacement as raw bits — float via
+//! ``reinterpret<uint>``, bool as 0/1; every dasSpirv spec constant is 4 bytes.
 struct public SpecConstantValue {
     id    : uint
     value : uint
 }
 
-//! create_compute_pipeline with specialization-constant overrides: each entry rewrites the
-//! shader's ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``). One
-//! shader module can back many pipelines with different values — the [tune]-style GPU kernel
-//! family primitive. Same ownership as the base overload.
+//! create_compute_pipeline with specialization-constant overrides: each entry rewrites the shader's
+//! ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``), so one module backs
+//! many pipelines — the [tune]-style GPU kernel-family primitive. Ownership as the base overload.
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
                                    spec : array<SpecConstantValue>; entry : string = "main") : Pipeline {
     var entries : array<VkSpecializationMapEntry>
@@ -1293,11 +1672,9 @@ def public transition_image(cmd : CommandBuffer; image : Image; old_layout, new_
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
-//! Depth-aspect counterpart of `transition_image`. Same barrier mechanics; flips the aspectMask
-//! to `depth = true`. Used by the shadow-mapping pattern when the shadow map is sampled in pass 2
-//! after being written in pass 1, or any other depth-image layout transition not covered by the
-//! render-pass-driven finalLayout. Stencil-combined formats need the stencil bit too — caller can
-//! use the explicit `transition_image_aspect` overload below for that case.
+//! Depth-aspect counterpart of `transition_image` — same barrier mechanics, aspectMask `depth = true`.
+//! For depth transitions the render-pass finalLayout doesn't cover (e.g. sampling a shadow map in pass
+//! 2). Stencil-combined formats need the stencil bit too: use `transition_image_aspect` below.
 def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
                                   src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
     var aspect : VkImageAspectFlags
@@ -1305,10 +1682,9 @@ def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout
     transition_image_aspect(cmd, image, old_layout, new_layout, src_access, dst_access, src_stage, dst_stage, aspect)
 }
 
-//! Fully general `transition_image` — caller supplies the `aspectMask`. Use this for stencil
-//! aspects, combined depth+stencil, or anything `transition_image` / `transition_depth_image`
-//! don't cover. `levelCount = layerCount = 1` (matching the convenience helpers); for mip
-//! chains / array layers drop to a raw `cmd_pipeline_barrier`.
+//! Fully general `transition_image` — caller supplies the `aspectMask` (stencil, combined
+//! depth+stencil, anything the two convenience helpers miss). `levelCount = layerCount = 1`; for mip
+//! chains or array layers drop to a raw `cmd_pipeline_barrier`.
 def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
                                    src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags;
                                    aspect : VkImageAspectFlags) {
@@ -1326,16 +1702,12 @@ def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layou
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
-//! Run a compute shader that writes an Rgba8 storage image and return the w*h RGBA8 pixels. `words` is
-//! an emitted SPIR-V compute blob whose entry point binds a storage image2D at set=0/binding=0 and
-//! `imageStore`s a color per invocation over an 8x8 local size. A one-shot: it creates its own
-//! instance/device, the storage image, the descriptor set, the compute pipeline and a command pool,
-//! dispatches w/8 x h/8, and reads the image back. w and h must be positive multiples of 8 so the
-//! dispatch covers every pixel (asserted). For the canonical authoring side see dasSpirv's image2D +
-//! imageStore (e.g. dasVulkan's storage-image tests and the Mandelbrot tutorial).
-//! When `srgb_encode` is true the linear storage image is blitted into an R8G8B8A8_SRGB intermediate
-//! before readback, so the hardware applies the linear->sRGB gamma encode at the blit and the returned
-//! bytes are display-ready (storage images do NOT sRGB-encode on write). Default false: copy as-is.
+//!@nolint
+//! Run a compute shader that writes an Rgba8 storage image (set=0/binding=0, 8x8 local size) and return
+//! the w*h RGBA8 pixels. One-shot: own instance/device/pipeline/pool; w,h must be positive multiples of 8.
+//! `srgb_encode` blits via R8G8B8A8_SRGB for display-ready bytes — storage writes do NOT gamma-encode.
+//! For the canonical authoring side see dasSpirv's image2D + imageStore — dasVulkan's storage-image
+//! tests and the Mandelbrot tutorial are worked examples.
 def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_encode : bool = false) : array<uint8> {
     assert(w > 0 && h > 0 && (w % 8) == 0 && (h % 8) == 0,
         "compute_to_storage_image: w/h must be positive multiples of 8")
@@ -1532,11 +1904,12 @@ def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; widt
     return <- build_offscreen_target(device, phys, width, height, format, samples, extra)
 }
 
+//!@nolint
 //! `build_offscreen_target` overload taking caller-supplied sample count + extra usage flags.
-//! `color_attachment` is always set; `extra_usage` adds the rest -- `transfer_src` for the
-//! offscreen-readback default, `input_attachment` for subpass-input rails (tutorial 10),
-//! `sampled` for post-processing chains (tutorial 11), `_4`/`_8` on `samples` for MSAA
-//! (tutorial 09). MSAA images CANNOT carry `transfer_src` -- the resolve target does.
+//! `color_attachment` is always set; `extra_usage` adds the rest — `transfer_src` for the
+//! offscreen-readback default, `input_attachment` for subpass-input rails (tutorial 10), `sampled` for
+//! post-processing chains (tutorial 11), `_4`/`_8` on `samples` for MSAA (tutorial 09).
+//! MSAA images CANNOT carry `transfer_src` — the resolve target does.
 def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; width, height : int;
                                   format : VkFormat; samples : VkSampleCountFlags;
                                   extra_usage : VkImageUsageFlags) : OffscreenTarget {
@@ -1568,10 +1941,9 @@ def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; widt
     return <- t
 }
 
-//! depth image + backing memory + depth-aspect view, owned together. Mirrors OffscreenTarget but
-//! with depth_stencil_attachment usage + a depth-only aspect on the view, suitable for the depth
-//! attachment of an offscreen render pass. Default format `D32_SFLOAT` is one of the two formats
-//! Vulkan guarantees on every device for depth attachment (the other is `D32_SFLOAT_S8_UINT`).
+//! depth image + backing memory + depth-aspect view, owned together — OffscreenTarget with
+//! depth_stencil_attachment usage and a depth-only view aspect. Default `D32_SFLOAT` is one of the two
+//! depth-attachment formats Vulkan guarantees on every device (the other is `D32_SFLOAT_S8_UINT`).
 struct public OffscreenDepth {
     image : Image
     memory : DeviceMemory
@@ -1590,10 +1962,9 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
     return <- build_offscreen_depth(device, phys, width, height, format, extra)
 }
 
-//! `build_offscreen_depth` overload taking caller-supplied extra usage flags. The base helper
-//! always sets `depth_stencil_attachment`; this overload adds whatever else the caller needs —
-//! `sampled` for shadow maps (the image is read by a `sampler2DShadow` in the next pass),
-//! `transfer_src` for offscreen-depth readback, etc. Memory + view stay device-local D32_SFLOAT.
+//! `build_offscreen_depth` overload taking caller-supplied extra usage flags. `depth_stencil_attachment`
+//! is always set; `extra_usage` adds `sampled` (shadow maps read by a `sampler2DShadow` next pass),
+//! `transfer_src` (depth readback), etc. Memory + view stay device-local D32_SFLOAT.
 def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
                                  format : VkFormat; extra_usage : VkImageUsageFlags) : OffscreenDepth {
     var samples : VkSampleCountFlags
@@ -1601,10 +1972,9 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
     return <- build_offscreen_depth(device, phys, width, height, format, extra_usage, samples)
 }
 
-//! `build_offscreen_depth` overload taking caller-supplied sample count. Use this for MSAA depth
-//! attachments (tutorial 09): the color and depth attachments in one render pass must agree on
-//! `samples`, so a 4x color target needs a 4x depth target. The caller passes both `extra_usage`
-//! and `samples` -- samples-only callers go through the 5-arg overload with default empty extras.
+//! `build_offscreen_depth` overload taking caller-supplied sample count, for MSAA depth attachments:
+//! color and depth in one render pass MUST agree on `samples`, so a 4x color target needs a 4x depth
+//! target. Takes both `extra_usage` and `samples`; the 5-arg overload defaults extras to empty.
 def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width, height : int;
                                  format : VkFormat; extra_usage : VkImageUsageFlags;
                                  samples : VkSampleCountFlags) : OffscreenDepth {
@@ -1673,10 +2043,9 @@ def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : u
     return <- hb
 }
 
-//! HostBuffer with caller-chosen usage flags (vertex/index/uniform/storage/transfer_src/...). The
-//! `(device, phys, size)` overload above hardcodes `transfer_dst` for the readback-buffer role;
-//! this overload is the path tutorials reach for when they want a host-visible buffer with
-//! arbitrary usage. Memory is still HOST_VISIBLE | HOST_COHERENT.
+//! HostBuffer with caller-chosen usage flags (vertex/index/uniform/storage/transfer_src/...), where the
+//! `(device, phys, size)` overload above hardcodes `transfer_dst` for the readback-buffer role.
+//! Memory is still HOST_VISIBLE | HOST_COHERENT.
 def public create_host_buffer(device : Device; phys : VkPhysicalDevice; size : uint64; usage : VkBufferUsageFlags) : HostBuffer {
     var bci = BufferCreateInfo(size = size, usage = usage)
     var inscope buffer <- create_buffer(device, bci)
@@ -1708,10 +2077,9 @@ def public upload_bytes(buf : HostBuffer; device : Device; var data : array<auto
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(buf.memory))
 }
 
-//! Create a host-visible buffer sized to fit `data` and upload it in one call. The single-line
-//! "vertex/index buffer from typed array" the tutorials all reach for. Panics on empty input:
-//! Vulkan requires `VkBufferCreateInfo.size > 0` (VUID-VkBufferCreateInfo-size-00912), so an
-//! empty array can't produce a valid buffer here.
+//! Create a host-visible buffer sized to fit `data` and upload it in one call — "vertex/index buffer
+//! from typed array". Panics on empty input: Vulkan requires `VkBufferCreateInfo.size > 0`
+//! (VUID-VkBufferCreateInfo-size-00912), so an empty array can't produce a valid buffer.
 def public create_host_buffer_from_bytes(device : Device; phys : VkPhysicalDevice;
                                          usage : VkBufferUsageFlags; var data : array<auto(TT)>) : HostBuffer {
     assert(!empty(data), "create_host_buffer_from_bytes: empty data — VkBuffer.size must be > 0")
@@ -1768,11 +2136,9 @@ def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; fra
     vkCmdEndRenderPass(raw_cmd)
 }
 
-//! multi-clear overload: one VkClearValue per attachment, in framebuffer attachment order.
-//! Use with `create_render_pass_color_depth` (clears = [color, depth]). The single-clear overload
-//! above covers the no-clear / one-attachment case; this one is for per-attachment clears, so an
-//! empty `clears` is always a caller bug (CLEAR loadOp attachments would read uninitialized
-//! VkClearValues -- VUID-VkRenderPassBeginInfo-clearValueCount-00902).
+//! multi-clear overload: one VkClearValue per attachment, in framebuffer attachment order — use with
+//! `create_render_pass_color_depth` (clears = [color, depth]). Empty `clears` is always a caller bug:
+//! CLEAR-loadOp attachments would read uninitialized values (VUID-VkRenderPassBeginInfo-clearValueCount-00902).
 def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; framebuffer : Framebuffer;
                               area : VkRect2D; var clears : array<VkClearValue>; blk : block<() : void>) {
     assert(!empty(clears), "record_render_pass multi-clear: clears must be non-empty (one per attachment)")
@@ -1790,12 +2156,9 @@ def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; fra
     vkCmdEndRenderPass(raw_cmd)
 }
 
-//! Block-form dynamic-rendering wrapper: calls vkCmdBeginRendering before the block,
-//! vkCmdEndRendering after. Vulkan 1.3 core. Replaces the (render_pass + framebuffer) pair
-//! `record_render_pass` needs with an inline VkRenderingInfo built from `color_attachments`
-//! + optional depth/stencil. The caller owns the boost `RenderingAttachmentInfo` values --
-//! tutorial 09 uses one MSAA color attachment with a 1x resolve target wired into
-//! `resolveImageView`, no extra render pass or framebuffer object required.
+//! Block-form dynamic-rendering wrapper (Vulkan 1.3 core): vkCmdBeginRendering before the block,
+//! vkCmdEndRendering after. Replaces `record_render_pass`'s (render_pass + framebuffer) pair with an
+//! inline VkRenderingInfo. The caller owns the boost `RenderingAttachmentInfo` values.
 def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : uint;
                             var color_attachments : array<RenderingAttachmentInfo>;
                             var depth_attachment : RenderingAttachmentInfo;
@@ -1822,14 +2185,9 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
     cmd_end_rendering(cmd)
 }
 
-//! Block-form device-memory mapping. Maps the whole allocation (VK_WHOLE_SIZE), invokes the block
-//! with the raw mapped pointer, unmaps on block return. Used by the SpirvVulkanShader bind_uniform
-//! macro for one-shot UBO upload: the block writes typed fields at known std140 offsets via
-//! `write_field`. **Memory must be HOST_VISIBLE | HOST_COHERENT**: with HOST_COHERENT the GPU sees
-//! the writes after vkUnmapMemory without an explicit flush; non-coherent memory needs a
-//! vkFlushMappedMemoryRanges between the writes and the unmap, which this helper does NOT do. The
-//! standard dasVulkan UBO allocation path (mhb / create_host_buffer) picks coherent memory, so the
-//! tutorials are safe; if you allocate non-coherent memory yourself, wrap the writes accordingly.
+//! Block-form device-memory mapping: maps the whole allocation (VK_WHOLE_SIZE), invokes the block with
+//! the raw pointer, unmaps on return. **Memory must be HOST_VISIBLE | HOST_COHERENT** — this helper does
+//! NOT vkFlushMappedMemoryRanges, so non-coherent memory you allocate yourself needs its own flush.
 def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : block<(ptr : void?) : void>) {
     var mapped : void? = null
     let flags : VkMemoryMapFlags
@@ -1845,11 +2203,9 @@ def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : bloc
 // threaded command recording + the block below never re-enters, so a module global is safe.
 var private g_push_staging : array<uint8>
 
-//! Block-form std140 staging for push constants. Sizes a CPU scratch buffer to `size` bytes, hands the
-//! block a raw pointer into it, and frees nothing (the scratch is reused). The push_constants_<shader>
-//! macro drives this: the block writes each field at its std140 offset via `write_field` and then calls
-//! vkCmdPushConstants with the same pointer, so the GPU receives std140-packed bytes rather than the raw
-//! daslang struct image (which can diverge — e.g. a float3 immediately before a scalar packs differently).
+//! Block-form std140 staging for push constants: sizes the CPU scratch to `size`, hands the block a raw
+//! pointer into it, frees nothing (scratch is reused). The block writes each field at its std140 offset
+//! then pushes, so the GPU gets std140 bytes — the raw daslang struct image can diverge from std140.
 def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
     return if (size == 0u)
     if (int(size) > length(g_push_staging)) {
@@ -1860,10 +2216,9 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
     }
 }
 
-//! Write a single typed value at a byte offset into mapped device memory (one memcpy of sizeof<TT>
-//! bytes). Designed for std140 field writes: the bind_uniform macro emits one call per @uniform-block
-//! field at its compile-time-computed offset. TT = any 32-bit scalar / vec / float4x4 / float3x4 with
-//! the daslang storage matching std140 directly. float3x3 needs per-column writes (not this).
+//! Write a single typed value at a byte offset into mapped device memory (one memcpy of sizeof<TT>), for
+//! std140 field writes at compile-time-computed offsets. TT = any 32-bit scalar / vec / float4x4 /
+//! float3x4 whose daslang storage matches std140 directly; float3x3 needs per-column writes, not this.
 def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
     unsafe {
         let dst = reinterpret<void?>(intptr(ptr) + uint64(offset))
@@ -1878,10 +2233,13 @@ def public map_memory_to_array(device : Device; memory : DeviceMemory; size : ui
     unsafe {
         vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, addr(mapped)), null)
     }
+    // array is int-indexed, so a >2GB mapping cannot be represented here at all — assert rather
+    // than resize truncated and then memcpy the full width, which would run past the allocation
+    assert(size <= uint64(0x7FFFFFFF), "map_memory_to_array: mapping exceeds the int-indexed array cap")
     var arr : array<uint8>
     arr |> resize(int(size))
     unsafe {
-        memcpy(addr<void?>(arr[0]), mapped, int(size))
+        memcpy(addr<void?>(arr[0]), mapped, size)
     }
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
     invoke(blk, arr)
@@ -1933,13 +2291,9 @@ def public clear_depth(depth : float = 1.0f; stencil : uint = 0u) : VkClearValue
     return c
 }
 
-//! Depth-compare ("shadow") sampler. Enables `compareEnable` + `compareOp = LESS`. Vulkan's
-//! per-tap result is `reference compareOp sampledDepth`, so with `LESS` the comparison fires when
-//! `ref < sampledDepth` → the fragment's light-space depth is closer to the light than the stored
-//! depth → not occluded → return 1 = lit. LINEAR filtering so the hardware PCFs the 2x2 footprint
-//! around the sample point. Address mode is CLAMP_TO_BORDER with a white (fully-lit)
-//! border so off-shadow-map fragments default to lit, the convention every shadow-map tutorial
-//! relies on. Consumed by `sampler2DShadow` + `textureCompare(...)` in the shader.
+//! Depth-compare ("shadow") sampler for `sampler2DShadow` + `textureCompare`. Vulkan's per-tap result
+//! is `reference compareOp sampledDepth`, so `LESS` returns 1 = lit when the fragment is nearer the
+//! light. LINEAR filtering PCFs the 2x2 footprint; CLAMP_TO_BORDER + white border = off-map is lit.
 def public create_sampler_shadow(device : Device; compare_op : VkCompareOp = VkCompareOp.LESS) : Sampler {
     let sci = SamplerCreateInfo(magFilter = VkFilter.LINEAR, minFilter = VkFilter.LINEAR,
         mipmapMode = VkSamplerMipmapMode.LINEAR, addressModeU = VkSamplerAddressMode.CLAMP_TO_BORDER,
@@ -1969,14 +2323,12 @@ def public cmd_bind_vertex_buffer(cmd : CommandBuffer; binding : uint; buffer : 
     }
 }
 
-//! Typed push-constant upload: writes `sizeof<TT>` bytes from `value` into the pipeline's push
-//! block at `offset`, for shader stages `stages`. The size is derived from the daslang value, so
-//! the call site no longer carries a hand-counted byte size or a `addr<void?>(...)`.
-//! TT's daslang layout must match the shader's std430 push-constant layout (true for scalar /
-//! vec4 / mat4 packs without vec3 padding surprises). Vulkan requires both `offset` and the
-//! resolved size to be multiples of 4 (VUID-vkCmdPushConstants-offset-00370 /
-//! VUID-vkCmdPushConstants-size-00369), so this asserts both — using e.g. a `bool` or `uint8`
-//! TT silently trips driver validation otherwise.
+//!@nolint
+//! Typed push-constant upload: `sizeof<TT>` bytes from `value` at `offset` for stages `stages`. TT's
+//! daslang layout must match the shader's std430 push block (fine for scalar / vec4 / mat4, watch vec3
+//! padding). Vulkan requires both `offset` and the resolved size to be multiples of 4
+//! (VUID-vkCmdPushConstants-offset-00370 / VUID-vkCmdPushConstants-size-00369), so both are
+//! asserted — a `bool` or `uint8` TT silently trips driver validation otherwise.
 def public cmd_push_constants(cmd : CommandBuffer; layout : PipelineLayout; stages : VkShaderStageFlags;
                               offset : uint; var value : auto(TT) const) {
     let sz = uint(typeinfo sizeof(type<TT>))
@@ -2001,6 +2353,104 @@ def public copy_image_to_buffer(cmd : CommandBuffer; image : Image; buffer : Hos
     }
 }
 
+// ===== pipeline executable introspection (VK_KHR_pipeline_executable_properties) =====
+
+def private exec_cstr(src : int8[VK_MAX_DESCRIPTION_SIZE]) : string {
+    var tmp = src
+    unsafe {
+        return "{reinterpret<string>(addr(tmp[0]))}"
+    }
+}
+
+def private blob_text(var blob : array<uint8>) : string {
+    if (empty(blob)) {
+        return ""
+    }
+    blob[length(blob) - 1] = uint8(0)   // last byte is the caller-reserved NUL slot, never content
+    unsafe {
+        return "{reinterpret<string>(addr(blob[0]))}"
+    }
+}
+
+//! One-string VK_KHR_pipeline_executable_properties report for `pipeline`: per-executable statistics
+//! (on NVIDIA: register count, binary size, ...) plus internal representations, `isText` payloads
+//! (disassembly) verbatim. Needs the capture_* pipeline flags + a device with pipelineExecutableInfo.
+def public dump_pipeline_executables(device : Device; pipeline : Pipeline) : string {
+    var execs <- get_pipeline_executable_properties_k_h_r(device, PipelineInfoKHR(pipeline = weak_copy(pipeline)))
+    let s = build_string() $(writer) {
+        write(writer, "pipeline executables: {length(execs)}\n")
+        for (ei in range(length(execs))) {
+            write(writer, "== executable {ei}: {exec_cstr(execs[ei].name)} ==\n")
+            write(writer, "  {exec_cstr(execs[ei].description)} (stages {uint(execs[ei].stages)}, subgroupSize {int(execs[ei].subgroupSize)})\n")
+            let info = PipelineExecutableInfoKHR(pipeline = weak_copy(pipeline), executableIndex = uint(ei))
+            var stats <- get_pipeline_executable_statistics_k_h_r(device, info)
+            write(writer, "-- statistics ({length(stats)}) --\n")
+            for (st in stats) {
+                var v = ""
+                if (st.format == VkPipelineExecutableStatisticFormatKHR.BOOL32_KHR) {
+                    v = st.value.b32 != 0u ? "true" : "false"
+                } elif (st.format == VkPipelineExecutableStatisticFormatKHR.INT64_KHR) {
+                    v = "{st.value.i64}"
+                } elif (st.format == VkPipelineExecutableStatisticFormatKHR.UINT64_KHR) {
+                    // decimal via int64 when it fits; raw uint64 (prints 0x-hex) past INT64_MAX
+                    v = st.value.u64 <= 0x7FFFFFFFFFFFFFFFl ? "{int64(st.value.u64)}" : "{st.value.u64}"
+                } else {
+                    v = "{st.value.f64}"
+                }
+                write(writer, "{exec_cstr(st.name)} = {v}    ({exec_cstr(st.description)})\n")
+            }
+            delete stats
+            // two-call pattern round 2: the generated wrapper filled name/isText/dataSize with pData null;
+            // allocate each pData at its reported dataSize and re-query to pull the actual bytes
+            var reps <- get_pipeline_executable_internal_representations_k_h_r(device, info)
+            write(writer, "-- internal representations ({length(reps)}) --\n")
+            var blobs : array<array<uint8>>
+            blobs |> reserve(length(reps))
+            for (r in reps) {
+                var b : array<uint8>
+                if (r.dataSize > 0x7FFFFFF0ul) {
+                    // int-overflow guard: can't resize() past INT_MAX — leave the blob empty so the fill call skips it
+                    write(writer, "-- representation '{exec_cstr(r.name)}' too large ({int64(r.dataSize)} bytes), skipped --\n")
+                } elif (int(r.dataSize) > 0) {
+                    // text payloads reserve ONE extra byte for the terminating NUL (see blob_text)
+                    b |> resize(int(r.dataSize) + (r.isText != 0u ? 1 : 0))
+                }
+                blobs |> emplace(b)
+            }
+            if (!empty(reps)) {
+                var vkinfo = VkPipelineExecutableInfoKHR()
+                vkinfo.pipeline = boost_value_to_vk(pipeline)
+                vkinfo.executableIndex = uint(ei)
+                var vkcount = uint(length(reps))
+                unsafe {
+                    for (ri in range(length(reps))) {
+                        if (!empty(blobs[ri])) {
+                            reps[ri].pData = addr<void?>(blobs[ri][0])
+                            reps[ri].dataSize = uint64(long_length(blobs[ri]))   // tell the driver about the reserved byte
+                        }
+                    }
+                    vk_check(vkGetPipelineExecutableInternalRepresentationsKHR(boost_value_to_vk(device), vkinfo, vkcount, addr(reps[0])), null)
+                }
+            }
+            for (ri in range(length(reps))) {
+                let is_text = reps[ri].isText != 0u
+                // skipped-oversize reps keep the driver-reported size (pData null => driver rewrites it): no int() cast
+                let ds = reps[ri].dataSize
+                let ds_str = ds > 0x7FFFFFF0ul ? "{int64(ds)} (skipped)" : "{int(ds)}"
+                write(writer, "[{ri}] {exec_cstr(reps[ri].name)} isText={is_text} dataSize={ds_str}    ({exec_cstr(reps[ri].description)})\n")
+                if (is_text && !empty(blobs[ri])) {
+                    write(writer, blob_text(blobs[ri]))
+                    write(writer, "\n")
+                }
+            }
+            delete blobs
+            delete reps
+        }
+    }
+    delete execs
+    return s
+}
+
 // ===== hardware ray tracing rails (VK_KHR_ray_tracing_pipeline) =====
 
 //! buffer + memory allocated with the DEVICE_ADDRESS flag + its GPU virtual address, owned
@@ -2018,12 +2468,9 @@ def public finalize(var ab : AddressBuffer) {
     delete ab.memory
 }
 
-//! Create a buffer + memory + device address. The helper adds the ``shader_device_address``
-//! usage bit and the matching ``VkMemoryAllocateFlagsInfo`` DEVICE_ADDRESS allocate flag (an
-//! address query against memory allocated without it is invalid). ``host_visible = true``
-//! allocates HOST_VISIBLE|HOST_COHERENT memory (mappable — SBTs, AS build inputs); ``false``
-//! allocates DEVICE_LOCAL (AS storage, scratch). Requires a device created with the
-//! ``bufferDeviceAddress`` feature (create_device_ray_tracing).
+//! Create a buffer + memory + device address, adding the ``shader_device_address`` usage bit and the
+//! matching DEVICE_ADDRESS allocate flag (an address query without it is invalid). ``host_visible``
+//! picks HOST_VISIBLE|HOST_COHERENT (SBTs, AS inputs) vs DEVICE_LOCAL. Needs ``bufferDeviceAddress``.
 def public create_address_buffer(device : Device; phys : VkPhysicalDevice; size : uint64;
                                  usage : VkBufferUsageFlags; host_visible : bool) : AddressBuffer {
     var u = usage
@@ -2084,27 +2531,26 @@ def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDevic
     return rtp
 }
 
-//! Fetch the opaque shader-group handles of a ray-tracing pipeline
-//! (``vkGetRayTracingShaderGroupHandlesKHR`` — raw-only in the generated layer: its ``void*``
-//! out-param is not boost-mappable). Returns ``group_count`` records of ``handle_size`` bytes,
-//! tightly packed — the raw material build_shader_binding_table copies into aligned SBT records.
+//! Fetch a ray-tracing pipeline's opaque shader-group handles (``vkGetRayTracingShaderGroupHandlesKHR``
+//! is raw-only in the generated layer — its ``void*`` out-param is not boost-mappable). Returns
+//! ``group_count`` records of ``handle_size`` bytes, tightly packed; build_shader_binding_table aligns.
 def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipeline;
                                                 first_group : uint; group_count : uint; handle_size : uint) : array<uint8> {
     var data : array<uint8>
     data |> resize(int(group_count * handle_size))
     unsafe {
         vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
-            first_group, group_count, uint64(length(data)), addr<void?>(data[0])), null)
+            first_group, group_count, uint64(long_length(data)), addr<void?>(data[0])), null)
     }
     return <- data
 }
 
-//! Create a triangle-path ray-tracing pipeline: raygen + N miss + closest-hit stages, one GENERAL
-//! group per general stage and one TRIANGLES_HIT_GROUP for the closest-hit. Group order is
-//! [raygen, miss[0..N), hit] — the layout build_shader_binding_table assumes; ``traceRayEXT``'s
-//! ``miss_index`` selects within the miss region. Shadow-ray setups take two miss shaders (index
-//! 0 = radiance/sky, index 1 = the shadow "lit" flip). ``max_recursion >= 2`` lets the
-//! closest-hit stage trace (shadow) rays itself.
+//!@nolint
+//! Create a triangle-path ray-tracing pipeline: raygen + N miss + closest-hit, one GENERAL group per
+//! general stage plus a TRIANGLES_HIT_GROUP. Group order is [raygen, miss[0..N), hit] — the layout
+//! build_shader_binding_table assumes; ``traceRayEXT``'s ``miss_index`` selects within the miss region.
+//! Shadow-ray setups take two miss shaders (index 0 = radiance/sky, index 1 = the shadow "lit" flip).
+//! ``max_recursion >= 2`` lets closest-hit trace shadow rays.
 def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
                                        raygen : ShaderModule; miss : array<ShaderModule>; closest_hit : ShaderModule;
                                        max_recursion : uint = 1u) : Pipeline {
@@ -2174,12 +2620,9 @@ def public finalize(var sbt : ShaderBindingTable) {
 
 def private align_up(v : uint64; alignment : uint64) : uint64 => (v + alignment - 1ul) & ~(alignment - 1ul)
 
-//! Build the shader binding table for a pipeline created by create_ray_tracing_pipeline (group
-//! order [raygen | miss_count × miss | hit_count × hit]). Queries the device's group-handle
-//! size/alignment rules, fetches the opaque handles, packs them into records aligned per
-//! ``shaderGroupHandleAlignment`` with each region start aligned per ``shaderGroupBaseAlignment``,
-//! and uploads into a SHADER_BINDING_TABLE device-address buffer. The returned regions point into
-//! that buffer — keep the ShaderBindingTable alive for every trace that uses it.
+//! Build the shader binding table for a create_ray_tracing_pipeline pipeline (group order
+//! [raygen | miss_count × miss | hit_count × hit]): records aligned per ``shaderGroupHandleAlignment``,
+//! region starts per ``shaderGroupBaseAlignment``. Keep the table alive for every trace using it.
 def public build_shader_binding_table(device : Device; phys : VkPhysicalDevice; pipeline : Pipeline;
                                       miss_count : uint; hit_count : uint) : ShaderBindingTable {
     let props = get_ray_tracing_properties(phys)
@@ -2228,11 +2671,9 @@ def public cmd_trace_rays(cmd : CommandBuffer; sbt : ShaderBindingTable; width :
     cmd_trace_rays_k_h_r(cmd, sbt.raygen, sbt.miss, sbt.hit, sbt.callable, width, height, depth)
 }
 
-//! Host-side stand-in for ``VkAccelerationStructureInstanceKHR``, which the generator skips (C
-//! bitfield members). The daslang layout is byte-identical to the C struct (48-byte row-major
-//! 3x4 transform, two packed bitfield words, the referenced BLAS address), so an
-//! ``array<AccelInstance>`` uploads straight into the TLAS instance buffer. Build records with
-//! make_accel_instance (it packs the bitfield words); set translation via ``inst.transform[r][3]``.
+//! Host-side stand-in for ``VkAccelerationStructureInstanceKHR``, which the generator skips (C bitfield
+//! members). Byte-identical to the C struct, so an ``array<AccelInstance>`` uploads straight into the
+//! TLAS instance buffer. Build with make_accel_instance; set translation via ``inst.transform[r][3]``.
 struct public AccelInstance {
     transform : float[3][4]        // row r = [x-axis, y-axis, z-axis, translation][r]
     customIndex24_mask8 : uint     // instanceCustomIndex:24 | mask:8
@@ -2310,10 +2751,9 @@ def private build_accel_structure(device : Device; phys : VkPhysicalDevice; pool
     return <- result
 }
 
-//! Build a bottom-level acceleration structure over an indexed triangle list, blocking until the
-//! GPU build completes. ``vertices`` are xyz positions (VK_FORMAT_R32G32B32_SFLOAT, stride
-//! ``sizeof(float3)``); ``indices`` are uint triples, one per triangle. The build-input buffers
-//! are transient — only the returned AccelStructure stays resident.
+//! Build a bottom-level acceleration structure over an indexed triangle list, blocking until the GPU
+//! build completes. ``vertices`` are xyz positions (R32G32B32_SFLOAT, stride ``sizeof(float3)``);
+//! ``indices`` are uint triples. Build inputs are transient — only the AccelStructure stays resident.
 def public build_blas(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;
                       var vertices : array<float3>; var indices : array<uint>) : AccelStructure {
     assert(!empty(vertices), "build_blas: vertices must be non-empty")
@@ -2365,8 +2805,7 @@ def public build_tlas(device : Device; phys : VkPhysicalDevice; pool : CommandPo
 
 //! Write a top-level acceleration structure into a descriptor set — the pNext-chained
 //! ``VkWriteDescriptorSetAccelerationStructureKHR`` dance in one call. Matches the
-//! ``SpirvDescriptorKind.acceleration_structure`` binding vulkan_reflect lays out for an
-//! ``accelerationStructureEXT`` shader global.
+//! ``SpirvDescriptorKind.acceleration_structure`` binding vulkan_reflect lays out for the shader global.
 def public write_descriptor_acceleration_structure(device : Device; dset : DescriptorSet; binding : uint; tlas : AccelStructure) {
     var raw_as = boost_value_to_vk(tlas.handle)
     var was = VkWriteDescriptorSetAccelerationStructureKHR()

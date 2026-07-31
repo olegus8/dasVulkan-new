@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 10 pixel-oracle gate. The scene is a brick-floor + concrete-cat statue lit by ONE

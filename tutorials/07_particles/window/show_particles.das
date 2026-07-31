@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed particles: the tutorial 07 compute-driven swarm rendered into the same offscreen colour

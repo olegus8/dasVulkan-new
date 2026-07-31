@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed SDF: the tutorial 03 compute shader (sdf_spv) recomputed every frame from a single `time`

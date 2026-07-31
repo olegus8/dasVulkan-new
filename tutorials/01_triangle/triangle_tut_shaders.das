@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 01 - the rotating triangle. The classic gl_VertexIndex hello-triangle (shader-local

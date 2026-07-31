@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed instancing: the tutorial 05 graphics pipeline (instancing_vert_spv + instancing_frag_spv)

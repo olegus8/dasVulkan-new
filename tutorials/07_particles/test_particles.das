@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 07 pixel oracle (lavapipe in CI, real GPU locally). 1024 particles are seeded on a
@@ -44,10 +45,9 @@ def test_particles_oracle(t : T?) {
             if (p.x > max_r) {
                 max_r = p.x
             }
-            // sRGB target: gamma-encoding compresses the blue/red gap relative to linear.
-            // Empirically the teal palette (cool = float3(0.20, 0.70, 1.00)) produces pixels
-            // where blue exceeds red by 10+ at brightness 60+; require gap >= 10 to confirm
-            // a genuinely teal-hued particle was rasterised.
+            // sRGB target: gamma-encoding compresses the blue/red gap relative to linear. Empirically
+            // the teal palette (cool = float3(0.20, 0.70, 1.00)) yields blue > red by 10+ at brightness
+            // 60+, so requiring a gap >= 10 confirms a genuinely teal-hued particle was rasterised.
             if (p.z > 60 && p.z > p.x + 10) {
                 saw_teal = true
             }

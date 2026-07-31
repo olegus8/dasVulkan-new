@@ -201,6 +201,17 @@ the location, the source binding slot, the format, and the byte offset
 within the vertex. Consumed by ``create_graphics_pipeline_v3d`` as
 ``vertex_attributes``.
 
+.. _handle-vulkan-vkphysicaldevicefeatures2:
+
+``vulkan::VkPhysicalDeviceFeatures2``
+-------------------------------------
+
+The chained feature struct a device is created with: core features in
+``features``, every extension feature struct hung off ``pNext``. The
+``create_device`` overloads that take one let a caller assemble an arbitrary
+chain, which is how the compute-tier creators enable coopmat, memory-priority
+and timeline-semaphore features in a single ``vkCreateDevice``.
+
 ``vulkan_structs`` view structs
 ===============================
 

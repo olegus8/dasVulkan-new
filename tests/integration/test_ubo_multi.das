@@ -1,17 +1,12 @@
 options gen2
-options _comment_hygiene = true
 options indenting = 4
 
-// GPU regression gate for the SHARED std140 walk (daslang's daslib/shader_block_layout): a UBO with a
-// float3x3, a float4[2] array, and a trailing vec4, uploaded through the GENERATED <shader>_bind_uniform
-// (the write_field path) -- NOT a hand-laid raw byte image (that is test_ubo_nested). This is the first
-// test that exercises the generated bind with composite / matrix fields: a flat write_field per
-// top-level field mis-packed float3x3 (36 packed bytes into the 48-byte std140 slot) and arrays / nested
-// structs (wrong stride). The shared walk decomposes float3x3 into per-column writes (column c at
-// offset+c*16) and arrays per element, so the bytes line up with the std140 layout the SPIR-V shader
-// reads. The fragment reads ONE value via each path -- rot column 2 (mat3), arr[1] (array element),
-// tint (the vec4 after the composites) -- into a different channel; decoys sit elsewhere so a wrong
-// offset/column/stride yields a clearly different pixel.
+// GPU gate for the multi-UBO contract: a shader reaching TWO @uniform blocks compiles, and the
+// generated <shader>_bind_uniform writes the FIRST declared block into the allocation it is handed.
+// The second block is the host's own upload (one bind function maps ONE allocation), so the fragment
+// reads one channel through each path: R + B from the generated bind, G from the host write. Decoys
+// sit in the other lanes, so binding the wrong block -- or writing the wrong offsets -- lands a decoy
+// in a channel and the pixel check fails.
 
 require dastest/testing_boost public
 require vulkan
@@ -24,20 +19,21 @@ require spirv/spirv_builtins public
 require spirv/spirv_reflect public
 require scene_helpers
 require math
-require daslib/math_boost
 
-// std140 layout: rot @ 0 (3 cols * 16 = 48), arr @ 48 (float4 stride 16, 32 bytes), tint @ 80 (16).
-struct Mat3UBO {
-    rot  : float3x3     // offset 0, size 48
-    arr  : float4[2]    // offset 48, ArrayStride 16
-    tint : float4       // offset 80
-}                       // total 96
+struct FrameUBO {
+    tint : float4       // offset 0, size 16
+}
 
-var @uniform @set = 0 @binding = 0 m3 : Mat3UBO
-var @out @location = 0 m3_color : float4
+struct LookupUBO {
+    tint : float4       // offset 0, size 16
+}
 
-[vulkan_vertex_shader(name="ubo_mat3_vert_spv"), marker(no_coverage)]
-def ubo_mat3_vert {
+var @uniform @set = 0 @binding = 0 mu_frame : FrameUBO
+var @uniform @set = 0 @binding = 1 mu_lookup : LookupUBO
+var @out @location = 0 mu_color : float4
+
+[vulkan_vertex_shader(name="ubo_multi_vert_spv"), marker(no_coverage)]
+def ubo_multi_vert {
     let i = gl_VertexIndex
     var xy = float2(0.0f, 0.0f)
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
@@ -46,21 +42,21 @@ def ubo_mat3_vert {
     gl_Position = float4(xy, 0.0f, 1.0f)
 }
 
-[vulkan_fragment_shader(name="ubo_mat3_frag_spv"), marker(no_coverage)]
-def ubo_mat3_frag {
-    let c2 = m3.rot * float3(0.0f, 0.0f, 1.0f)       // mat3 * basis = column 2 (per-column repack path)
-    m3_color = float4(m3.arr[1].x, m3.tint.y, c2.z, 1.0f)
+[vulkan_fragment_shader(name="ubo_multi_frag_spv"), marker(no_coverage)]
+def ubo_multi_frag {
+    mu_color = float4(mu_frame.tint.x, mu_lookup.tint.y, mu_frame.tint.z, 1.0f)
 }
 
 let TEX_W = 256
 let TEX_H = 256
+let UBO_SIZE = 16ul
 
-def private render_mat3() : array<uint8> {
+def private render_multi() : array<uint8> {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
     var pixels : array<uint8>
-    var inscope instance <- create_instance("dasVulkan test ubo_mat3", make_api_version(1u, 2u, 0u))
+    var inscope instance <- create_instance("dasVulkan test ubo_multi", make_api_version(1u, 2u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
@@ -77,24 +73,27 @@ def private render_mat3() : array<uint8> {
         width = uint(TEX_W), height = uint(TEX_H), layers = 1u)
     var inscope framebuffer <- create_framebuffer(device, fbci)
 
-    // Host-visible UBO uploaded std140-packed via the GENERATED bind (the path under test). Decoys = 0.9; read values arr[1].x=0.2, tint.y=0.4, rot column2.z=0.6 -> expected center (51,102,153).
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
-    var inscope ubo <- create_host_buffer(device, phys, 96ul, ubo_usage)
-    m3.rot[0] = float3(0.9f, 0.9f, 0.9f)
-    m3.rot[1] = float3(0.9f, 0.9f, 0.9f)
-    m3.rot[2] = float3(0.0f, 0.0f, 0.6f)
-    m3.arr[0] = float4(0.9f, 0.9f, 0.9f, 0.9f)
-    m3.arr[1] = float4(0.2f, 0.9f, 0.9f, 0.9f)
-    m3.tint = float4(0.9f, 0.4f, 0.9f, 0.9f)
-    ubo_mat3_frag_bind_uniform(device, ubo.memory)
+    var inscope ubo_frame <- create_host_buffer(device, phys, UBO_SIZE, ubo_usage)
+    var inscope ubo_lookup <- create_host_buffer(device, phys, UBO_SIZE, ubo_usage)
 
-    var reflections <- [decode_reflection(ubo_mat3_vert_spv_reflect), decode_reflection(ubo_mat3_frag_spv_reflect)]
+    // Block 0 through the GENERATED bind: reads land in R (0.2 -> 51) and B (0.6 -> 153). Binding the
+    // second block instead would write mu_lookup's 0.9 decoy into R.
+    mu_frame.tint = float4(0.2f, 0.9f, 0.6f, 1.0f)
+    ubo_multi_frag_bind_uniform(device, ubo_frame.memory)
+    // Block 1 the way the host must upload every further block: its own map + write_field. G = 0.4 -> 102.
+    mu_lookup.tint = float4(0.9f, 0.4f, 0.9f, 1.0f)
+    with_mapped_memory(device, ubo_lookup.memory) $(ptr : void?) {
+        write_field(ptr, 0u, mu_lookup.tint)
+    }
+
+    var reflections <- [decode_reflection(ubo_multi_vert_spv_reflect), decode_reflection(ubo_multi_frag_spv_reflect)]
     var inscope set_layouts <- build_descriptor_set_layouts(device, reflections)
 
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = 1u
-    var ps = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    var ps = DescriptorPoolSize(type_ = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 2u)
     dpci.pPoolSizes |> push(ps)
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
@@ -109,19 +108,24 @@ def private render_mat3() : array<uint8> {
     }
 
     var writes : array<WriteDescriptorSet>
-    var w = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
+    var w0 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 0u,
         descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
-    var binfo = DescriptorBufferInfo(buffer = weak_copy(ubo.buffer), range_ = 96ul)
-    w.pBufferInfo |> push(binfo)
-    writes |> emplace(w)
+    var binfo0 = DescriptorBufferInfo(buffer = weak_copy(ubo_frame.buffer), range_ = UBO_SIZE)
+    w0.pBufferInfo |> push(binfo0)
+    writes |> emplace(w0)
+    var w1 = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = 1u,
+        descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
+    var binfo1 = DescriptorBufferInfo(buffer = weak_copy(ubo_lookup.buffer), range_ = UBO_SIZE)
+    w1.pBufferInfo |> push(binfo1)
+    writes |> emplace(w1)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, writes, no_copies)
 
     var inscope pipe_layout <- build_pipeline_layout(device, set_layouts, reflections)
     delete reflections
 
-    var inscope vert <- create_shader_module(device, ubo_mat3_vert_spv)
-    var inscope frag <- create_shader_module(device, ubo_mat3_frag_spv)
+    var inscope vert <- create_shader_module(device, ubo_multi_vert_spv)
+    var inscope frag <- create_shader_module(device, ubo_multi_frag_spv)
     var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, pipe_layout, vert, frag, TEX_W, TEX_H)
 
     let buf_size = uint64(TEX_W * TEX_H * 4)
@@ -148,12 +152,12 @@ def private render_mat3() : array<uint8> {
 }
 
 [test]
-def test_ubo_mat3_shared_walk(t : T?) {
-    var pixels <- render_mat3()
+def test_ubo_multi_first_block(t : T?) {
+    var pixels <- render_multi()
     let c = px(pixels, 128, 128)
-    // arr[1].x=0.2 -> R~51, tint.y=0.4 -> G~102, rot col2.z=0.6 -> B~153. A wrong column / stride /
-    // offset would read a 0.9 decoy (~230) or 0 in some channel.
+    // R = mu_frame.tint.x = 0.2 (51) and B = mu_frame.tint.z = 0.6 (153) prove the generated bind wrote
+    // the FIRST block; G = mu_lookup.tint.y = 0.4 (102) proves the host's own upload of the second one.
     t |> success(abs(c.x - 51) <= 8 && abs(c.y - 102) <= 8 && abs(c.z - 153) <= 8,
-        "shared std140 walk: mat3 column + array element + vec4 read at correct offsets (got R={c.x} G={c.y} B={c.z})")
+        "two @uniform blocks: generated bind wrote the first, host wrote the second (got R={c.x} G={c.y} B={c.z})")
     delete pixels
 }

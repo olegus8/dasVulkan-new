@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 06 render path: draw a procedural cubemap skybox surrounding the camera. Six procedural
@@ -38,11 +39,9 @@ let private cube_vertices : array<float> <- [
      1.0,  1.0,  1.0,    // 6
     -1.0,  1.0,  1.0]    // 7
 
-//! 36 indices, each face wound CCW **from inside the cube** (= CW from outside). The v3d pipeline
-//! culls back-facing triangles with CCW = front; the camera renders the cube as if from inside
-//! (the view's translation column is stripped on the host, so the cube stays glued to the camera).
-//! Each triangle's inward-pointing normal must match CCW vertex order -- I verified each face by
-//! cross-producting the first two edges and checking the sign of the resulting normal component.
+//! 36 indices, each face wound CCW **from inside the cube** (= CW from outside), because the v3d pipeline
+//! culls back faces with CCW = front and the camera sits inside (the host strips the view's translation
+//! column, gluing the cube to the camera). Faces verified by cross-producting the first two edges.
 let private cube_indices : array<uint16> <- [
     // +X face (right, inward normal = -X): v1, v5, v6, v2
     uint16(1), uint16(5), uint16(6),  uint16(1), uint16(6), uint16(2),
@@ -152,10 +151,9 @@ def strip_translation(var m : float4x4) : float4x4 {
 
 let public SUN_DIR : float3 = vec3_normalize(float3(0.45f, 0.55f, 0.85f))
 
-//! Sample the sky at a unit direction. A two-tone vertical gradient (zenith blue -> warm horizon)
-//! plus a soft falloff to the ground hemisphere, plus a sun disc + Mie-style glow along SUN_DIR.
-//! The same function evaluates on every cube face; that's why the seams between faces are invisible
-//! -- each face just rasterises this continuous function over its own outgoing-direction patch.
+//! Sample the sky at a unit direction: a two-tone vertical gradient (zenith blue -> warm horizon), a soft
+//! falloff to the ground hemisphere, and a sun disc + Mie-style glow along SUN_DIR. Every cube face
+//! rasterises this same continuous function over its own direction patch -- which is why seams vanish.
 def sample_sky(dir : float3) : float3 {
     let altitude = clamp(dir.y, -1.0f, 1.0f)
     let elevation = clamp(altitude * 0.5f + 0.5f, 0.0f, 1.0f)
@@ -566,10 +564,9 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     attr_pos.format = VkFormat.R32G32B32_SFLOAT
     attr_pos.offset = 0u
     vattrs |> push(attr_pos)
-    // depth-trick pipeline: test LESS_OR_EQUAL, write disabled. With the vertex shader's z=w snap
-    // every skybox fragment lives at NDC z=1.0; the test passes against any cleared 1.0 depth value
-    // but never overwrites depth, so future foreground geometry (or a re-ordered scene) keeps its
-    // own z values intact.
+    // depth-trick pipeline: test LESS_OR_EQUAL, write disabled. The vertex shader's z=w snap puts every
+    // skybox fragment at NDC z=1.0, so the test passes against a cleared 1.0 depth but never overwrites
+    // it -- foreground geometry (or a re-ordered scene) keeps its own z values intact.
     var inscope pipeline <- create_graphics_pipeline_v3d(device, render_pass, pipe_layout, vert, frag,
         SKY_W, SKY_H, vbindings, vattrs, /*depth_test_enable=*/true, /*depth_write_enable=*/false,
         VkCompareOp.LESS_OR_EQUAL)

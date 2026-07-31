@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed teapot: the Tutorial 14 mesh-shader pipeline (teapot_task/mesh/frag) renders the GPU-

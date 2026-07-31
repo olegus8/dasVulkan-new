@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowing tier: bridge a native window handle to a VkSurfaceKHR, build a
@@ -77,12 +78,9 @@ def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR;
     unsafe {
         vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, addr(formats[0])), null)
     }
-    // 1. honor an explicit preference if the surface supports it. A UNORM format presents
-    // pass-through (no GPU sRGB encode), which a UI/2D app wants so already-sRGB vertex colors aren't
-    // double-encoded; an sRGB format suits a linear-lit 3D pipeline. Caller's call.
+    // 1. explicit preference: UNORM presents pass-through (UI/2D, no double sRGB encode), sRGB suits linear-lit 3D.
     if (preferred != VkFormat.UNDEFINED) {
-        // prefer the requested format with the standard sRGB-nonlinear colorspace (predictable
-        // presentation); only then fall back to the requested format with any colorspace.
+        // sRGB-nonlinear colorspace first (predictable presentation), then the format with any colorspace.
         for (f in formats) {
             if (f.format == preferred && f.colorSpace == VkColorSpaceKHR.SRGB_NONLINEAR_KHR) {
                 out_color_space = f.colorSpace
@@ -230,10 +228,9 @@ def private set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
     delete scis
 }
 
-//! acquire -> record (render pass + user block) -> submit -> present, then wait idle.
-//! returns false if the swapchain is out of date (caller should recreate). When
-//! `dynamic_viewport` is true, a full-extent viewport+scissor is set each frame (pairs
-//! with create_graphics_pipeline_simple(..., dynamic_viewport = true) for resize).
+//! acquire -> record (render pass + user block) -> submit -> present, then wait idle. Returns false if
+//! the swapchain is out of date (caller should recreate). `dynamic_viewport` sets a full-extent
+//! viewport+scissor each frame — pairs with create_graphics_pipeline_simple(..., dynamic_viewport=true).
 def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_pass : RenderPass;
                       pool : CommandPool; sync : FrameSync; clear : VkClearValue; dynamic_viewport : bool = false;
                       blk : block<(cmd : CommandBuffer) : void>) : bool {
@@ -300,12 +297,9 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }
 
-//! acquire -> record a RAW command block (no render pass) -> submit -> present, then wait idle.
-//! The block receives the command buffer, the acquired swapchain `VkImage`, and its index, so the
-//! caller can transition + blit/copy/clear straight into it (e.g. present a compute result without a
-//! graphics pipeline). The image is in an UNDEFINED layout on entry and MUST be left in
-//! `PRESENT_SRC_KHR` by the block. Waits at the transfer stage (the typical blit/copy consumer).
-//! Returns false if the swapchain is out of date (caller should recreate). Sibling of draw_frame.
+//! acquire -> record a RAW command block (no render pass) -> submit -> present, then wait idle. Sibling
+//! of draw_frame; the block gets (cmd, acquired VkImage, index) and MUST leave the image — UNDEFINED on
+//! entry — in `PRESENT_SRC_KHR`. Waits at the transfer stage. Returns false if the swapchain is stale.
 def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool;
                          sync : FrameSync; blk : block<(cmd : CommandBuffer; target : VkImage; image_index : uint) : void>) : bool {
     let dev = boost_value_to_vk(device)

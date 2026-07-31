@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // The #53 batch creators, end to end on a real driver: allocate_descriptor_sets and

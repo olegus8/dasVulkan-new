@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Shared compute resources for both animated Mandelbrot viewers. Unlike vulkan_boost's one-shot
@@ -39,10 +40,9 @@ def public finalize(var mc : MandelCompute) {
     delete mc.memory
 }
 
-//! Build the resident compute resources for `words` (a dasSpirv compute blob binding a storage image2D
-//! at set=0/binding=0 and reading a `float` push constant at offset 0). The image is Rgba8 with STORAGE
-//! (compute write) + TRANSFER_SRC (the blit path) + SAMPLED (the texture path) usage, and starts in the
-//! UNDEFINED layout -- call record_compute each frame to fill it. w and h must be positive multiples of 8.
+//! Build the resident compute resources for `words` (a dasSpirv compute blob binding a storage image2D at
+//! set=0/binding=0 and a `float` push constant at offset 0). Rgba8, STORAGE (compute write) + TRANSFER_SRC
+//! (blit) + SAMPLED (texture); starts UNDEFINED -- record_compute fills it. w/h: positive multiples of 8.
 def public build_mandel_compute(device : Device; phys : VkPhysicalDevice; var words : array<uint>;
                                 w, h : int) : MandelCompute {
     assert(w > 0 && h > 0 && (w % 8) == 0 && (h % 8) == 0,

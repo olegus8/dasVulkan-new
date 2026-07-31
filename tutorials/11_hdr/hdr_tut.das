@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 11 render path: HDR scene -> Karis-style 5-mip bloom -> ACES-tonemapped LDR.
@@ -33,11 +34,9 @@ let public HDR_W = 768
 let public HDR_H = 768
 let HDR_FMT      = VkFormat.R16G16B16A16_SFLOAT
 let DEPTH_FMT    = VkFormat.D32_SFLOAT
-// LDR target is 16-bit float carrying *linear* post-tonemap values in [0,1]. The composite shader
-// does ACES tonemap but does NOT gamma-encode -- gamma is applied later, at the blit-to-sRGB step
-// (the swap target is `B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`; the hardware does the linear->sRGB
-// conversion at blit time, which gives ~12 bits of dark-region precision = no visible banding in
-// HDR smooth gradients). show_hdr.das asserts the chosen swapchain format is one of those two.
+// LDR target holds *linear* post-tonemap values in [0,1]: the composite shader does ACES but does
+// NOT gamma-encode. Gamma comes later and free, from the sRGB swap format at blit time (~12 bits of
+// dark-region precision = no banding). show_hdr.das asserts the swap format is one of the two sRGB.
 let LDR_FMT      = VkFormat.R16G16B16A16_SFLOAT
 // Test readback path uses a sibling 8-bit-sRGB image: composite (linear 16-bit float) is blitted
 // here with hardware sRGB encoding, then copied to a host buffer. Existing tests assume the host
@@ -295,16 +294,14 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     var ldr_extra : VkImageUsageFlags
     ldr_extra.transfer_src = true                   // composite output is blitted (sRGB conversion) to swap or to readback_8bit
     var inscope ldr_color <- build_offscreen_target(device, phys, HDR_W, HDR_H, LDR_FMT, samples1, ldr_extra)
-    // build_offscreen_target unconditionally adds `color_attachment` usage, which we don't need
-    // for the readback intermediate (it's only a blit-dst + blit-src). Build it ourselves with
-    // the minimal usage set so the tutorial stays portable to platforms that report `R8G8B8A8_SRGB`
-    // as supporting `BLIT_*` but not `COLOR_ATTACHMENT` (rare in practice but spec-allowed).
+    // build_offscreen_target always adds `color_attachment`, which the readback intermediate (only
+    // a blit-dst + blit-src) doesn't need. The minimal usage set keeps us portable to drivers that
+    // report `R8G8B8A8_SRGB` as supporting `BLIT_*` but not `COLOR_ATTACHMENT` -- rare, but legal.
     var inscope readback_8bit <- build_readback_image(device, phys, HDR_W, HDR_H, READBACK_FMT)
 
-    // ----- render passes ----- (built with explicit external subpass dependencies so frames
-    // running concurrently in flight in the windowed viewer see each other's writes; the boost
-    // helpers' implicit BOTTOM->TOP dep only orders ops, it doesn't make COLOR_ATTACHMENT_WRITE
-    // visible to a later FRAGMENT_SHADER SHADER_READ).
+    // ----- render passes ----- explicit external subpass deps, so frames in flight in the windowed
+    // viewer see each other's writes: the boost helpers' implicit BOTTOM->TOP dep orders stages but
+    // never makes COLOR_ATTACHMENT_WRITE visible to a later FRAGMENT_SHADER SHADER_READ.
     var inscope rp_scene      <- build_scene_render_pass(device)                                  // HDR sampled by post passes
     var inscope rp_post_clear <- build_post_clear_render_pass(device)                             // bright + downsample
     var inscope rp_post_load  <- build_post_load_render_pass(device)                              // upsample (loadOp=LOAD)
@@ -543,11 +540,9 @@ def private write_sampler(set : VkDescriptorSet; binding : uint; view : ImageVie
     return <- w
 }
 
-//! Minimal-usage offscreen image (TRANSFER_SRC + TRANSFER_DST only, no color_attachment) sized
-//! 1:1 with the LDR target. The boost `build_offscreen_target` helper always sets
-//! `color_attachment` usage; we don't render to this image (only blit through it), and on a
-//! driver that reports `R8G8B8A8_SRGB` as a blit target but not a color attachment that helper
-//! would fail `vkCreateImage`. Build it ourselves with exactly the bits we use.
+//! Minimal-usage offscreen image (TRANSFER_SRC + TRANSFER_DST, no color_attachment), sized 1:1 with
+//! the LDR target. We only blit through it, and `build_offscreen_target` -- which always sets
+//! color_attachment -- would fail `vkCreateImage` where `R8G8B8A8_SRGB` blits but can't be a target.
 def private build_readback_image(device : Device; phys : VkPhysicalDevice;
                                  width, height : int; format : VkFormat) : OffscreenTarget {
     var ici = ImageCreateInfo(
@@ -586,13 +581,9 @@ def private build_readback_image(device : Device; phys : VkPhysicalDevice;
 
 // ===== render passes / pipelines =====
 
-//! Two external subpass dependencies for a "writer" pass: BEFORE -- the previous frame's sampling of
-//! this image must complete before we begin writing; AFTER -- our writes must be visible to the next
-//! pass's fragment-shader read. Vulkan's implicit subpass dependency for finalLayout transitions is
-//! BOTTOM_OF_PIPE -> TOP_OF_PIPE with no access masks -- it orders pipeline stages but does NOT make
-//! `COLOR_ATTACHMENT_WRITE` visible to a later `SHADER_READ`. Without these dependencies, the static
-//! test (which waits on a fence between frames) sees correct rendering, but the windowed viewer
-//! (which lets multiple frames be in flight) shows torn/stale data -- the exact bug Boris hit.
+//! Two external deps for a "writer" pass: BEFORE, the previous frame's sample must finish before we write;
+//! AFTER, our write must reach the next pass's fragment read. The implicit finalLayout dep (BOTTOM->TOP, no
+//! access masks) orders stages only, so frames in flight tear -- a fence-per-frame test hides the gap.
 def private color_write_sample_deps() : array<VkSubpassDependency> {
     var deps : array<VkSubpassDependency>
     var d0 : VkSubpassDependency
@@ -614,10 +605,9 @@ def private color_write_sample_deps() : array<VkSubpassDependency> {
     return <- deps
 }
 
-//! Color+depth render pass for the scene (HDR target). Color cleared, depth cleared. FinalLayout
-//! for color is SHADER_READ_ONLY (post passes sample it) and depth stays in DEPTH_STENCIL_ATTACH
-//! (we never read it back). External deps cover both color and depth — the bright pass samples the
-//! color image, and the next frame's scene write must wait for the previous frame's sample.
+//! Scene render pass (HDR target), color and depth both cleared. Color finalLayout is
+//! SHADER_READ_ONLY (post passes sample it); depth stays DEPTH_STENCIL_ATTACHMENT (never read back).
+//! External deps cover both, so the next frame's scene write waits on the previous frame's sample.
 def private build_scene_render_pass(device : Device) : RenderPass {
     var attaches : array<VkAttachmentDescription>
     var color : VkAttachmentDescription
@@ -649,21 +639,13 @@ def private build_scene_render_pass(device : Device) : RenderPass {
     var subpass : VkSubpassDescription
     subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
     subpass.colorAttachmentCount = 1u
-    // BEGIN dep: wait for previous frame's sample of color before we write (color + depth start fresh)
-    // END dep: ensure color write is visible to bright-pass sample
+    // BEGIN dep waits on the previous frame's color sample; END dep publishes our write to the bright pass.
     var deps <- color_write_sample_deps()
-    // Extend BEGIN dep to also cover the depth aspect.
-    //   dstStage: need BOTH early and late fragment-tests stages -- pipelines without
-    //     `EarlyFragmentTests` SPIR-V execution mode (or with discard/depth export) defer the depth
-    //     write to the late-fragment-tests stage; the dependency must drain either side.
-    //   srcStage: previous frame's depth write also happens at early/late fragment-tests; in
-    //     pipeline order late_fragment_tests runs AFTER fragment_shader, so listing only
-    //     fragment_shader leaves a depth WAW hazard against the previous frame. Add both stages
-    //     plus `depth_stencil_attachment_write` access so the previous-frame depth write is
-    //     actually drained before this frame's clear/write.
+    // src: previous frame's depth write lands at early OR late fragment-tests, so draining fragment_shader alone leaves a WAW hazard.
     deps[0].srcStageMask.early_fragment_tests = true
     deps[0].srcStageMask.late_fragment_tests = true
     deps[0].srcAccessMask.depth_stencil_attachment_write = true
+    // dst: without `EarlyFragmentTests` (or with discard/depth export) our depth write defers to late -- cover both stages.
     deps[0].dstStageMask.early_fragment_tests = true
     deps[0].dstStageMask.late_fragment_tests = true
     deps[0].dstAccessMask.depth_stencil_attachment_write = true
@@ -725,10 +707,9 @@ def private build_post_clear_render_pass(device : Device) : RenderPass {
     return <- b
 }
 
-//! Single-color LOAD render pass for the upsample (additive blend) -- previous mip content is loaded
-//! and the tent-filter contribution from below is blended on top. BEGIN dep covers BOTH the previous
-//! sample AND the previous color write (because loadOp=LOAD reads the previous write); END dep
-//! ensures the new blended content is visible to the next sampler read.
+//! Single-color LOAD render pass for the upsample: the previous mip is loaded and the tent-filter
+//! contribution from below is blended on top. loadOp=LOAD reads that previous write, so the BEGIN dep
+//! covers both it and the previous sample; the END dep publishes the blend to the next sampler read.
 def private build_post_load_render_pass(device : Device) : RenderPass {
     var attach : VkAttachmentDescription
     attach.format = HDR_FMT
@@ -745,8 +726,7 @@ def private build_post_load_render_pass(device : Device) : RenderPass {
     subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
     subpass.colorAttachmentCount = 1u
     var deps <- color_write_sample_deps()
-    // Tighten BEGIN dep: loadOp=LOAD means the previous-pass's color write must be visible AND we
-    // need COLOR_ATTACHMENT_READ access to LOAD the existing pixel into the blend hardware.
+    // loadOp=LOAD: BEGIN dep also needs the previous color write visible, plus COLOR_ATTACHMENT_READ to load the pixel into the blender.
     deps[0].srcStageMask.color_attachment_output = true
     deps[0].srcAccessMask.color_attachment_write = true
     deps[0].dstAccessMask.color_attachment_read = true
@@ -822,11 +802,9 @@ def private build_composite_render_pass(device : Device) : RenderPass {
     return <- b
 }
 
-//! Fullscreen-triangle pipeline with additive blend (srcColor=ONE, dstColor=ONE on RGB; the
-//! colour-write mask drops alpha so the dst alpha is preserved at whatever the bright pass / earlier
-//! downsample wrote). Used for the upsample passes -- each smaller mip's contribution is *added* to
-//! the destination mip, building the energy-pyramid back up. Alpha is never read by any subsequent
-//! pass (the composite shader only reads `.xyz`), but pinning it keeps debug visualisations honest.
+//! Fullscreen-triangle pipeline with additive blend (ONE/ONE on RGB) for the upsample passes: each
+//! smaller mip's contribution is *added* to the destination, rebuilding the energy pyramid. The
+//! colour-write mask drops alpha, pinning dst alpha at the bright-pass value for honest debug views.
 def private build_additive_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
                                     vert : ShaderModule; frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
@@ -860,8 +838,7 @@ def private build_additive_pipeline(device : Device; rp : RenderPass; layout : P
     blend_att.srcColorBlendFactor = VkBlendFactor.ONE
     blend_att.dstColorBlendFactor = VkBlendFactor.ONE
     blend_att.colorBlendOp = VkBlendOp.ADD
-    // Alpha blend state is required even when the colourWriteMask drops alpha (Vulkan reads the
-    // alphaBlend* fields unconditionally) -- ONE/ONE/ADD is the simplest valid choice.
+    // Vulkan reads the alphaBlend* fields even with alpha masked out; ONE/ONE/ADD is the simplest valid fill.
     blend_att.srcAlphaBlendFactor = VkBlendFactor.ONE
     blend_att.dstAlphaBlendFactor = VkBlendFactor.ONE
     blend_att.alphaBlendOp = VkBlendOp.ADD
@@ -956,9 +933,8 @@ def private set_dyn_vp(cmd : CommandBuffer; w, h : int) {
 }
 
 //! Set the shader-side `pc : BloomCtrl` global to the per-pass values. The generated
-//! `hdr_*_push_constants(cmd, layout)` helpers (one per fragment shader that reads `pc`) then
-//! push the full struct via `vkCmdPushConstants` with the right size + stage flag derived from
-//! the shader's `@push_constant` declaration -- no manual size constant, no manual memcpy.
+//! `hdr_*_push_constants(cmd, layout)` helpers (one per fragment shader reading `pc`) then push the
+//! struct with size + stage derived from its `@push_constant` declaration -- no size const, no memcpy.
 def private set_pc(src_rcp_w, src_rcp_h, threshold, soft_knee, bloom_intensity : float) {
     pc.src_rcp = float2(src_rcp_w, src_rcp_h)
     pc.threshold = threshold
@@ -1058,11 +1034,9 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {
     delete comp_clears
 }
 
-//! Per-frame work: update UBO, record the HDR/bloom/composite chain, blit the 16-bit-float linear
-//! LDR target through an sRGB intermediate (hardware applies the linear->sRGB encoding at format
-//! conversion), then copy the sRGB-encoded 8-bit bytes to the host readback buffer. The window
-//! viewer (show_hdr.das) does a similar linear->sRGB blit directly to the swap target -- both
-//! routes get banding-free dark-region precision from the sRGB format.
+//! Per-frame: update UBO, record the HDR/bloom/composite chain, blit the linear 16-bit-float LDR
+//! target through an sRGB intermediate (hardware encodes linear->sRGB at format conversion), then
+//! copy those bytes to the host buffer. show_hdr.das blits the same way straight to the swap target.
 def public render_hdr_frame(var ctx : HdrContext; time, camera_t : float) : array<uint8> {
     update_hdr_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>

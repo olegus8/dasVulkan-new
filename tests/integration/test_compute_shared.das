@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv Phase 10.5 GPU regression gate): the compute tier -- @workgroup shared memory
@@ -77,7 +78,7 @@ def private run_compute_shared() : array<uint> {
     var zeros : array<uint> = [for (_k in range(2)); 0u]
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf0, addr(zero)), null)
-        memcpy(zero, addr<void?>(zeros[0]), int(buf_size))
+        memcpy(zero, addr<void?>(zeros[0]), buf_size)
     }
     vkUnmapMemory(dev, memory)
     delete zeros
@@ -160,7 +161,7 @@ def private run_compute_shared() : array<uint> {
     let mf : VkMemoryMapFlags
     unsafe {
         vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
-        memcpy(addr<void?>(values[0]), mapped, int(buf_size))
+        memcpy(addr<void?>(values[0]), mapped, buf_size)
     }
     vkUnmapMemory(dev, memory)
 

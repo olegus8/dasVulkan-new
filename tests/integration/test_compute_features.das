@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // GPU gates for the dasSpirv compute-tier wave (daslang #3493 + #3494): subgroup reduce/shuffle
@@ -48,6 +49,22 @@ def idp_kernel {
     idp_y[gi] = sdot4(idp_a[gi], idp_b[gi])
 }
 
+var @ssbo @binding = 0 cmt_a : array<float16>   // 16x16 A, row-major
+var @ssbo @binding = 1 cmt_b : array<float16>   // 16x16 B, column-major
+var @ssbo @binding = 2 cmt_c : array<float>     // 16x16 C, column-major
+
+// wg 64 covers both subgroup widths: two 32-wide subgroups compute the same tile (benign), one 64-wide computes it once
+[compute_shader(local_size_x=64, name="cmt_spv")]
+def cmt_kernel {
+    var a : coopmatA_f16_16x16
+    var b : coopmatB_f16_16x16
+    var acc : coopmatAcc_f32_16x16
+    coopmatLoad(a, cmt_a, 0, 16, 0)
+    coopmatLoad(b, cmt_b, 0, 16, 1)
+    acc = coopmatMulAdd(a, b, acc)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+    coopmatStore(acc, cmt_c, 0, 16, 1)
+}
+
 struct GBlockQ8 {
     d  : float16
     qs : int8[32]
@@ -69,13 +86,13 @@ def gq8_kernel {
 }
 
 // ===== a multi-SSBO compute runner =====
-// One host-visible coherent STORAGE buffer per binding, contents uploaded from / read back into
-// `bufs` (byte arrays; bufs[i] -> binding i). `spec` empty = the plain pipeline path;
-// `storage_8_16` picks the feature-enabled device (`int_dot` additionally chains
-// shaderIntegerDotProduct). Callers gate on probe_support() first — requesting a feature the
-// device lacks fails loudly in device creation.
+
+// One host-visible coherent STORAGE buffer per binding, uploaded from / read back into `bufs`
+// (bufs[i] -> binding i). `spec` empty = plain pipeline; `storage_8_16`/`int_dot`/`coopmat` pick the
+// matching feature-enabled device — gate on probe_support(), else device creation fails.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;
-              spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false) {
+              spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false;
+              coopmat : bool = false) {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
@@ -84,8 +101,9 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    var inscope device <- (int_dot ? create_device_storage_8_16_int_dot(phys, gfx)
-                                   : (storage_8_16 ? create_device_storage_8_16(phys, gfx) : create_device(phys, gfx)))
+    var inscope device <- (coopmat ? create_device_storage_8_16_int_dot_coopmat(phys, gfx)
+                                   : (int_dot ? create_device_storage_8_16_int_dot(phys, gfx)
+                                              : (storage_8_16 ? create_device_storage_8_16(phys, gfx) : create_device(phys, gfx))))
     volkLoadDevice(boost_value_to_vk(device))
     let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
@@ -96,7 +114,7 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     memories |> reserve(nb)
     for (bi in range(nb)) {
         var bci : BufferCreateInfo
-        bci.size = uint64(length(bufs[bi]))
+        bci.size = uint64(long_length(bufs[bi]))
         bci.usage.storage_buffer = true
         var buffer <- create_buffer(device, bci)
         var req : VkMemoryRequirements
@@ -111,8 +129,8 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
         var mapped : void? = null
         let mf : VkMemoryMapFlags
         unsafe {
-            vk_check(vkMapMemory(dev, boost_value_to_vk(memory), 0ul, uint64(length(bufs[bi])), mf, addr(mapped)), null)
-            memcpy(mapped, addr<void?>(bufs[bi][0]), length(bufs[bi]))
+            vk_check(vkMapMemory(dev, boost_value_to_vk(memory), 0ul, uint64(long_length(bufs[bi])), mf, addr(mapped)), null)
+            memcpy(mapped, addr<void?>(bufs[bi][0]), long_length(bufs[bi]))
         }
         vkUnmapMemory(dev, boost_value_to_vk(memory))
         buffers |> emplace(buffer)
@@ -150,7 +168,7 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     for (bi in range(nb)) {
         var write = WriteDescriptorSet(dstSet = vk_value_to_boost(raw_set), dstBinding = uint(bi),
             descriptorType = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
-        var binfo = DescriptorBufferInfo(buffer = weak_copy(buffers[bi]), range_ = uint64(length(bufs[bi])))
+        var binfo = DescriptorBufferInfo(buffer = weak_copy(buffers[bi]), range_ = uint64(long_length(bufs[bi])))
         write.pBufferInfo |> push(binfo)
         writes |> emplace(write)
     }
@@ -179,8 +197,8 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
         var mapped : void? = null
         let mf : VkMemoryMapFlags
         unsafe {
-            vk_check(vkMapMemory(dev, boost_value_to_vk(memories[bi]), 0ul, uint64(length(bufs[bi])), mf, addr(mapped)), null)
-            memcpy(addr<void?>(bufs[bi][0]), mapped, length(bufs[bi]))
+            vk_check(vkMapMemory(dev, boost_value_to_vk(memories[bi]), 0ul, uint64(long_length(bufs[bi])), mf, addr(mapped)), null)
+            memcpy(addr<void?>(bufs[bi][0]), mapped, long_length(bufs[bi]))
         }
         vkUnmapMemory(dev, boost_value_to_vk(memories[bi]))
     }
@@ -189,20 +207,31 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
 }
 
 // device-support probe with a throwaway instance (tests soft-skip on false)
-def probe_support() : tuple<subgroups : bool; storage : bool; int_dot : bool> {
+def probe_support() : tuple<subgroups : bool; storage : bool; int_dot : bool; coopmat : bool> {
     if (volkInitialize() != 0) {
-        return (subgroups = false, storage = false, int_dot = false)
+        return (subgroups = false, storage = false, int_dot = false, coopmat = false)
     }
     var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     return (subgroups = subgroup_compute_ops_supported(phys), storage = storage_8_16_supported(phys),
-        int_dot = integer_dot_product_supported(phys))
+        int_dot = integer_dot_product_supported(phys), coopmat = cooperative_matrix_supported(phys))
 }
 
 def u32_of(buf : array<uint8>; i : int) : uint {
     return (uint(buf[i * 4]) | (uint(buf[i * 4 + 1]) << 8u)
         | (uint(buf[i * 4 + 2]) << 16u) | (uint(buf[i * 4 + 3]) << 24u))
+}
+
+def put_half(var buf : array<uint8>; elem : int; v : float) {
+    let bits = packHalf2x16(float2(v, 0.0)) & 0xFFFFu
+    buf[elem * 2] = uint8(bits & 0xFFu)
+    buf[elem * 2 + 1] = uint8((bits >> 8u) & 0xFFu)
+}
+
+def f16_ref(buf : array<uint8>; elem : int) : float {
+    let lo = uint(buf[elem * 2]) | (uint(buf[elem * 2 + 1]) << 8u)
+    return unpackHalf2x16(lo).x
 }
 
 [test]
@@ -337,6 +366,58 @@ def test_storage_8_16_gpu(t : T?) {
         }
     }
     t |> success(bad == 0, "GPU dequant of host-packed block_q8_0 bytes == CPU ({bad} of {nblocks} wrong)")
+    delete words
+    delete bufs
+    delete expected
+}
+
+[test]
+def test_coopmat_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.storage || !sup.int_dot || !sup.coopmat) {
+        feint("device lacks cooperative matrix (+8/16-bit storage, int-dot); skipping\n")
+        return
+    }
+    // A row-major, B/C column-major; small f16-exact values -> the f32 MMA result is exact vs CPU
+    var a_bytes : array<uint8>
+    a_bytes |> resize(256 * 2)
+    var b_bytes : array<uint8>
+    b_bytes |> resize(256 * 2)
+    for (m in range(16)) {
+        for (k in range(16)) {
+            put_half(a_bytes, m * 16 + k, 0.5 * float((m + k) % 4))
+        }
+    }
+    for (n in range(16)) {
+        for (k in range(16)) {
+            put_half(b_bytes, n * 16 + k, 0.25 * float((n * 3 + k) % 5))
+        }
+    }
+    var expected : array<float>
+    expected |> resize(256)
+    for (m in range(16)) {
+        for (n in range(16)) {
+            var acc = 0.0
+            for (k in range(16)) {
+                acc += f16_ref(a_bytes, m * 16 + k) * f16_ref(b_bytes, n * 16 + k)
+            }
+            expected[n * 16 + m] = acc
+        }
+    }
+    var yb : array<uint8>
+    yb |> resize(256 * 4)
+    var bufs <- [ <- a_bytes, <- b_bytes, <- yb]
+    var words <- clone_to_move(cmt_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, 1u, no_spec, true, true, true)
+    var bad = 0
+    for (i in range(256)) {
+        let got = unsafe(reinterpret<float>(u32_of(bufs[2], i)))
+        if (got != expected[i]) {
+            bad++
+        }
+    }
+    t |> success(bad == 0, "16x16 f16 coopmat MMA == CPU f32 reference on every element ({bad} of 256 wrong)")
     delete words
     delete bufs
     delete expected

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
@@ -62,12 +63,9 @@ var private g_readback_cap : uint64 = 0ul
 
 def public vk_live_set_target(device : Device; phys : VkPhysicalDevice; queue : VkQueue;
                               pool : CommandPool; var swap : Swapchain) {
-    //! Register the Vulkan objects screenshot / recording read from. Call once after creating the
-    //! swapchain. `swap` is stored BY POINTER, so an in-place `recreate_swapchain(swap, ...)` is
-    //! picked up automatically (no re-register on resize) -- but `swap` MUST outlive the live module's
-    //! use (live for the app's run); a short-lived / inner-scope swapchain would leave a dangling
-    //! pointer. The owning handles are stored as non-owning weak copies and the raw handles by value;
-    //! this module never destroys them.
+    //! Register the objects screenshot / recording read from; call once after creating the swapchain.
+    //! `swap` is stored BY POINTER — in-place `recreate_swapchain` is picked up free, but `swap` MUST
+    //! outlive the app's run or the pointer dangles. Handles stored weak / by value; never destroyed here.
     g.device = weak_copy(device)
     g.pool   = weak_copy(pool)
     // phys / queue are non-owning raw handles; strip the caller's `let`-constness to store them.
@@ -174,12 +172,9 @@ def private set_live_viewport(cmd : CommandBuffer; width, height : int) {
 
 def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;
                               dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
-    //! acquire -> record (render pass + `blk`) -> submit -> present, on the registered target. A
-    //! drop-in for vulkan_window's `draw_frame` that additionally tracks the presented image and,
-    //! while recording, feeds each frame to the APNG writer. Returns false when acquire or present
-    //! reports the swapchain out-of-date / lost -- the caller should recreate it and keep calling (the
-    //! stored swap reference updates in place). Other GPU errors on submit / queue-wait still panic via
-    //! vk_check (matching the rest of dasVulkan). Call `vk_live_set_target` first.
+    //! acquire -> record (render pass + `blk`) -> submit -> present on the `vk_live_set_target` target;
+    //! drop-in for vulkan_window's `draw_frame` that also tracks the presented image and feeds the APNG
+    //! writer. False = swapchain out-of-date/lost (recreate, keep calling); other GPU errors vk_check-panic.
     if (!g.valid || g.swap == null) {
         panic("vk_live_draw_frame: no target -- call vk_live_set_target first")
     }
@@ -361,14 +356,9 @@ def screenshot(input : JsonValue?) : JsonValue? {
     return JV(ScreenshotResult(saved = fname, width = sc.width, height = sc.height))
 }
 
-// ============================================================================
-// APNG recording
-// ============================================================================
-//
-// Streaming APNG via dasStbImage's stbi_apng_begin/frame/end. Unlike opengl_live (which pipelines an
-// async PBO ring), Vulkan readback here is already synchronous -- vk_live_draw_frame waits idle, so
-// the just-presented image is immediately copyable. record_capture_frame is driven straight from
-// vk_live_draw_frame, so recording "just works" once started, with no per-frame hook.
+// ===== APNG recording =====
+// Streaming APNG via dasStbImage's stbi_apng_begin/frame/end. Vulkan readback here is already
+// synchronous (vk_live_draw_frame waits idle), so record_capture_frame is driven straight off it.
 
 struct private RecorderState {
     writer           : void?     // StbiApngWriter* opaque handle

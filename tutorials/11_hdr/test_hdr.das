@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 11 pixel oracle (lavapipe in CI, real GPU locally). HDR scene + Karis-style 5-level
@@ -63,10 +64,9 @@ def test_hdr_oracle(t : T?) {
     t |> success(max_l >= 200,           "brightest sampled pixel is very bright ({max_l} >= 200, emissive cube + tonemap)")
     t |> success(n_saturated >= 4,       "at least 4 near-saturated samples (emissive cubes survived ACES)")
 
-    // (3) bloom halo: histogram. 1024 sample positions across the central 480x480 region; count
-    // "bright" pixels (luma 80..200) -- the halo around emissive cubes. Without bloom the count
-    // would be dominated by lit non-emissive cubes only. With bloom the halo dilates the bright
-    // count above what scene-only lighting produces.
+    // (3) bloom halo histogram: 1024 sample positions across the central 480x480 region, counting
+    // "bright" pixels (luma 80..200) -- the halo around emissive cubes. Without bloom that count comes
+    // from lit non-emissive cubes alone; bloom's halo dilates it above scene-only lighting.
     var n_bright = 0
     var n_total = 0
     for (j in range(32)) {

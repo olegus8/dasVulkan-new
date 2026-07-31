@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 // The canonical windowed "hello triangle": a GLFW window + Vulkan swapchain,
 // rendering the RGB triangle every frame (FIFO present). Run from the repo root:

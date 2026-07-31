@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 options strict_smart_pointers = true
 
@@ -31,8 +32,7 @@ class VulkanLintVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        // Skip null guards, macro-generated bodies, and macro-synthesized call
-        // sites (whose `at` points outside the containing function's file).
+        // Macro-synthesized call sites are detected by an `at` outside the containing function's file.
         if (expr.func == null || expr.func._module == null
                 || (current_function != null
                     && (current_function.flags.generated

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 09 render path: re-renders the synthwave cube from tutorial 04, but with two new rails
@@ -33,11 +34,10 @@ let MSAA_COLOR_FMT = VkFormat.R8G8B8A8_SRGB   // sRGB: gamma-encode the linear o
 let TEX_DIM = 256
 
 // ===== procedural spiky ball (the AA-test mesh) =====
-// MSAA's edge smoothing is subtle on a cube (12 edges) and dramatic on a dense thin silhouette. This
-// builds a smooth UV-sphere core studded with SPIKE_COUNT flat-shaded pyramidal spikes in Fibonacci-
-// distributed directions -- a sea-urchin whose every spike is a high-frequency silhouette edge that
-// crawls with jaggies at 1x and turns silky under 4x. Vertex format matches the pipeline:
-// pos.xyz (offset 0), uv (12), normal.xyz (20); stride 32.
+
+// MSAA is subtle on a cube (12 edges) and dramatic on a dense thin silhouette, so this builds a UV-sphere
+// core studded with SPIKE_COUNT flat-shaded pyramidal spikes in Fibonacci directions -- a sea-urchin whose
+// every spike crawls with jaggies at 1x and goes silky at 4x. Layout: pos.xyz(0), uv(12), normal.xyz(20), stride 32.
 
 let SPIKE_COUNT    = 150
 let CORE_R         = 0.5f
@@ -234,28 +234,15 @@ def gen_synthwave_texture(w, h : int) : array<uint8> {
 
 // ===== reusable per-frame context =====
 
-//! All MSAA cube state. Carries BOTH the 4x MSAA path (color_msaa + color_resolve + depth_msaa
-//! + pipeline_msaa) AND a 1x rasterization path (color_1x + depth_1x + pipeline_1x) so the
-//! window/recording can toggle between them at runtime without a rebuild.
-//!
-//!   * `color_msaa` -- 4x MSAA color image. pipeline_msaa writes here.
-//!   * `color_resolve` -- 1x color image that receives the resolved (averaged-over-4-samples)
-//!     pixels at end-of-render-pass via the rendering-attachment's resolveImageView.
-//!   * `depth_msaa` -- 4x depth image (sample count must match the 4x color).
-//!   * `color_1x` -- 1x color image used by the no-MSAA path; the final image, blittable.
-//!   * `depth_1x` -- 1x depth image (matching color_1x).
-//!   * `pipeline_msaa` / `pipeline_1x` -- two pipelines built from the same shader modules but
-//!     with rasterizationSamples = 4x or 1x respectively; the per-frame caller picks one via
-//!     `use_msaa : bool`.
-//!
-//! Notably absent: `render_pass` and `framebuffer`. The dynamic-rendering path replaces both with
-//! the inline VkRenderingInfo built inside record_msaa_render.
+//! All MSAA cube state: BOTH the 4x path (color_msaa + color_resolve + depth_msaa + pipeline_msaa) AND a
+//! 1x path (color_1x + depth_1x + pipeline_1x), so window/recording toggle at runtime with no rebuild. No
+//! `render_pass` / `framebuffer` -- dynamic rendering replaces both with an inline VkRenderingInfo.
 struct public MsaaResources {
-    color_msaa    : OffscreenTarget
-    color_resolve : OffscreenTarget
-    depth_msaa    : OffscreenDepth
-    color_1x      : OffscreenTarget
-    depth_1x      : OffscreenDepth
+    color_msaa    : OffscreenTarget //!< 4x MSAA color image; pipeline_msaa writes here
+    color_resolve : OffscreenTarget //!< 1x image receiving the resolved (averaged-over-4) pixels at end-of-pass, via resolveImageView
+    depth_msaa    : OffscreenDepth  //!< 4x depth; sample count must match the 4x color
+    color_1x      : OffscreenTarget //!< 1x color for the no-MSAA path; the final image, blittable
+    depth_1x      : OffscreenDepth  //!< 1x depth, matching color_1x
     vb            : HostBuffer
     ib            : HostBuffer
     ubo           : HostBuffer
@@ -267,8 +254,8 @@ struct public MsaaResources {
     desc_pool     : DescriptorPool
     desc_set      : VkDescriptorSet
     pipe_layout   : PipelineLayout
-    pipeline_msaa : Pipeline
-    pipeline_1x   : Pipeline
+    pipeline_msaa : Pipeline        //!< same shader modules as pipeline_1x, rasterizationSamples = 4x
+    pipeline_1x   : Pipeline        //!< ...and = 1x; the per-frame caller picks one via `use_msaa : bool`
     readback      : HostBuffer
     buf_size      : uint64
     push_size     : uint
@@ -480,10 +467,9 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
     attr_n.format = VkFormat.R32G32B32_SFLOAT
     attr_n.offset = 20u
     vattrs |> push(attr_n)
-    // Two pipelines built from the same shader modules, differing only in rasterizationSamples.
-    // create_graphics_pipeline_dyn takes the format+samples that go into VkPipelineRenderingCreateInfo
-    // on pNext (no VkRenderPass involved). We have to clone the bindings/attrs arrays for the
-    // second build because create_graphics_pipeline_dyn takes them as `var ... array<>`.
+    // Two pipelines from the same shader modules, differing only in rasterizationSamples. The format +
+    // samples go into VkPipelineRenderingCreateInfo on pNext (no VkRenderPass). The bindings/attrs arrays
+    // are cloned for the second build because create_graphics_pipeline_dyn takes them as `var array<>`.
     var vbindings_copy := vbindings
     var vattrs_copy := vattrs
     var inscope pipeline_msaa <- create_graphics_pipeline_dyn(device,
@@ -593,10 +579,9 @@ def public final_image(res : MsaaResources; use_msaa : bool) : Image {
     return use_msaa ? res.color_resolve.image : res.color_1x.image
 }
 
-//! Record the cube draw into the given command buffer using dynamic rendering. `use_msaa` picks
-//! the path: 4x MSAA + resolve, or 1x rasterization. Each path uses its own pipeline + color/depth
-//! attachments built up front -- no rebuild on toggle.
-//! Ends with the chosen final image (resolve or 1x color) in TRANSFER_SRC_OPTIMAL ready for blit.
+//! Record the cube draw with dynamic rendering. `use_msaa` picks 4x MSAA + resolve or 1x raster; each
+//! path has its own pipeline + color/depth attachments built up front, so toggling needs no rebuild.
+//! Ends with the chosen final image (resolve or 1x color) in TRANSFER_SRC_OPTIMAL, ready for blit.
 def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa : bool = true) {
     var to_color : VkAccessFlags
     to_color.color_attachment_write = true
@@ -667,10 +652,9 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
         cmd_draw_indexed(cmd, res.index_count, 1u, 0u, 0, 0u)
     }
 
-    // Mode indicator strip: a second dynamic-rendering "pass" with renderArea narrowed to the
-    // top INDICATOR_H rows of the final image, loadOp=CLEAR with a mode-coloured clear value.
-    // No draw calls -- the clear at begin time IS the indicator. Vivid green = 4x MSAA, vivid
-    // red = 1x. Shows up in both window and recording without a font texture.
+    // Mode indicator strip: a second dynamic-rendering "pass" with renderArea narrowed to the top
+    // INDICATOR_H rows, loadOp=CLEAR with a mode-coloured value. No draw calls -- the clear at begin
+    // time IS the indicator. Green = 4x, red = 1x; works in window and recording with no font texture.
     var indicator_att = RenderingAttachmentInfo(
         imageView = use_msaa ? weak_copy(res.color_resolve.view) : weak_copy(res.color_1x.view),
         imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
