@@ -149,7 +149,7 @@ vkGetMemoryRemoteAddressNV: param pAddress: unknown param type VkRemoteAddressNV
 vkGetPhysicalDeviceCooperativeMatrixPropertiesNV: param pProperties: param type VkCooperativeMatrixPropertiesNV not emitted
 vkWriteResourceDescriptorsEXT: param pResources: param type VkResourceDescriptorInfoEXT not emitted
 
-== boost structs skipped: 57 ==
+== boost structs skipped: 44 ==
 VkAccelerationStructureVersionInfoKHR: member pVersionData (uint8_t x1) not mappable
 VkAllocationCallbacks: member pUserData (void x1) not mappable
 VkBaseInStructure: member pNext (VkBaseInStructure x1) not mappable
@@ -161,14 +161,11 @@ VkConvertCooperativeVectorMatrixInfoNV: member pDstSize (size_t x1) not mappable
 VkCopyImageToMemoryInfo: member pRegions (VkImageToMemoryCopy x1) not mappable
 VkCopyMemoryToImageInfo: member pRegions (VkMemoryToImageCopy x1) not mappable
 VkCuLaunchInfoNVX: member pParams (void x2) not mappable
-VkCuModuleCreateInfoNVX: member pData (void x1) not mappable
 VkDataGraphPipelineConstantARM: member pConstantData (void x1) not mappable
 VkDataGraphPipelinePropertyQueryResultARM: member pData (void x1) not mappable
 VkDataGraphPipelineShaderModuleCreateInfoARM: member pConstants (VkDataGraphPipelineConstantARM x1) not mappable
-VkDebugMarkerObjectTagInfoEXT: member pTag (void x1) not mappable
 VkDebugReportCallbackCreateInfoEXT: member pfnCallback (PFN_vkDebugReportCallbackEXT x0) not mappable
 VkDebugUtilsMessengerCreateInfoEXT: member pfnUserCallback (PFN_vkDebugUtilsMessengerCallbackEXT x0) not mappable
-VkDebugUtilsObjectTagInfoEXT: member pTag (void x1) not mappable
 VkDeviceCreateInfo: member ppEnabledLayerNames (char x2) not mappable
 VkDeviceDeviceMemoryReportCreateInfoEXT: member pfnUserCallback (PFN_vkDeviceMemoryReportCallbackEXT x0) not mappable
 VkDeviceFaultDebugInfoKHR: member pVendorBinaryData (void x1) not mappable
@@ -176,15 +173,11 @@ VkDeviceFaultInfoEXT: member pAddressInfos (VkDeviceFaultAddressInfoKHR x1) not 
 VkDeviceFaultShaderAbortMessageInfoKHR: member pMessageData (void x1) not mappable
 VkDirectDriverLoadingInfoLUNARG: member pfnGetInstanceProcAddr (PFN_vkGetInstanceProcAddrLUNARG x0) not mappable
 VkDirectDriverLoadingListLUNARG: member pDrivers (VkDirectDriverLoadingInfoLUNARG x1) not mappable
-VkHdrVividDynamicMetadataHUAWEI: member pDynamicMetadata (void x1) not mappable
-VkHostAddressRangeConstEXT: member address (void x1) not mappable
 VkHostAddressRangeEXT: member address (void x1) not mappable
 VkImageToMemoryCopy: member pHostPointer (void x1) not mappable
 VkImportMemoryHostPointerInfoEXT: member pHostPointer (void x1) not mappable
 VkInitializePerformanceApiInfoINTEL: member pUserData (void x1) not mappable
 VkInstanceCreateInfo: member ppEnabledLayerNames (char x2) not mappable
-VkLayerSettingEXT: member pValues (void x1) not mappable
-VkLayerSettingsCreateInfoEXT: member pSettings (VkLayerSettingEXT x1) not mappable
 VkMemoryMapPlacedInfoEXT: member pPlacedAddress (void x1) not mappable
 VkMemoryToImageCopy: member pHostPointer (void x1) not mappable
 VkMicromapVersionInfoEXT: member pVersionData (uint8_t x1) not mappable
@@ -193,22 +186,16 @@ VkOpticalFlowSessionCreatePrivateDataInfoNV: member pPrivateData (void x1) not m
 VkPhysicalDeviceGroupProperties: member physicalDevices (VkPhysicalDevice x0) not mappable
 VkPipelineBinaryDataKHR: member pData (void x1) not mappable
 VkPipelineBinaryKeysAndDataKHR: member pPipelineBinaryData (VkPipelineBinaryDataKHR x1) not mappable
-VkPipelineCacheCreateInfo: member pInitialData (void x1) not mappable
 VkPipelineCreationFeedbackCreateInfo: member pPipelineCreationFeedback (VkPipelineCreationFeedback x1) not mappable
 VkPipelineExecutableInternalRepresentationKHR: member pData (void x1) not mappable
-VkPushConstantsInfo: member pValues (void x1) not mappable
 VkPushDescriptorSetWithTemplateInfo: member pData (void x1) not mappable
 VkQueryLowLatencySupportNV: member pQueriedLowLatencyData (void x1) not mappable
 VkRenderPassBeginInfo: member pClearValues (VkClearValue x1) not mappable
 VkRenderPassCreationFeedbackCreateInfoEXT: member pRenderPassFeedback (VkRenderPassCreationFeedbackInfoEXT x1) not mappable
 VkRenderPassSubpassFeedbackCreateInfoEXT: member pSubpassFeedback (VkRenderPassSubpassFeedbackInfoEXT x1) not mappable
-VkShaderCreateInfoEXT: member pCode (void x1) not mappable
 VkShaderModuleCreateInfo: member pCode (uint32_t x1) not mappable
-VkSpecializationInfo: member pData (void x1) not mappable
-VkValidationCacheCreateInfoEXT: member pInitialData (void x1) not mappable
-VkWriteDescriptorSetInlineUniformBlock: member pData (void x1) not mappable
 
-== boost commands skipped: 89 ==
+== boost commands skipped: 82 ==
 vkCmdBeginCustomResolveEXT: pointer param pBeginCustomResolveInfo (VkBeginCustomResolveInfoEXT) not mappable
 vkCmdBeginRenderPass2: pointer param pRenderPassBegin (VkRenderPassBeginInfo) not mappable
 vkCmdBeginRenderPass: pointer param pRenderPassBegin (VkRenderPassBeginInfo) not mappable
@@ -227,7 +214,6 @@ vkCmdCuLaunchKernelNVX: pointer param pLaunchInfo (VkCuLaunchInfoNVX) not mappab
 vkCmdDispatchDataGraphARM: pointer param pInfo (VkDataGraphPipelineDispatchInfoARM) not mappable
 vkCmdDrawMultiIndexedEXT: pointer param pVertexOffset (int32_t) not mappable
 vkCmdEndRendering2KHR: pointer param pRenderingEndInfo (VkRenderingEndInfoKHR) not mappable
-vkCmdPushConstants2: pointer param pPushConstantsInfo (VkPushConstantsInfo) not mappable
 vkCmdPushConstants: pointer param pValues (void) not mappable
 vkCmdPushDescriptorSetWithTemplate2: pointer param pPushDescriptorSetWithTemplateInfo (VkPushDescriptorSetWithTemplateInfo) not mappable
 vkCmdPushDescriptorSetWithTemplate: pointer param pData (void) not mappable
@@ -243,7 +229,6 @@ vkCmdUpdateMemoryKHR: pointer param pData (void) not mappable
 vkConvertCooperativeVectorMatrixNV: pointer param pInfo (VkConvertCooperativeVectorMatrixInfoNV) not mappable
 vkCopyImageToMemory: pointer param pCopyImageToMemoryInfo (VkCopyImageToMemoryInfo) not mappable
 vkCopyMemoryToImage: pointer param pCopyMemoryToImageInfo (VkCopyMemoryToImageInfo) not mappable
-vkDebugMarkerSetObjectTagEXT: pointer param pTagInfo (VkDebugMarkerObjectTagInfoEXT) not mappable
 vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM: pointer param pCounters (VkPerformanceCounterARM) not mappable
 vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR: pointer param pCounters (VkPerformanceCounterKHR) not mappable
 vkGetAccelerationStructureHandleNV: pointer param pData (void) not mappable
@@ -269,15 +254,12 @@ vkGetInstanceProcAddr: return type PFN_vkVoidFunction not mappable
 vkGetMemoryHostPointerPropertiesEXT: pointer param pHostPointer (void) not mappable
 vkGetMemoryRemoteAddressNV: out param pAddress (VkRemoteAddressNV) not a ref-mappable value
 vkGetPhysicalDeviceCooperativeMatrixPropertiesNV: pointer param pProperties (VkCooperativeMatrixPropertiesNV) not mappable
-vkGetPipelineBinaryDataKHR: pointer param pPipelineBinaryData (void) not mappable
-vkGetPipelineCacheData: pointer param pData (void) not mappable
+vkGetPipelineBinaryDataKHR: out param pPipelineBinaryKey beside an enumerated array
 vkGetPipelineKeyKHR: pointer param pPipelineCreateInfo (VkPipelineCreateInfoKHR) not mappable
 vkGetQueryPoolResults: pointer param pData (void) not mappable
 vkGetRayTracingCaptureReplayShaderGroupHandlesKHR: pointer param pData (void) not mappable
 vkGetRayTracingShaderGroupHandlesKHR: pointer param pData (void) not mappable
 vkGetSamplerOpaqueCaptureDescriptorDataEXT: pointer param pData (void) not mappable
-vkGetShaderBinaryDataEXT: pointer param pData (void) not mappable
-vkGetShaderInfoAMD: pointer param pInfo (void) not mappable
 vkGetShaderInstrumentationValuesARM: pointer param pMetricValues (void) not mappable
 vkGetShaderModuleCreateInfoIdentifierEXT: pointer param pCreateInfo (VkShaderModuleCreateInfo) not mappable
 vkGetSwapchainTimeDomainPropertiesEXT: out param pTimeDomainsCounter (uint64_t) not a ref-mappable value
@@ -285,14 +267,12 @@ vkGetSwapchainTimingPropertiesEXT: out param pSwapchainTimingPropertiesCounter (
 vkGetTensorOpaqueCaptureDataARM: pointer param pDatas (VkHostAddressRangeEXT) not mappable
 vkGetTensorOpaqueCaptureDescriptorDataARM: pointer param pData (void) not mappable
 vkGetTensorViewOpaqueCaptureDescriptorDataARM: pointer param pData (void) not mappable
-vkGetValidationCacheDataEXT: pointer param pData (void) not mappable
 vkInitializePerformanceApiINTEL: pointer param pInitializeInfo (VkInitializePerformanceApiInfoINTEL) not mappable
 vkMapMemory2: param ppData (void x2) not mappable
 vkMapMemory: param ppData (void x2) not mappable
 vkRegisterDeviceEventEXT: pointer param pAllocator (VkAllocationCallbacks) not mappable
 vkRegisterDisplayEventEXT: pointer param pAllocator (VkAllocationCallbacks) not mappable
 vkReleaseCapturedPipelineDataKHR: pointer param pAllocator (VkAllocationCallbacks) not mappable
-vkSetDebugUtilsObjectTagEXT: pointer param pTagInfo (VkDebugUtilsObjectTagInfoEXT) not mappable
 vkUpdateDescriptorSetWithTemplate: pointer param pData (void) not mappable
 vkWriteAccelerationStructuresPropertiesKHR: pointer param pData (void) not mappable
 vkWriteMicromapsPropertiesEXT: pointer param pData (void) not mappable

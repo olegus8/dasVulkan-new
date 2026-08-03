@@ -110,6 +110,17 @@ def create_image_view(device : Device; create_info : ImageViewCreateInfo; var re
     return <- b
 }
 
+def create_pipeline_cache(device : Device; var create_info : PipelineCacheCreateInfo; var result : VkResult? = null) : PipelineCache {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkPipelineCache
+    vk_check(vkCreatePipelineCache(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_graphics_pipelines(device : Device; pipelineCache : PipelineCache; var create_infos : array<GraphicsPipelineCreateInfo>; var result : VkResult? = null) : array<Pipeline> {
     let n = length(create_infos)
     var vkraw : array<VkGraphicsPipelineCreateInfo>
@@ -399,6 +410,17 @@ def create_sampler_ycbcr_conversion(device : Device; create_info : SamplerYcbcrC
     return <- b
 }
 
+def create_validation_cache_e_x_t(device : Device; var create_info : ValidationCacheCreateInfoEXT; var result : VkResult? = null) : ValidationCacheEXT {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkValidationCacheEXT
+    vk_check(vkCreateValidationCacheEXT(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_render_pass2(device : Device; var create_info : RenderPassCreateInfo2; var result : VkResult? = null) : RenderPass {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -519,6 +541,17 @@ def create_video_session_parameters_k_h_r(device : Device; create_info : VideoSe
     return <- b
 }
 
+def create_cu_module_n_v_x(device : Device; var create_info : CuModuleCreateInfoNVX; var result : VkResult? = null) : CuModuleNVX {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkCuModuleNVX
+    vk_check(vkCreateCuModuleNVX(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_cu_function_n_v_x(device : Device; create_info : CuFunctionCreateInfoNVX; var result : VkResult? = null) : CuFunctionNVX {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }
@@ -550,6 +583,33 @@ def create_optical_flow_session_n_v(device : Device; create_info : OpticalFlowSe
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
     return <- b
+}
+
+def create_shaders_e_x_t(device : Device; var create_infos : array<ShaderCreateInfoEXT>; var result : VkResult? = null) : array<ShaderEXT> {
+    let n = length(create_infos)
+    var vkraw : array<VkShaderCreateInfoEXT>
+    vkraw |> resize(n)
+    for (vki in range(n)) {
+        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    }
+    var vkout : array<VkShaderEXT>
+    vkout |> resize(n)
+    if (n > 0) {
+        unsafe {
+            vk_check(vkCreateShadersEXT(boost_value_to_vk(device), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
+        }
+    }
+    for (vkv in create_infos) { vk_view_destroy(vkv) }
+    delete vkraw
+    var blist : array<ShaderEXT>
+    blist |> resize(n)
+    for (i in range(n)) {
+        var b = vk_value_to_boost(vkout[i])
+        b._needs_delete = true
+        b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+        blist[i] = b
+    }
+    return <- blist
 }
 
 def create_external_compute_queue_n_v(device : Device; create_info : ExternalComputeQueueCreateInfoNV; var result : VkResult? = null) : ExternalComputeQueueNV {
