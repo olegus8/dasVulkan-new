@@ -331,6 +331,19 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
     }
     // arrays: a len that names a count member
     let hasvkcount = !empty(m.len) && key_exists(counts, m.len)
+    // a const void payload -> array<uint8>: vk.xml gives such a member a len,
+    // and that len is always its size in BYTES.  The raw slot stays void?, so
+    // the scratch pointer is reinterpreted the way a flags array's is.  Only
+    // const: a non-const void payload is written by the call, and the scratch
+    // a view copies into never reaches the caller back.
+    if (hasvkcount && m.num_ptrs == 1 && m.is_const && tn == "void") {
+        bf.kind = FieldKind.arr_scalar
+        bf.count_member = m.len
+        bf.boost_type = "array<uint8>"
+        bf.elem_vktype = "uint8"
+        bf.arr_raw_ptr = "void?"
+        return <- bf
+    }
     if (hasvkcount && m.num_ptrs == 1 && tn != "void" && tn != "char") {
         bf.count_member = m.len
         // "optional" here means this array's length is NOT the authoritative count:
@@ -570,17 +583,26 @@ def private count_authoritative_array(vs : ViewStruct; raw_count : string) : str
     return first
 }
 
-//! uint expression for the largest length among `arrs` (fallback for an independent count)
-def private len_max_expr(arrs : array<string>) : string {
-    return "0u" if (empty(arrs))
+//! one array field's length as `count_type`: the cast is the count member's own
+//! type, since das promotes nothing.  A 64-bit count takes long_length -- widening
+//! length's own 32-bit result gets past no limit it already hit (LINT017).
+def private count_len_expr(count_type, arr : string) : string {
+    let bits64 = count_type == "uint64" || count_type == "int64"
+    return "{count_type}({bits64 ? "long_length" : "length"}(b.{arr}))"
+}
+
+//! `count_type` expression for the largest length among `arrs` (fallback for an
+//! independent count)
+def private len_max_expr(arrs : array<string>; count_type : string) : string {
+    return "{count_type}(0)" if (empty(arrs))
     let extra = length(arrs) - 1
     return build_string() $(var w) {
         for (_i in range(extra)) {
             w |> write("max(")
         }
-        w |> write("uint(length(b.{arrs[0]}))")
+        w |> write(count_len_expr(count_type, arrs[0]))
         for (i in range(1, length(arrs))) {
-            w |> write(", uint(length(b.{arrs[i]})))")
+            w |> write(", {count_len_expr(count_type, arrs[i])})")
         }
     }
 }
@@ -683,11 +705,11 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                 let cm = das_safe_name(bf.raw_name)
                 if (bf.kind == FieldKind.count_independent) {
                     let arrs <- count_referencing_arrays(vs, bf.raw_name)
-                    fprint(f, "    vk.{cm} = b.{bf.name} != 0u ? b.{bf.name} : {len_max_expr(arrs)}\n")
+                    fprint(f, "    vk.{cm} = b.{bf.name} != 0u ? b.{bf.name} : {len_max_expr(arrs, bf.boost_type)}\n")
                 } elif (bf.kind == FieldKind.erase) {
                     let auth = count_authoritative_array(vs, bf.raw_name)
                     if (!empty(auth)) {
-                        fprint(f, "    vk.{cm} = uint(length(b.{auth}))\n")
+                        fprint(f, "    vk.{cm} = {count_len_expr(bf.boost_type, auth)}\n")
                     }
                 }
             }
@@ -1052,6 +1074,7 @@ struct CmdPlan {
     has_out_array : bool
     out_array_pname : string
     out_array_elem : string        //! raw elem type (array<elem>)
+    out_array_is_bytes : bool      //! enumerate writes a void payload -> array<uint8>
     count_query_pname : string
     count_is_64 : bool             //! enumerate count is size_t (uint64) not uint32
     direct_ret : string            //! non-void non-VkResult scalar return ("" if none)
@@ -1105,16 +1128,20 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
         param_names |> insert(p.name)
     }
     // detect the two-call enumerate: a non-const uint32_t*/size_t* count whose name is
-    // the len= of another non-const, non-void pointer param (the output array)
+    // the len= of another non-const pointer param (the output array).  A void payload
+    // is written by the byte, so its count is a byte count and it comes back as
+    // array<uint8>.
     var enum_count = -1
     var enum_array = -1
     for (p, i in c.params, range(n)) {
         if (p.num_ptrs == 1 && !p.is_const && (p.type_name == "uint32_t" || p.type_name == "size_t")) {
             for (q, j in c.params, range(n)) {
+                let bytes = q.type_name == "void" && q.num_ptrs == 1
                 if (j != i && !empty(q.len) && q.len == p.name && q.num_ptrs >= 1 && !q.is_const &&
-                        q.type_name != "void" && mappable_value_type(reg, em, q.type_name)) {
+                        (bytes || (q.type_name != "void" && mappable_value_type(reg, em, q.type_name)))) {
                     enum_count = i
                     enum_array = j
+                    plan.out_array_is_bytes = bytes
                     plan.count_is_64 = p.type_name == "size_t"
                 }
             }
@@ -1142,7 +1169,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             a.kind = CmdArgKind.out_array
             plan.has_out_array = true
             plan.out_array_pname = a.pname
-            plan.out_array_elem = p.type_name
+            plan.out_array_elem = plan.out_array_is_bytes ? "uint8" : p.type_name
             plan.args |> emplace(a)
             continue
         }
@@ -1267,6 +1294,13 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
     if (out_value_count > 1) {
         plan.emittable = false
         plan.skip = "{c.name}: {out_value_count} out params (only single out supported)"
+        return <- plan
+    }
+    // a two-call enumerate returns its array, which leaves nowhere to put a second
+    // out param
+    if (plan.has_out_array && plan.has_out_value) {
+        plan.emittable = false
+        plan.skip = "{c.name}: out param {plan.out_value_pname} beside an enumerated array"
         return <- plan
     }
     // link each erasevkcount to the array param it counts (-> uint(length(arr)))
@@ -1417,7 +1451,8 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 // two-call enumerate. Both calls return VkResult when is_result: wrap
                 // each in vk_check so OOM / VK_INCOMPLETE surfaces through `result` and
                 // doesn't silently produce a truncated array.
-                fprint(f, "    var vkcount = {plan.count_is_64 ? "0ul" : "0u"}\n")
+                let zero = plan.count_is_64 ? "0ul" : "0u"
+                fprint(f, "    var vkcount = {zero}\n")
                 let result_arg = plan.is_result ? ", result" : ""
                 let lhs_open = plan.is_result ? "vk_check(" : ""
                 let lhs_close = plan.is_result ? "{result_arg})" : ""
@@ -1431,10 +1466,13 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "        vklist[vki] = {plan.out_array_elem}()\n")
                     fprint(f, "    {CB}\n")
                 }
-                fprint(f, "    if (vkcount > 0u) {OB}\n")
+                fprint(f, "    if (vkcount > {zero}) {OB}\n")
                 fprint(f, "        unsafe {OB}\n")
                 fprint(f, "            {lhs_open}{plan.command}(")
-                emit_call_args(f, plan, "addr(vklist[0])")
+                // already inside `unsafe`, so the byte payload's cast to the raw
+                // void? slot takes no wrap of its own
+                emit_call_args(f, plan, plan.out_array_is_bytes
+                    ? "addr<void?>(vklist[0])" : "addr(vklist[0])")
                 fprint(f, "){lhs_close}\n")
                 fprint(f, "        {CB}\n")
                 fprint(f, "    {CB}\n")

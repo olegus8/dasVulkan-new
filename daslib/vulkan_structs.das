@@ -1296,24 +1296,67 @@ def vk_view_destroy(_b : SpecializationMapEntry) {
     pass
 }
 
+struct SpecializationInfo {
+    pMapEntries : array<SpecializationMapEntry>
+    pData : array<uint8>
+    _vk_view_pMapEntries : array<VkSpecializationMapEntry>
+    _vk_view_pData : array<uint8>
+}
+def vk_view_create_unsafe(var b : SpecializationInfo) : VkSpecializationInfo {
+    var vk = VkSpecializationInfo()
+    b._vk_view_pMapEntries |> resize(length(b.pMapEntries))
+    for (vki in range(length(b.pMapEntries))) {
+        b._vk_view_pMapEntries[vki] = vk_view_create_unsafe(b.pMapEntries[vki])
+    }
+    vk.pMapEntries = array_addr(b._vk_view_pMapEntries)
+    b._vk_view_pData := b.pData
+    vk.pData = unsafe(reinterpret<void?>(array_addr(b._vk_view_pData)))
+    vk.mapEntryCount = uint(length(b.pMapEntries))
+    vk.dataSize = uint64(long_length(b.pData))
+    return <- vk
+}
+def vk_view_destroy(var b : SpecializationInfo) {
+    for (vki in range(length(b.pMapEntries))) {
+        vk_view_destroy(b.pMapEntries[vki])
+    }
+    delete b._vk_view_pMapEntries
+    delete b._vk_view_pData
+}
+
 struct PipelineShaderStageCreateInfo {
     next : void?
     flags : VkPipelineShaderStageCreateFlags
     stage : VkShaderStageFlags
     module_ : ShaderModule
     pName : string
+    pSpecializationInfo : SpecializationInfo?
+    _vk_view_pSpecializationInfo_value : SpecializationInfo
+    _vk_view_pSpecializationInfo_vk : VkSpecializationInfo
+    _vk_view_pSpecializationInfo_present : bool
 }
-def vk_view_create_unsafe(b : PipelineShaderStageCreateInfo) : VkPipelineShaderStageCreateInfo {
+def vk_view_create_unsafe(var b : PipelineShaderStageCreateInfo) : VkPipelineShaderStageCreateInfo {
     var vk = VkPipelineShaderStageCreateInfo()
     vk.pNext = b.next
     vk.flags = b.flags
     vk.stage = b.stage
     vk.module_ = boost_value_to_vk(b.module_)
     vk.pName = b.pName
+    unsafe {
+        if (b.pSpecializationInfo != null) {
+            b._vk_view_pSpecializationInfo_value := *b.pSpecializationInfo
+            b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(b._vk_view_pSpecializationInfo_value)
+            b._vk_view_pSpecializationInfo_present = true
+            vk.pSpecializationInfo = addr(b._vk_view_pSpecializationInfo_vk)
+            b.pSpecializationInfo = null
+        }
+    }
     return <- vk
 }
-def vk_view_destroy(_b : PipelineShaderStageCreateInfo) {
-    pass
+def vk_view_destroy(var b : PipelineShaderStageCreateInfo) {
+    if (b._vk_view_pSpecializationInfo_present) {
+        vk_view_destroy(b._vk_view_pSpecializationInfo_value)
+        b._vk_view_pSpecializationInfo_present = false
+    }
 }
 
 struct ComputePipelineCreateInfo {
@@ -1892,6 +1935,25 @@ def vk_view_destroy(var b : GraphicsPipelineCreateInfo) {
         vk_view_destroy(b._vk_view_pDynamicState_value)
         b._vk_view_pDynamicState_present = false
     }
+}
+
+struct PipelineCacheCreateInfo {
+    next : void?
+    flags : VkPipelineCacheCreateFlags
+    pInitialData : array<uint8>
+    _vk_view_pInitialData : array<uint8>
+}
+def vk_view_create_unsafe(var b : PipelineCacheCreateInfo) : VkPipelineCacheCreateInfo {
+    var vk = VkPipelineCacheCreateInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pInitialData := b.pInitialData
+    vk.pInitialData = unsafe(reinterpret<void?>(array_addr(b._vk_view_pInitialData)))
+    vk.initialDataSize = uint64(long_length(b.pInitialData))
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineCacheCreateInfo) {
+    delete b._vk_view_pInitialData
 }
 
 struct PipelineCacheHeaderVersionOne {
@@ -3353,6 +3415,50 @@ def vk_view_destroy(var b : ValidationFeaturesEXT) {
     delete b._vk_view_pDisabledValidationFeatures
 }
 
+struct LayerSettingsCreateInfoEXT {
+    next : void?
+    pSettings : array<LayerSettingEXT>
+    _vk_view_pSettings : array<VkLayerSettingEXT>
+}
+def vk_view_create_unsafe(var b : LayerSettingsCreateInfoEXT) : VkLayerSettingsCreateInfoEXT {
+    var vk = VkLayerSettingsCreateInfoEXT()
+    vk.pNext = b.next
+    b._vk_view_pSettings |> resize(length(b.pSettings))
+    for (vki in range(length(b.pSettings))) {
+        b._vk_view_pSettings[vki] = vk_view_create_unsafe(b.pSettings[vki])
+    }
+    vk.pSettings = array_addr(b._vk_view_pSettings)
+    vk.settingCount = uint(length(b.pSettings))
+    return <- vk
+}
+def vk_view_destroy(var b : LayerSettingsCreateInfoEXT) {
+    for (vki in range(length(b.pSettings))) {
+        vk_view_destroy(b.pSettings[vki])
+    }
+    delete b._vk_view_pSettings
+}
+
+struct LayerSettingEXT {
+    pLayerName : string
+    pSettingName : string
+    type_ : VkLayerSettingTypeEXT
+    pValues : array<uint8>
+    _vk_view_pValues : array<uint8>
+}
+def vk_view_create_unsafe(var b : LayerSettingEXT) : VkLayerSettingEXT {
+    var vk = VkLayerSettingEXT()
+    vk.pLayerName = b.pLayerName
+    vk.pSettingName = b.pSettingName
+    vk.type_ = b.type_
+    b._vk_view_pValues := b.pValues
+    vk.pValues = unsafe(reinterpret<void?>(array_addr(b._vk_view_pValues)))
+    vk.valueCount = uint(length(b.pValues))
+    return <- vk
+}
+def vk_view_destroy(var b : LayerSettingEXT) {
+    delete b._vk_view_pValues
+}
+
 struct PipelineRasterizationStateRasterizationOrderAMD {
     next : void?
     rasterizationOrder : VkRasterizationOrderAMD
@@ -3383,6 +3489,29 @@ def vk_view_create_unsafe(b : DebugMarkerObjectNameInfoEXT) : VkDebugMarkerObjec
 }
 def vk_view_destroy(_b : DebugMarkerObjectNameInfoEXT) {
     pass
+}
+
+struct DebugMarkerObjectTagInfoEXT {
+    next : void?
+    objectType : VkDebugReportObjectTypeEXT
+    object : uint64
+    tagName : uint64
+    pTag : array<uint8>
+    _vk_view_pTag : array<uint8>
+}
+def vk_view_create_unsafe(var b : DebugMarkerObjectTagInfoEXT) : VkDebugMarkerObjectTagInfoEXT {
+    var vk = VkDebugMarkerObjectTagInfoEXT()
+    vk.pNext = b.next
+    vk.objectType = b.objectType
+    vk.object = b.object
+    vk.tagName = b.tagName
+    b._vk_view_pTag := b.pTag
+    vk.pTag = unsafe(reinterpret<void?>(array_addr(b._vk_view_pTag)))
+    vk.tagSize = uint64(long_length(b.pTag))
+    return <- vk
+}
+def vk_view_destroy(var b : DebugMarkerObjectTagInfoEXT) {
+    delete b._vk_view_pTag
 }
 
 struct DebugMarkerMarkerInfoEXT {
@@ -5716,6 +5845,23 @@ def vk_view_destroy(_b : HdrMetadataEXT) {
     pass
 }
 
+struct HdrVividDynamicMetadataHUAWEI {
+    next : void?
+    pDynamicMetadata : array<uint8>
+    _vk_view_pDynamicMetadata : array<uint8>
+}
+def vk_view_create_unsafe(var b : HdrVividDynamicMetadataHUAWEI) : VkHdrVividDynamicMetadataHUAWEI {
+    var vk = VkHdrVividDynamicMetadataHUAWEI()
+    vk.pNext = b.next
+    b._vk_view_pDynamicMetadata := b.pDynamicMetadata
+    vk.pDynamicMetadata = unsafe(reinterpret<void?>(array_addr(b._vk_view_pDynamicMetadata)))
+    vk.dynamicMetadataSize = uint64(long_length(b.pDynamicMetadata))
+    return <- vk
+}
+def vk_view_destroy(var b : HdrVividDynamicMetadataHUAWEI) {
+    delete b._vk_view_pDynamicMetadata
+}
+
 struct DisplayNativeHdrSurfaceCapabilitiesAMD {
     next : void?
     localDimmingSupport : uint
@@ -6908,6 +7054,23 @@ def vk_view_destroy(_b : PhysicalDeviceInlineUniformBlockProperties) {
     pass
 }
 
+struct WriteDescriptorSetInlineUniformBlock {
+    next : void?
+    pData : array<uint8>
+    _vk_view_pData : array<uint8>
+}
+def vk_view_create_unsafe(var b : WriteDescriptorSetInlineUniformBlock) : VkWriteDescriptorSetInlineUniformBlock {
+    var vk = VkWriteDescriptorSetInlineUniformBlock()
+    vk.pNext = b.next
+    b._vk_view_pData := b.pData
+    vk.pData = unsafe(reinterpret<void?>(array_addr(b._vk_view_pData)))
+    vk.dataSize = uint(length(b.pData))
+    return <- vk
+}
+def vk_view_destroy(var b : WriteDescriptorSetInlineUniformBlock) {
+    delete b._vk_view_pData
+}
+
 struct DescriptorPoolInlineUniformBlockCreateInfo {
     next : void?
     maxInlineUniformBlockBindings : uint
@@ -6961,6 +7124,25 @@ def vk_view_create_unsafe(var b : ImageFormatListCreateInfo) : VkImageFormatList
 }
 def vk_view_destroy(var b : ImageFormatListCreateInfo) {
     delete b._vk_view_pViewFormats
+}
+
+struct ValidationCacheCreateInfoEXT {
+    next : void?
+    flags : VkValidationCacheCreateFlagsEXT
+    pInitialData : array<uint8>
+    _vk_view_pInitialData : array<uint8>
+}
+def vk_view_create_unsafe(var b : ValidationCacheCreateInfoEXT) : VkValidationCacheCreateInfoEXT {
+    var vk = VkValidationCacheCreateInfoEXT()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    b._vk_view_pInitialData := b.pInitialData
+    vk.pInitialData = unsafe(reinterpret<void?>(array_addr(b._vk_view_pInitialData)))
+    vk.initialDataSize = uint64(long_length(b.pInitialData))
+    return <- vk
+}
+def vk_view_destroy(var b : ValidationCacheCreateInfoEXT) {
+    delete b._vk_view_pInitialData
 }
 
 struct ShaderModuleValidationCacheCreateInfoEXT {
@@ -7539,6 +7721,29 @@ def vk_view_create_unsafe(b : DebugUtilsObjectNameInfoEXT) : VkDebugUtilsObjectN
 }
 def vk_view_destroy(_b : DebugUtilsObjectNameInfoEXT) {
     pass
+}
+
+struct DebugUtilsObjectTagInfoEXT {
+    next : void?
+    objectType : VkObjectType
+    objectHandle : uint64
+    tagName : uint64
+    pTag : array<uint8>
+    _vk_view_pTag : array<uint8>
+}
+def vk_view_create_unsafe(var b : DebugUtilsObjectTagInfoEXT) : VkDebugUtilsObjectTagInfoEXT {
+    var vk = VkDebugUtilsObjectTagInfoEXT()
+    vk.pNext = b.next
+    vk.objectType = b.objectType
+    vk.objectHandle = b.objectHandle
+    vk.tagName = b.tagName
+    b._vk_view_pTag := b.pTag
+    vk.pTag = unsafe(reinterpret<void?>(array_addr(b._vk_view_pTag)))
+    vk.tagSize = uint64(long_length(b.pTag))
+    return <- vk
+}
+def vk_view_destroy(var b : DebugUtilsObjectTagInfoEXT) {
+    delete b._vk_view_pTag
 }
 
 struct DebugUtilsLabelEXT {
@@ -16330,6 +16535,23 @@ def vk_view_destroy(_b : PhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR) {
     pass
 }
 
+struct CuModuleCreateInfoNVX {
+    next : void?
+    pData : array<uint8>
+    _vk_view_pData : array<uint8>
+}
+def vk_view_create_unsafe(var b : CuModuleCreateInfoNVX) : VkCuModuleCreateInfoNVX {
+    var vk = VkCuModuleCreateInfoNVX()
+    vk.pNext = b.next
+    b._vk_view_pData := b.pData
+    vk.pData = unsafe(reinterpret<void?>(array_addr(b._vk_view_pData)))
+    vk.dataSize = uint64(long_length(b.pData))
+    return <- vk
+}
+def vk_view_destroy(var b : CuModuleCreateInfoNVX) {
+    delete b._vk_view_pData
+}
+
 struct CuModuleTexturingModeCreateInfoNVX {
     next : void?
     use64bitTexturing : uint
@@ -18714,8 +18936,10 @@ struct FrameBoundaryEXT {
     bufferCount : uint
     pBuffers : array<Buffer>
     tagName : uint64
+    pTag : array<uint8>
     _vk_view_pImages : array<VkImage>
     _vk_view_pBuffers : array<VkBuffer>
+    _vk_view_pTag : array<uint8>
 }
 def vk_view_create_unsafe(var b : FrameBoundaryEXT) : VkFrameBoundaryEXT {
     var vk = VkFrameBoundaryEXT()
@@ -18727,13 +18951,17 @@ def vk_view_create_unsafe(var b : FrameBoundaryEXT) : VkFrameBoundaryEXT {
     b._vk_view_pBuffers <- [for (h in b.pBuffers); boost_value_to_vk(h)]
     vk.pBuffers = array_addr(b._vk_view_pBuffers)
     vk.tagName = b.tagName
+    b._vk_view_pTag := b.pTag
+    vk.pTag = unsafe(reinterpret<void?>(array_addr(b._vk_view_pTag)))
     vk.imageCount = b.imageCount != 0u ? b.imageCount : uint(length(b.pImages))
     vk.bufferCount = b.bufferCount != 0u ? b.bufferCount : uint(length(b.pBuffers))
+    vk.tagSize = uint64(long_length(b.pTag))
     return <- vk
 }
 def vk_view_destroy(var b : FrameBoundaryEXT) {
     unsafe { delete b._vk_view_pImages }
     unsafe { delete b._vk_view_pBuffers }
+    delete b._vk_view_pTag
 }
 
 struct PhysicalDeviceFrameBoundaryFeaturesEXT {
@@ -19238,6 +19466,70 @@ def vk_view_destroy(_b : PhysicalDeviceShaderObjectPropertiesEXT) {
     pass
 }
 
+struct ShaderCreateInfoEXT {
+    next : void?
+    flags : VkShaderCreateFlagsEXT
+    stage : VkShaderStageFlags
+    nextStage : VkShaderStageFlags
+    codeType : VkShaderCodeTypeEXT
+    pCode : array<uint8>
+    pName : string
+    setLayoutCount : uint
+    pSetLayouts : array<DescriptorSetLayout>
+    pushConstantRangeCount : uint
+    pPushConstantRanges : array<PushConstantRange>
+    pSpecializationInfo : SpecializationInfo?
+    _vk_view_pCode : array<uint8>
+    _vk_view_pSetLayouts : array<VkDescriptorSetLayout>
+    _vk_view_pPushConstantRanges : array<VkPushConstantRange>
+    _vk_view_pSpecializationInfo_value : SpecializationInfo
+    _vk_view_pSpecializationInfo_vk : VkSpecializationInfo
+    _vk_view_pSpecializationInfo_present : bool
+}
+def vk_view_create_unsafe(var b : ShaderCreateInfoEXT) : VkShaderCreateInfoEXT {
+    var vk = VkShaderCreateInfoEXT()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.stage = b.stage
+    vk.nextStage = b.nextStage
+    vk.codeType = b.codeType
+    b._vk_view_pCode := b.pCode
+    vk.pCode = unsafe(reinterpret<void?>(array_addr(b._vk_view_pCode)))
+    vk.pName = b.pName
+    b._vk_view_pSetLayouts <- [for (h in b.pSetLayouts); boost_value_to_vk(h)]
+    vk.pSetLayouts = array_addr(b._vk_view_pSetLayouts)
+    b._vk_view_pPushConstantRanges |> resize(length(b.pPushConstantRanges))
+    for (vki in range(length(b.pPushConstantRanges))) {
+        b._vk_view_pPushConstantRanges[vki] = vk_view_create_unsafe(b.pPushConstantRanges[vki])
+    }
+    vk.pPushConstantRanges = array_addr(b._vk_view_pPushConstantRanges)
+    unsafe {
+        if (b.pSpecializationInfo != null) {
+            b._vk_view_pSpecializationInfo_value := *b.pSpecializationInfo
+            b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(b._vk_view_pSpecializationInfo_value)
+            b._vk_view_pSpecializationInfo_present = true
+            vk.pSpecializationInfo = addr(b._vk_view_pSpecializationInfo_vk)
+            b.pSpecializationInfo = null
+        }
+    }
+    vk.codeSize = uint64(long_length(b.pCode))
+    vk.setLayoutCount = b.setLayoutCount != 0u ? b.setLayoutCount : uint(length(b.pSetLayouts))
+    vk.pushConstantRangeCount = b.pushConstantRangeCount != 0u ? b.pushConstantRangeCount : uint(length(b.pPushConstantRanges))
+    return <- vk
+}
+def vk_view_destroy(var b : ShaderCreateInfoEXT) {
+    delete b._vk_view_pCode
+    unsafe { delete b._vk_view_pSetLayouts }
+    for (vki in range(length(b.pPushConstantRanges))) {
+        vk_view_destroy(b.pPushConstantRanges[vki])
+    }
+    delete b._vk_view_pPushConstantRanges
+    if (b._vk_view_pSpecializationInfo_present) {
+        vk_view_destroy(b._vk_view_pSpecializationInfo_value)
+        b._vk_view_pSpecializationInfo_present = false
+    }
+}
+
 struct PhysicalDeviceShaderTileImageFeaturesEXT {
     next : void?
     shaderTileImageColorReadAccess : uint
@@ -19497,6 +19789,29 @@ def vk_view_create_unsafe(var b : BindDescriptorSetsInfo) : VkBindDescriptorSets
 def vk_view_destroy(var b : BindDescriptorSetsInfo) {
     unsafe { delete b._vk_view_pDescriptorSets }
     delete b._vk_view_pDynamicOffsets
+}
+
+struct PushConstantsInfo {
+    next : void?
+    layout : PipelineLayout
+    stageFlags : VkShaderStageFlags
+    offset : uint
+    pValues : array<uint8>
+    _vk_view_pValues : array<uint8>
+}
+def vk_view_create_unsafe(var b : PushConstantsInfo) : VkPushConstantsInfo {
+    var vk = VkPushConstantsInfo()
+    vk.pNext = b.next
+    vk.layout = boost_value_to_vk(b.layout)
+    vk.stageFlags = b.stageFlags
+    vk.offset = b.offset
+    b._vk_view_pValues := b.pValues
+    vk.pValues = unsafe(reinterpret<void?>(array_addr(b._vk_view_pValues)))
+    vk.size = uint(length(b.pValues))
+    return <- vk
+}
+def vk_view_destroy(var b : PushConstantsInfo) {
+    delete b._vk_view_pValues
 }
 
 struct PushDescriptorSetInfo {
@@ -22171,6 +22486,21 @@ def vk_view_destroy(_b : PhysicalDeviceShaderSubgroupPartitionedFeaturesEXT) {
     pass
 }
 
+struct HostAddressRangeConstEXT {
+    address : array<uint8>
+    _vk_view_address : array<uint8>
+}
+def vk_view_create_unsafe(var b : HostAddressRangeConstEXT) : VkHostAddressRangeConstEXT {
+    var vk = VkHostAddressRangeConstEXT()
+    b._vk_view_address := b.address
+    vk.address = unsafe(reinterpret<void?>(array_addr(b._vk_view_address)))
+    vk.size = uint64(long_length(b.address))
+    return <- vk
+}
+def vk_view_destroy(var b : HostAddressRangeConstEXT) {
+    delete b._vk_view_address
+}
+
 struct ImageDescriptorInfoEXT {
     next : void?
     pView : ImageViewCreateInfo?
@@ -22522,14 +22852,30 @@ def vk_view_destroy(_b : SamplerCustomBorderColorIndexCreateInfoEXT) {
 
 struct OpaqueCaptureDataCreateInfoEXT {
     next : void?
+    pData : HostAddressRangeConstEXT?
+    _vk_view_pData_value : HostAddressRangeConstEXT
+    _vk_view_pData_vk : VkHostAddressRangeConstEXT
+    _vk_view_pData_present : bool
 }
-def vk_view_create_unsafe(b : OpaqueCaptureDataCreateInfoEXT) : VkOpaqueCaptureDataCreateInfoEXT {
+def vk_view_create_unsafe(var b : OpaqueCaptureDataCreateInfoEXT) : VkOpaqueCaptureDataCreateInfoEXT {
     var vk = VkOpaqueCaptureDataCreateInfoEXT()
     vk.pNext = b.next
+    unsafe {
+        if (b.pData != null) {
+            b._vk_view_pData_value := *b.pData
+            b._vk_view_pData_vk = vk_view_create_unsafe(b._vk_view_pData_value)
+            b._vk_view_pData_present = true
+            vk.pData = addr(b._vk_view_pData_vk)
+            b.pData = null
+        }
+    }
     return <- vk
 }
-def vk_view_destroy(_b : OpaqueCaptureDataCreateInfoEXT) {
-    pass
+def vk_view_destroy(var b : OpaqueCaptureDataCreateInfoEXT) {
+    if (b._vk_view_pData_present) {
+        vk_view_destroy(b._vk_view_pData_value)
+        b._vk_view_pData_present = false
+    }
 }
 
 struct IndirectCommandsLayoutPushDataTokenNV {
