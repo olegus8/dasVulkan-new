@@ -1414,7 +1414,7 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "        vklist[vki] = {plan.out_array_elem}()\n")
                     fprint(f, "    {CB}\n")
                 }
-                fprint(f, "    if (vkcount > {zero}) {OB}\n")
+                fprint(f, "    if (vkcount > {plan.count_is_64 ? "0ul" : "0u"}) {OB}\n")
                 fprint(f, "        unsafe {OB}\n")
                 fprint(f, "            {lhs_open}{plan.command}(")
                 // already inside `unsafe`, so the byte payload's cast to the raw
