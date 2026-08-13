@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 13 -- mesh shaders (VK_EXT_mesh_shader): the GPU-driven cluster-culling pipeline.

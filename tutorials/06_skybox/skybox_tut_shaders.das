@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 06 -- a procedural skybox via a cubemap. The vertex shader emits one cube vertex per draw

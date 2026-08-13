@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 15 -- hardware ray tracing: the host side.
@@ -74,7 +75,7 @@ def finalize(var rv : RtView) {
 
 //! Build the resident RT stack. The device must come from create_device_ray_tracing; pool/queue
 //! are used (and waited idle) for the BLAS/TLAS builds.
-def build_rt_view(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;
+def build_rt_view(device : Device; phys : VkPhysicalDevice; pool : CommandPool; queue : VkQueue;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                   w, h : int) : RtView {
     let dev = boost_value_to_vk(device)
 

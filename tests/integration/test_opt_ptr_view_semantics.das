@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Canary for #56's single-view semantics: vk_view_create_unsafe clone-copies an
@@ -47,10 +48,9 @@ def test_opt_ptr_view_semantics(t : T?) {
     t |> equal(int(vdsai.descriptorSetCount), 2)
     vk_view_destroy(dsai)
 
-    // fixed-array member copy: blendConstants float[4] must land in the raw struct element-exact,
-    // in order. Host-side and driver-independent, so it runs (and must pass) on EVERY CI lane --
-    // this is the marshal half of the CONSTANT_COLOR pixel oracle in test_pipeline_boost_structs,
-    // whose GPU half llvmpipe fails on the DRIVER side (ARGB blend-color misread; see that header).
+    // fixed-array member copy: blendConstants float[4] must land in the raw struct element-exact and in
+    // order. Host-side and driver-independent, so it must pass on EVERY CI lane -- the marshal half of
+    // test_pipeline_boost_structs' CONSTANT_COLOR oracle, whose GPU half llvmpipe fails driver-side.
     var cb : PipelineColorBlendStateCreateInfo
     cb.blendConstants = fixed_array(0.25f, 0.5f, 0.75f, 1.0f)
     let vcb = vk_view_create_unsafe(cb)

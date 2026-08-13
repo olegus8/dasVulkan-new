@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // A windowed Dear ImGui application harness on Vulkan -- the Vulkan-backed mirror of dasImgui's
@@ -106,11 +107,9 @@ var private g_app : VulkanApp?
 // ===== lifecycle =====
 
 def public harness_init(title : string; width : int = 800; height : int = 600; ray_tracing : bool = false) {
-    //! Create the window + Vulkan device/swapchain + ImGui context (daslang theme + JetBrains Mono) +
-    //! the vulkan_imgui_driver renderer, and register the swapchain with vulkan_live. Idempotent.
-    //! Call from your script's init(). Pass `ray_tracing = true` to request the hardware-RT device
-    //! (acceleration structures + RT pipeline + buffer device address); when the GPU lacks the
-    //! extension the harness silently falls back to the plain device — probe `harness_rt_supported()`.
+    //! Create window + Vulkan device/swapchain + ImGui context (daslang theme, JetBrains Mono) + the
+    //! vulkan_imgui_driver renderer, and register the swapchain with vulkan_live. Idempotent; call from
+    //! init(). `ray_tracing = true` requests the RT device but falls back SILENTLY — probe `harness_rt_supported()`.
     if (g_app != null) {
         return
     }
@@ -229,9 +228,8 @@ def public harness_begin_frame() : bool {
 
 def public harness_new_frame() {
     //! Runs the boost synth tick — so synthetic input (`imgui_click`, `imgui_force_set`,
-    //! `set_user_control`) works on every harness app with no opt-in — then ImGui::NewFrame().
-    //! The tick sits between ImGui_ImplGlfw_NewFrame (in harness_begin_frame) and NewFrame(),
-    //! the slot synthetic input must drain in. Mirrors imgui_harness.
+    //! `set_user_control`) works with no opt-in — then NewFrame(). The tick MUST sit between
+    //! ImGui_ImplGlfw_NewFrame (in harness_begin_frame) and NewFrame(): the slot synth input drains in.
     imgui_synth_tick()
     NewFrame()
 }

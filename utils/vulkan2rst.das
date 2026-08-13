@@ -1,5 +1,10 @@
 options gen2
+options _comment_hygiene = true
 options rtti = true
+// This file emits RST prose - section titles carry em-dashes that render on the docs site.
+// The option is environment-independent; a per-line nolint is not, because STYLE039's default
+// is path-gated (on under daslib/ and modules/) and dasVulkan is checked out standalone in CI.
+options _ascii_strings = false
 
 require strings
 require daslib/fio
@@ -73,6 +78,8 @@ def document_module_vulkan_boost() {
         group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|transition_image|transition_depth_image|transition_image_aspect)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
+        group_by_regex("Compute tier & device capabilities", mod, %regex~^(storage_8_16_supported|subgroup_properties|subgroup_compute_ops_supported|integer_dot_product_supported|cooperative_matrix_supported|cooperative_matrix2_supported|cooperative_matrix2_fa_supported|cooperative_matrix2_properties|cooperative_vector_supported|memory_priority_supported|timeline_semaphore_supported|external_memory_host_supported|external_memory_host_min_alignment|select_transfer_queue_family|create_device_(storage_8_16.*|cooperative_matrix|coopmat_full_subgroups))$%%),
+        group_by_regex("Pipeline introspection", mod, %regex~^(pipeline_exec_props_supported|dump_pipeline_executables)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))
     )
     document("Boost — selection, builders, block brackets, conveniences", mod, "vulkan_boost.rst", groups)
@@ -122,7 +129,7 @@ def document_vulkan_structs_anchors() {
 // generate correctly under both -load_module (dev) and daspkg-install (CI).
 def dasvulkan_root() : string {
     let m = find_module("vulkan_boost")
-    assert(m != null, "vulkan_boost not loaded — cannot locate dasVulkan root")
+    assert(m != null, "vulkan_boost not loaded - cannot locate dasVulkan root")
     return dir_name(dir_name(string(m.fileName)))
 }
 

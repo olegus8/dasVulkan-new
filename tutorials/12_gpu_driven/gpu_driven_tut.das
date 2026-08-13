@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 12 host -- GPU-driven rendering: the GPU decides what to draw.
@@ -138,10 +139,9 @@ def public god_view_proj() : float4x4 {
     return proj * view
 }
 
-//! the wall slab model matrix for a given X (animated viewers sweep `wall_x`; the oracle pins it).
-//! Wide enough (half-width 2) that whole columns of the field sit fully behind it -- the conservative
-//! max-downsampled HZB only culls a cube whose entire screen footprint is covered, so an edge-thin
-//! wall would never produce a clean occlusion (the footprint texels straddle the wall boundary).
+//! the wall slab model matrix for a given X (animated viewers sweep `wall_x`; the oracle pins it). Wide
+//! enough (half-width 2) that whole columns of the field sit fully behind it: the conservative max-
+//! downsampled HZB culls only a cube whose ENTIRE footprint is covered, so an edge-thin wall never would.
 def public wall_model(wall_x : float) : float4x4 {
     return model_ts(wall_x, 0.0, 2.5, 3.2, 16.0, 0.5)
 }
@@ -195,20 +195,18 @@ def private gen_instance_words() : array<uint> {
 }
 
 // ===== device: GPU-driven feature set =====
+
 // multiDrawIndirect (base) + drawIndirectCount (1.2) + shaderDrawParameters (1.1, for gl_DrawID) +
 // descriptorIndexing + shaderSampledImageArrayNonUniformIndexing (1.2, for the bindless sampler2D[]).
-// Models create_device_descriptor_indexing / create_device_draw_parameters, threading 1.1 + 1.2 +
-// base features together in one pNext chain.
+// Models create_device_descriptor_indexing / create_device_draw_parameters: 1.1 + 1.2 + base, one pNext.
 def public create_device_gpu_driven(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_ext : array<string>
     return <- create_device_gpu_driven(phys, queue_family, no_ext)
 }
 
-//! Probe whether a device advertises ``drawIndirectCount`` (the one feature this tutorial needs that
-//! the bindless / draw-parameter integration tests don't already exercise on CI's lavapipe).
-//! descriptorIndexing + multiDrawIndirect + shaderDrawParameters are proven by those tests; this gates
-//! the ``vkCmdDrawIndexedIndirectCount`` path so the oracle soft-skips on a renderer that lacks it
-//! rather than panicking in ``vkCreateDevice``. Mirrors ``mesh_shader_supported``.
+//! Probe for ``drawIndirectCount``, the one feature here that the bindless / draw-parameter tests don't
+//! already exercise on CI's lavapipe (they prove descriptorIndexing + multiDrawIndirect + shaderDrawParameters).
+//! Gates the indirect-count path so the oracle soft-skips rather than panicking. Mirrors ``mesh_shader_supported``.
 def public draw_indirect_count_available() : bool {
     if (volkInitialize() != 0) {
         return false
@@ -311,7 +309,7 @@ def private create_material(device : Device; phys : VkPhysicalDevice; queue : Vk
     var bytes <- gen_material_bytes(m)
     var staging_usage : VkBufferUsageFlags
     staging_usage.transfer_src = true
-    var inscope staging <- create_host_buffer(device, phys, uint64(length(bytes)), staging_usage)
+    var inscope staging <- create_host_buffer(device, phys, uint64(long_length(bytes)), staging_usage)
     upload_bytes(staging, device, bytes)
 
     var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
@@ -554,10 +552,9 @@ def private build_depth_pipeline(device : Device; rp : RenderPass; layout : Pipe
 }
 
 //! full graphics pipeline (vertex+fragment, color+depth, dynamic viewport) with caller-chosen vertex
-//! input, depth-write, and alpha-blend. Covers the four color-pass pipelines: main + occluder-solid
-//! (blend off), god + occluder-ghost (blend on; ghost has depth-write off so the translucent wall
-//! does not stamp the depth buffer over the cubes behind it).
-def private build_color_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+//! input, depth-write and alpha-blend. Covers all four color-pass pipelines: main + occluder-solid (blend
+//! off), god + occluder-ghost (blend on; ghost skips depth-write so the wall doesn't stamp over cubes).
+def private build_color_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                  vert, frag : ShaderModule;
                                  var vbindings : array<VkVertexInputBindingDescription>;
                                  var vattrs : array<VkVertexInputAttributeDescription>;
@@ -787,7 +784,7 @@ def public finalize(var ctx : GpuDrivenContext) {
 
 // ===== build =====
 
-def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : GpuDrivenResources {
+def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : GpuDrivenResources {   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
     // ----- offscreen targets -----
     var samples1 : VkSampleCountFlags
     samples1._1 = true
@@ -1062,7 +1059,7 @@ def private compute_barrier(cmd : CommandBuffer) {
 
 //! Record the whole GPU-driven frame for a given wall X. One command buffer, five passes, the barrier
 //! chain between them. Leaves out_color in TRANSFER_SRC_OPTIMAL for the caller's readback / present.
-def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : float) {
+def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : float) {   // nolint:STYLE038 - flat command-record run
     let raw = boost_value_to_vk(cmd)
 
     // ===== pass 1: occluder depth pre-pass (camera view) =====

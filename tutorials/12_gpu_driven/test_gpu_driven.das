@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 // build_gpu_driven_resources is one large frame (the full GpuDrivenResources struct + ~40 inscope
 // locals). dastest runs each test in its own context sized from the program's `options stack`, whose

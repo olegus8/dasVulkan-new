@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed HDR + bloom: the tutorial 11 pipeline rendered into the same offscreen LDR target the
@@ -29,7 +30,7 @@ def require_srgb_swap(swap : Swapchain) {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }
@@ -93,7 +94,7 @@ def main {
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
             require_srgb_swap(swap)   // recreation can fall back to a different surface format
         }
         let t = float(glfwGetTime())
@@ -140,7 +141,7 @@ def main {
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

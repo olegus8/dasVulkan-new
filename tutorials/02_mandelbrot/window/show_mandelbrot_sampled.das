@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 02, present method TWO of two: SAMPLE-AS-TEXTURE. Same animated Mandelbrot zoom as the blit
@@ -25,7 +26,7 @@ require mandelbrot_compute
 require daslib/defer
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }

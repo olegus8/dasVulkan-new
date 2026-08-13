@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // A graphics pipeline built ENTIRELY from #53's boost view structs -- every
@@ -42,7 +43,7 @@ def private is_llvmpipe() : bool {
 }
 
 [test]
-def test_pipeline_boost_structs(t : T?) {
+def test_pipeline_boost_structs(t : T?) {   // nolint:STYLE038 - flat test cell
     if (volkInitialize() != 0) {
         t |> failure("no Vulkan loader")
         return

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 13 - the runnable view. Opens a GLFW window + Vulkan swapchain and presents the live
@@ -22,7 +23,7 @@ let W = 800
 let H = 600
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }

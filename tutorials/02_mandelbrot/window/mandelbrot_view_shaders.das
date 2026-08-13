@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 02, the "sample-as-texture" present path. The compute shader (mandelbrot_tut_shaders.das)

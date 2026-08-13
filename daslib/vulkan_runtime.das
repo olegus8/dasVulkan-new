@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Hand-written boost runtime primitives that the GENERATED boost (handles,

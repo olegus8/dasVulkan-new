@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 11 -- HDR + Karis-style bloom. Five shader pairs, one per pass in the bloom pipeline:
@@ -159,12 +160,9 @@ def hdr_bright_fs {
     let knee = max(pc.soft_knee, 0.0001)
     let t = clamp((luma - pc.threshold + knee) / (2.0 * knee), 0.0, 1.0)
     let curve = t * t * (3.0 - 2.0 * t)
-    // Karis 2014 partial-Karis weight `1/(1 + luma)` ("Next Generation Post Processing in Call of
-    // Duty Advanced Warfare", SIGGRAPH 2014, slide 142). Without this, an 8x-boosted emissive cube
-    // writes raw HDR ~8.0 into bloom mip 0; the composite's bilinear read produces a value > 1.0
-    // for most of the texel span, which clamps to white at the LDR target -- the sharp axis-aligned
-    // square block instead of a smooth halo. The Karis weight crushes 8.0 down to 8 / 9 ~= 0.89 so
-    // the pyramid carries values in [0, 1] and bilinear filtering at composite gives smooth bloom.
+    // Partial-Karis weight `1/(1 + luma)` (Karis, "Next Generation Post Processing in Call of Duty
+    // Advanced Warfare", SIGGRAPH 2014, slide 142). Without it an 8x emissive cube writes raw HDR ~8.0
+    // into mip 0 and the bilinear read clamps to a hard white square; 8/9 ~= 0.89 keeps the pyramid in [0,1].
     let karis_weight = 1.0 / (1.0 + luma)
     frag_bright = float4(hdr * karis_weight * curve, 1.0)
 }
@@ -220,10 +218,9 @@ var @uniform @set = 1 @binding = 1 src_bloom : sampler2D
 
 var @out @location = 0 frag_ldr : float4
 
-//! ACES fitted approximation (Krzysztof Narkowicz 2015). The full ACES system is a 4-matrix tone
-//! mapper; this fit hits the same shoulder/toe shape with a single rational polynomial. Cheap and
-//! preserves the "filmic" look that the bloom is designed for. daslang shaders require explicit
-//! float3 broadcasts on every constant (no implicit scalar-broadcast across the +/- operators).
+//! ACES fitted approximation (Krzysztof Narkowicz 2015). Full ACES is a 4-matrix tone mapper; this fit
+//! hits the same shoulder/toe shape with one rational polynomial -- cheap, and it keeps the filmic look
+//! the bloom targets. daslang shaders need explicit float3 broadcasts (no implicit scalar broadcast).
 def aces_fit(x : float3) : float3 {
     let a = float3(2.51, 2.51, 2.51)
     let b = float3(0.03, 0.03, 0.03)
@@ -239,11 +236,8 @@ def hdr_composite_fs {
     let bloom = textureLod(src_bloom, f_uv, 0.0).xyz
     let merged = hdr + bloom * pc.bloom_intensity
     let mapped = aces_fit(merged)
-    // Output LINEAR post-tonemap values in [0,1]. The LDR target is R16G16B16A16_SFLOAT (16-bit
-    // float linear). Gamma encoding happens at the *blit* step where the destination is sRGB --
-    // for the window the swap target is B8G8R8A8_SRGB or R8G8B8A8_SRGB (asserted in show_hdr.das);
-    // for the static test we blit through an R8G8B8A8_SRGB readback image. Both routes get the
-    // linear->sRGB encoding for free in hardware, with ~12-bit equivalent dark-region precision --
-    // no banding visible in smooth bloom halos.
+    // Output LINEAR post-tonemap values in [0,1] -- the LDR target is R16G16B16A16_SFLOAT. Gamma comes
+    // at the *blit*, where the destination is sRGB: the swap target for the window (asserted in
+    // show_hdr.das), an R8G8B8A8_SRGB readback for the test. Free in hardware, ~12-bit dark, no banding.
     frag_ldr = float4(mapped, 1.0)
 }

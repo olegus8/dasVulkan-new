@@ -1,9 +1,10 @@
 options gen2
+options _comment_hygiene = true
 
 require vulkan
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - flat example scaffold
     if (volkInitialize() != 0) {
         print("no Vulkan\n")
         return
