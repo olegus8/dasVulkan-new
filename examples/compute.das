@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 require vulkan
 require vulkan/vulkan_boost
@@ -24,7 +25,7 @@ def find_mem(phys : VkPhysicalDevice; bits : uint; want : VkMemoryPropertyFlags)
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 - flat example scaffold
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "no Vulkan loader\n")
         return 1

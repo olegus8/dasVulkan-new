@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Fullscreen solid-white shaders for the batch-creator / boost-pipeline tests: the

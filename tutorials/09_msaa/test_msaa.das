@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 09 pixel-oracle gate (lavapipe in CI, real GPU locally). The scene is a procedural spiky

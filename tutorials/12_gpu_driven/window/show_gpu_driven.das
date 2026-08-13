@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed tutorial 12: the GPU-driven frame blitted onto a GLFW swapchain image. Reuses
@@ -17,7 +18,7 @@ require daslib/defer
 require math
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }
@@ -79,7 +80,7 @@ def main {
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
         }
         let t = float(glfwGetTime())
         let wall_x = 5.0f * sin(t * 1.05f)                // sweep the wall across the field (~6 s round trip)
@@ -120,7 +121,7 @@ def main {
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

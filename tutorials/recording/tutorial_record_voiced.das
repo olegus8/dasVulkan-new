@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 options rtti                                 // dasOPENAI's SpeechRequest has @optional fields
 
@@ -95,15 +96,9 @@ def private esc_drawtext(s : string) : string {
     return r
 }
 
-//! Same as convert_to_mp4 but also:
-//!   - mixes each prepared voiceover wav (delayed to its frame index) under the music bed,
-//!   - paints each caption via ffmpeg drawtext, timed to (line.frame/fps .. + line.dur_s + 0.4s).
-//! Codec settings are tuned for the smooth, slow-pan content these tutorial recordings produce:
-//! `-tune animation` (animation+slow-pan biases x264 toward larger blocks + stronger lookahead),
-//! `-preset slower` (more motion-search exhaustiveness), `-crf 25` (a notch over the libx264 default
-//! 23 -- the content is shader-pure, so a small visual hit is invisible but the size cut is real).
-//! `font_file` must be the ffmpeg-escaped path of a TTF on the running machine (the Windows default
-//! works on Boris's PC; pass a different one on Linux). prepare_voiceover() must run first.
+//! convert_to_mp4 plus: each prepared voiceover wav mixed under the music bed (delayed to its frame
+//! index), each caption painted via ffmpeg drawtext over (line.frame/fps .. + line.dur_s + 0.4s).
+//! `font_file` is an ffmpeg-escaped TTF path (the default is Windows-only). prepare_voiceover() first.
 def public convert_to_mp4_voiced(apng_path, music_feature, daslang_exe, out_mp4 : string;
                                   dur_s : float; fps, bed_db, fade_ms : int;
                                   font_file : string = "C\\:/Windows/Fonts/arial.ttf") : bool {
@@ -156,6 +151,9 @@ def public convert_to_mp4_voiced(apng_path, music_feature, daslang_exe, out_mp4 
     fargs |> push_from([
         "-filter_complex", fg,
         "-map", "[vout]", "-map", "[aout]",
+        // Tuned for the smooth slow-pan content these recordings produce: `-tune animation` biases x264
+        // toward larger blocks + stronger lookahead, `-preset slower` buys motion-search exhaustiveness,
+        // and a crf above libx264's default 23 is invisible on shader-pure output but cuts size for real.
         "-c:v", "libx264", "-preset", "slower", "-tune", "animation", "-crf", "28",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", "-shortest", out_mp4])

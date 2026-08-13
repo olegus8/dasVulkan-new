@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 08 -- the canonical two-pass shadow-map dance. One offscreen D32_SFLOAT image used in
@@ -191,10 +192,9 @@ def private ortho_m4(left, right, bottom, top, znear, zfar : float) : float4x4 {
 
 // ===== resources =====
 
-//! All shadow-tutorial render state owned together. Two render passes, two framebuffers, two
-//! pipelines (shadow + main), four buffers (cube vb/ib + floor vb/ib), the shadow map texture +
-//! sampler, the UBO, descriptors, and the readback buffer. The driver (offscreen test or window
-//! viewer) owns instance/device/queue/pool and passes them in.
+//! All shadow-tutorial render state owned together: two render passes, two framebuffers, two pipelines
+//! (shadow + main), four buffers (cube + floor vb/ib), the shadow map + sampler, UBO, descriptors and
+//! readback. The driver (offscreen test or window viewer) owns instance/device/queue/pool, and passes.
 struct public ShadowResources {
     color        : OffscreenTarget
     depth        : OffscreenDepth
@@ -285,7 +285,7 @@ def private vertex_input() : VkPipelineVertexInputStateCreateInfo {
 }
 
 //! Inline shadow pipeline: vertex-only, no color attachments, depth bias enabled.
-def private build_shadow_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+def private build_shadow_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                   vert : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(1)
@@ -370,7 +370,7 @@ def private build_shadow_pipeline(device : Device; rp : RenderPass; layout : Pip
 }
 
 //! Inline main pipeline: vertex + fragment, color + depth attachments, two vertex attributes.
-def private build_main_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+def private build_main_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                 vert, frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -472,7 +472,7 @@ def private build_main_pipeline(device : Device; rp : RenderPass; layout : Pipel
 
 //! Build the shadow tutorial resources against a caller-owned (device, phys, queue, pool). Used by
 //! both build_shadow_context (offscreen test/recording) and window/show_shadow.das (swapchain blit).
-def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;
+def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                   queue : VkQueue; pool : CommandPool) : ShadowResources {
     var inscope color <- build_offscreen_target(device, phys, SCENE_W, SCENE_H, SCENE_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, SCENE_W, SCENE_H, SCENE_DEPTH_FMT)
@@ -703,10 +703,9 @@ def public update_shadow_uniforms(res : ShadowResources; device : Device; time, 
     main_vs_bind_uniform(device, res.ubo.memory)
 }
 
-//! Per-frame work for the two passes. Pass 1 renders cube + floor depth into the shadow map; the
-//! render pass's `finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL` hands it to pass 2 ready to
-//! sample. Pass 2 renders cube + floor into the color attachment, with the fragment shader
-//! reading the shadow map.
+//! Per-frame work for both passes. Pass 1 renders cube + floor depth into the shadow map, whose
+//! `finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL` hands it to pass 2 ready to sample. Pass 2 renders
+//! cube + floor into the color attachment, with the fragment shader reading that shadow map.
 def public record_shadow_render_pass(res : ShadowResources; cmd : CommandBuffer) {
     let sets <- [vk_value_to_boost(res.desc_set)]
     var no_dyn : array<uint>

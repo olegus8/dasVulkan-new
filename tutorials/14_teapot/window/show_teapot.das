@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Windowed teapot: the Tutorial 14 mesh-shader pipeline (teapot_task/mesh/frag) renders the GPU-
@@ -18,7 +19,7 @@ require ../teapot_tut.das
 require daslib/defer
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }
@@ -88,7 +89,7 @@ def main {
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
         }
         let t = float(glfwGetTime())
         update_teapot_uniforms(res, device, t, false)
@@ -130,7 +131,7 @@ def main {
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

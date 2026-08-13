@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 05 render path: a thousand small cubes in one indexed-instanced draw call. Per-vertex
@@ -112,11 +113,9 @@ def look_at_rh(eye, center, up : float3) : float4x4 {
 
 // ===== per-instance buffer init =====
 
-//! Build N_INSTANCES rows of (offset.xyz, color.rgb, phase). Offsets sample a Lissajous-style 3D
-//! curve (7 azimuthal lobes against 3 elevation lobes against radial breathing) so the swarm fills a
-//! visually balanced volume without obvious axis alignment. Colours cycle the hue circle three times
-//! across the swarm via the cos-triplet palette; phase is a uniform sweep through [0,1) so the
-//! per-cube breathing in the vertex shader is desynchronised.
+//! Build N_INSTANCES rows of (offset.xyz, color.rgb, phase). Offsets sample a Lissajous-style 3D curve
+//! (7 azimuthal x 3 elevation lobes x radial breathing) so the swarm fills a balanced volume with no
+//! axis alignment; colours cycle the hue circle 3x, and phase sweeps [0,1) to desync the breathing.
 def gen_instance_data(n : int) : array<float> {
     var data : array<float>
     data |> resize(n * INST_FLOATS_PER)
@@ -146,10 +145,9 @@ def gen_instance_data(n : int) : array<float> {
 
 // ===== reusable per-frame context =====
 
-//! All instancing-render state that depends only on (device, phys, queue, pool). Same shape as
-//! tutorial 04's CubeResources (offscreen targets + render pass + framebuffer + pipeline + readback),
-//! with a second vertex buffer ``inst_buf`` for the per-instance attribute stream. No texture, no
-//! sampler -- the tutorial's headline is the instance buffer, not the lighting.
+//! All instancing-render state depending only on (device, phys, queue, pool). Same shape as tutorial 04's
+//! CubeResources (offscreen targets + render pass + framebuffer + pipeline + readback), plus a second
+//! vertex buffer ``inst_buf`` for the per-instance stream. No texture/sampler -- the buffer is the point.
 struct public InstancingResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
@@ -206,7 +204,7 @@ def public finalize(var ctx : InstancingContext) {
 //! Build the offscreen render targets, the 2-binding vertex input pipeline, descriptors and the
 //! readback buffer against a caller-owned (device, phys, queue, pool). Used by the offscreen test +
 //! recording driver via build_instancing_context, and by window/show_instancing.das directly.
-def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : InstancingResources {
+def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool) : InstancingResources {   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
     // queue/pool are unused here (no texture upload), but the signature mirrors build_cube_resources
     // so the windowed driver pattern carries across tutorials.
     let _unused_queue = queue

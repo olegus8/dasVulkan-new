@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 // Boost twin of compute.das: the same "square each index" compute dispatch, but
 // driven entirely through the vulkan_boost layer — buffer, memory (+ requirements
@@ -29,7 +30,7 @@ def square {
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 - flat example scaffold
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "no Vulkan loader\n")
         return 1

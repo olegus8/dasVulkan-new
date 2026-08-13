@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Shared asset loaders for the tutorials: file textures (via dasStbImage) and OBJ models (via the
@@ -63,6 +64,7 @@ def private load_pixels(path : string; hdr : bool; var w, h : int&; var bytes : 
     }
     w = simg.width
     h = simg.height
+    delete bytes
     bytes <- simg.bytes
     return true
 }
@@ -90,7 +92,7 @@ def private mip_barrier(cmd : CommandBuffer; image : vulkan_handles::Image; base
 //! Upload already-decoded pixel `bytes` (w*h*`fmt`) as a sampled device-local image. When `gen_mips`
 //! is true a full mip chain is built on the GPU via a linear blit cascade (kills minification moiré
 //! on detailed textures); the caller's sampler should then use a high maxLod.
-def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool;
+def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQueue; pool : CommandPool;   // nolint:STYLE038 - flat staging-upload sequence
                           w, h : int; fmt : VkFormat; var bytes : array<uint8>; gen_mips : bool = true) : Texture {
     let dev = boost_value_to_vk(device)
     let mip_levels = gen_mips ? uint(floor(log2(float(max(w, h))))) + 1u : 1u

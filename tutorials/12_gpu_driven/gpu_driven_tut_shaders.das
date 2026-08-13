@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 12 -- GPU-driven rendering: Hi-Z occlusion culling + indirect draw + bindless materials.
@@ -58,6 +59,7 @@ def hzb_down {
 }
 
 // ===== instance scene + cull compute =====
+
 // One axis-aligned cube per instance (no rotation): the world AABB is pos +/- 0.5*scale. Counts are
 // carried as floats in float4s (cast in-shader) to stay on the codegen paths the UBO emitter handles
 // cleanly -- trailing scalar UBO fields are a known rough edge.
@@ -175,6 +177,7 @@ let N_MAT = 6
 var @set = 0 @binding = 7 samplers : sampler2D[6]
 
 // ===== main camera view: survivors only, via vkCmdDrawIndexedIndirectCount =====
+
 // gl_DrawID is the compacted draw ordinal [0, drawCount); draw_instance[gl_DrawID] maps it back to the
 // original instance the cull kept. The wall in front means the culled instances were hidden anyway, so
 // this view looks correct -- that is the whole point of occlusion culling.
@@ -209,10 +212,10 @@ def main_fs {
 }
 
 // ===== god view: ALL N instances, the reveal =====
+
 // A regular instanced draw (cmd_draw_indexed, instanceCount = N) from an offset camera that sees the
-// occluder from the side. gl_InstanceIndex IS the instance id, so cull_reason[gl_InstanceIndex] colours
-// each cube by what the GPU decided: full material if visible, a translucent red ghost if occlusion-
-// culled, a translucent blue ghost if frustum-culled. This is what makes the invisible cull visible.
+// occluder side-on. gl_InstanceIndex IS the instance id, so cull_reason[gl_InstanceIndex] colours each
+// cube by the GPU's verdict: full material if visible, red ghost if occlusion-, blue if frustum-culled.
 
 var @out @location = 0 g_normal : float3
 var @out @location = 1 g_uv     : float2
@@ -254,6 +257,7 @@ def god_fs {
 }
 
 // ===== occluder wall =====
+
 // One opaque slab, rendered three times: into the depth pre-pass (so it populates the HZB), opaque into
 // the main view, and translucent into the god view. The host bakes the wall's animated position into the
 // mvp push constant (a lone matrix -> no trailing-scalar push-constant codegen pitfall).

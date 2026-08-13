@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // vulkan_gltf integration: load glTF fixtures from the daslang tree (tests/dasGLTF/models),

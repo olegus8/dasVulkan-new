@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 14 -- the Utah teapot, tessellated on the GPU by a mesh-shader pipeline. There is no
@@ -35,22 +36,17 @@ let TRIS  = 98   // 2*TESS^2
 
 // ===== UBO =====
 
-//! One UBO (binding 0), shared by every shader in this module (teapot task/mesh/frag, the ground
-//! floor, the env sky). generate_bind_uniform writes the WHOLE struct from any one reachable shader,
-//! so the host calls a single *_bind_uniform per frame and all stages see the same allocation. cp =
-//! 32 patches x 16 control points (xyz; w pad), patch p = cp[p*16 .. p*16+15], row-major 4x4. mvp =
-//! proj*view*model (teapot positions); model = world rotation (normals + cull facing); vp = proj*view
-//! (the world-space ground floor, which carries its own world coords); light_vp = the light's
-//! proj*view for the shadow-map pass; camera.xyz = world eye, camera.w = debug-tint flag (0/1);
-//! light.xyz = world light direction (the sun, shared by env + shadow).
+//! One UBO (binding 0), shared by every shader in this module (teapot task/mesh/frag, ground floor,
+//! env sky). generate_bind_uniform writes the WHOLE struct from any one reachable shader, so the host
+//! calls a single *_bind_uniform per frame and every stage sees the same allocation.
 struct TeapotUBO {
-    mvp      : float4x4
-    model    : float4x4
-    vp       : float4x4
-    light_vp : float4x4
-    camera   : float4
-    light    : float4
-    cp       : float4[512]
+    mvp      : float4x4     //!< proj*view*model -- teapot positions
+    model    : float4x4     //!< world rotation -- normals + cull facing
+    vp       : float4x4     //!< proj*view; the ground floor carries its own world coords, so no model
+    light_vp : float4x4     //!< the light's proj*view, for the shadow-map pass
+    camera   : float4       //!< .xyz = world eye, .w = debug-tint flag (0/1)
+    light    : float4       //!< .xyz = world light direction (the sun; shared by env + shadow)
+    cp       : float4[512]  //!< 32 patches x 16 control points (xyz; w pad), patch p = cp[p*16 .. p*16+15], row-major 4x4
 }
 var @uniform @set = 0 @binding = 0 ubo : TeapotUBO
 
@@ -105,11 +101,9 @@ def eval_normal(base : int; u, v : float) : float3 {
 
 [vulkan_task_shader(local_size_x=1, name="teapot_task_spv")]
 def teapot_task {
-    // Per-patch backface cull: a patch whose (world) surface normal faces away from the camera is
-    // hidden by the front of the teapot (depth resolves the rest), so it is dropped before any mesh
-    // workgroup runs for it. This is the GPU-driven cluster cull -- the count of surviving patches
-    // drops as the teapot rotates, and the rendered image is unchanged (the culled patches were
-    // occluded). A small negative threshold keeps grazing silhouette patches so the outline stays solid.
+    // Per-patch backface cull -- the GPU-driven cluster cull: a patch whose world normal faces away is
+    // hidden by the front of the teapot, so it is dropped before any mesh workgroup runs and the image
+    // is unchanged. A small negative threshold keeps grazing patches so the silhouette stays solid.
     var n = 0u
     for (p in range(PATCH_COUNT)) {
         let base = p * 16
@@ -120,12 +114,9 @@ def teapot_task {
         c *= 1.0 / 16.0                       // patch center = mean of the control net
         let world_c = (ubo.model * float4(c, 1.0)).xyz
         let outward = normalize(world_c)      // teapot is centered at the origin
-        // Patch normal from the control net. A collapsed control-net row (the lid-knob apex rows are
-        // single points) makes one span zero -> cross() is the zero vector -> normalize() is NaN, and
-        // `dot(NaN,..) > t` is false for ANY t, so the patch would be wrongly culled (the knob vanished).
-        // Fall back to the position-based outward direction there. Otherwise orient cross(du,dv) outward
-        // (the Newell patches are not consistently wound) and cull only near-fully-back patches so the
-        // silhouette stays artifact-free.
+        // Patch normal from the control net. A collapsed row (the lid-knob apex is a single point) zeroes
+        // one span -> cross() is zero -> normalize() is NaN, and `dot(NaN,..) > t` is false for ANY t, so
+        // the knob got culled: fall back to `outward` there, and orient cross(du,dv) outward (winding varies).
         let du = ubo.cp[base + 3].xyz - ubo.cp[base + 0].xyz
         let dv = ubo.cp[base + 12].xyz - ubo.cp[base + 0].xyz
         let raw = cross(du, dv)
@@ -190,10 +181,9 @@ var @in @location = 1 f_world_pos    : float3
 var @in @location = 2 f_patch        : float
 var @out @location = 0 frag_color    : float4
 
-//! Procedural environment sampled by a direction -- the thing the glazed teapot reflects. A warm
-//! horizon -> cool zenith gradient, a darker ground hemisphere, and a bright sun disc + glow along the
-//! light direction (so the reflected sun rides the surface as the teapot turns, and lines up with the
-//! specular highlight). No cubemap texture needed: it's evaluated analytically per fragment.
+//! Procedural environment sampled by a direction -- what the glazed teapot reflects. Warm horizon ->
+//! cool zenith, a darker ground hemisphere, plus a sun disc + glow along the light dir, so the reflected
+//! sun rides the surface as it turns and lines up with the specular. Analytic; no cubemap needed.
 def env_color(dir : float3) : float3 {
     let up = clamp(dir.y, -1.0, 1.0)
     let t = clamp(up * 0.5 + 0.5, 0.0, 1.0)
@@ -243,6 +233,7 @@ def teapot_fs {
 }
 
 // ===== SHADOW MAP SAMPLER =====
+
 // The depth-compare combined sampler. dasSpirv emits OpTypeImage with the Depth=1 flag (the
 // `sampler2DShadow` marker) and textureCompare lowers to OpImageSampleDrefImplicitLod -> scalar PCF
 // in [0,1] (1 = lit, 0 = shadowed). The floor reads it to receive the teapot's cast silhouette.
@@ -265,10 +256,10 @@ def private pcf_shadow(uv : float2; ref : float) : float {
 }
 
 // ===== GROUND FLOOR =====
-// A world-space XZ plane the teapot sits on. Its own pipeline (regular vertex + fragment, vertex
-// buffer of world positions) drawn in the same color pass as the mesh-shader teapot. The floor reads
-// `ubo.vp` (proj*view, no model — the quad is already in world space), reflects the SAME env the
-// teapot does, and receives the teapot's shadow via the sampler2DShadow above.
+
+// A world-space XZ plane the teapot sits on: its own regular vertex+fragment pipeline, drawn in the
+// same color pass as the mesh-shader teapot. It reads `ubo.vp` (no model — the quad is already in
+// world space), reflects the SAME env the teapot does, and receives its shadow via sampler2DShadow.
 
 var @in  @location = 0 fl_pos   : float3
 var @out @location = 0 fl_world : float3
@@ -323,10 +314,10 @@ def floor_fs {
 }
 
 // ===== ENV SKY =====
+
 // A fullscreen triangle drawn first (depth test off) so the background shows the same procedural env
-// the teapot + floor reflect — the teapot is now in a scene, not a void. The host computes the three
-// corner view-rays from the camera basis and uploads them as the triangle's per-vertex attribute; the
-// fragment normalizes the interpolated ray and evaluates env_color.
+// the teapot + floor reflect — a scene, not a void. The host uploads the three corner view-rays from
+// the camera basis as a per-vertex attribute; the fragment normalizes it and evaluates env_color.
 
 var @in  @location = 0 sky_clip : float2
 var @in  @location = 1 sky_ray  : float3
@@ -347,10 +338,10 @@ def sky_fs {
 }
 
 // ===== SHADOW CASTER (mesh-shader, depth-only) =====
+
 // The teapot casts its TRUE silhouette: the same on-GPU Bezier tessellation, rendered depth-only from
-// the light's point of view into the shadow map (pass 1). The task emits ALL patches (a shadow caster
-// must include patches that face away from the camera — they still occlude the light); the mesh writes
-// clip = light_vp * model * pos and no fragment varyings (the pipeline has no fragment stage).
+// the light's view into the shadow map (pass 1). The task emits ALL patches — a caster must keep the
+// camera-facing-away ones, they still occlude — and the mesh writes only clip = light_vp*model*pos.
 
 [vulkan_task_shader(local_size_x=1, name="teapot_shadow_task_spv")]
 def teapot_shadow_task {

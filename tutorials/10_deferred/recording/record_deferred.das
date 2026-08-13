@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 10 recording driver (manual, local-only). Renders the deferred-shading scene in AUTO

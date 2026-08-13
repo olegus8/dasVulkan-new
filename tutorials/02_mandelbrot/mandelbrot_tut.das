@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 02 render path: dispatch the Mandelbrot compute shader over a MAND_DIM x MAND_DIM grid and

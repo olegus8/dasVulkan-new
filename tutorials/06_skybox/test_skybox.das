@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 06 pixel oracle (lavapipe in CI, real GPU locally). A chrome/metal sphere sits on a
@@ -64,10 +65,9 @@ def test_skybox_oracle(t : T?) {
     t |> success(saw_sphere_blue && saw_sphere_dark,
                  "reflective sphere present (blue zenith + dark ground reflection in centre)")
 
-    // 4. checkerboard floor: the bottom third shows both a bright (light tile) and a dark (dark tile) pixel.
-    // sRGB format (R8G8B8A8_SRGB) gamma-encodes the linear output, brightening both tile types:
-    //   light tiles: lum ~620-635 (old linear: ~430+); dark tiles: lum ~370-400 (old linear: ~60-240).
-    // The two clusters remain well separated (~230 lum apart), so contrast detection is still valid.
+    // 4. checkerboard floor: the bottom third must show both a light-tile and a dark-tile pixel. The sRGB
+    // format gamma-encodes the linear output, brightening both (light ~620-635, dark ~370-400; linear was
+    // ~430+ and ~60-240), but the clusters stay ~230 lum apart, so contrast detection is still valid.
     var saw_light_tile = false
     var saw_dark_tile = false
     let fy0 = SKY_H * 7 / 10

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // PR 8 (dasSpirv PR-B GPU regression gate): the nonuniformEXT cascade. Identical descriptor-array
@@ -73,9 +74,7 @@ struct private Tex {
 }
 
 def private finalize(var t : Tex) {
-    // Vulkan teardown order: image views first (they reference the image), then the image itself
-    // (still attached to memory), then the memory it was bound to. Reversing image/memory hits the
-    // validation layer for "memory still in use by image".
+    // Teardown order: views (they reference the image), then image, then its memory -- reversing image/memory trips "memory still in use by image".
     delete t.view
     delete t.image
     delete t.memory
@@ -144,7 +143,7 @@ def private create_1x1_texture(device : Device; phys : VkPhysicalDevice; queue :
     return <- Tex(image <- img, memory <- mem, view <- view)
 }
 
-def private render_one_id(id : int) : array<uint8> {
+def private render_one_id(id : int) : array<uint8> {   // nolint:STYLE038 - flat command-record run
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }

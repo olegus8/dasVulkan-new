@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Phase-7.4 separate image + sampler GPU gate: render a fullscreen quad whose fragment samples a

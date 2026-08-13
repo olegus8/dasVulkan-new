@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Phase-7.3 sampler2DArray GPU gate shaders: a fullscreen quad whose fragment picks an array layer from

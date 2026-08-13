@@ -35,6 +35,7 @@ def main():
     out = os.path.join(here, "..", "teapot_data.das")
     L = []
     L.append("options gen2")
+    L.append("options _comment_hygiene = true")
     L.append("options indenting = 4")
     L.append("")
     L.append("// Generated from teapotCGA.bpt (original Newell 32-patch Utah teapot, public domain) by")

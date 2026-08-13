@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 03 - a signed-distance-field raymarcher in pure daslang. A [compute_shader] fires one
@@ -72,9 +73,7 @@ def private rot2(p : float2; ang : float) : float2 {
 def private map(p : float3; t : float) : float2 {
     let d_plane = sd_plane(p, -0.5f)
     let d_sphere = sd_sphere(p - float3(0.0f, 0.2f * sin(t * 1.5f), 0.0f), 0.55f)
-    // torus orbits the sphere by rotating its local xz frame with time. We rebuild the whole vector
-    // via constructor -- dasSpirv does not support write-swizzle (pt.x = ...) yet, so component-wise
-    // mutation goes via reconstruction.
+    // Torus orbits the sphere via its rotated local xz frame, rebuilt whole by constructor: dasSpirv has no write-swizzle (`pt.x = ...`) yet.
     let xz = rot2(float2(p.x, p.z), t * 0.8f)
     let pt = float3(xz.x, p.y, xz.y)
     let d_torus = sd_torus(pt - float3(1.0f, 0.0f, 0.0f), 0.32f, 0.12f)
@@ -102,10 +101,9 @@ def private get_normal(p : float3; t : float) : float3 {
     return normalize(float3(nx, ny, nz))
 }
 
-// March from ro toward rd. Returns (t_hit, material). t_hit >= MAX_DIST means miss (sky). The
-// three exit cases are: (1) HIT_EPS hit -> set mat + break, (2) far-plane escape -> break, (3)
-// step-budget exhausted without either -> force a miss (without this, dist could land just under
-// MAX_DIST and the caller would shade garbage at material 0).
+// March from ro toward rd. Returns (t_hit, material); t_hit >= MAX_DIST means miss (sky). Three exits:
+// HIT_EPS hit -> set mat + break; far-plane escape -> break; step budget exhausted -> force a miss,
+// since otherwise dist could land just under MAX_DIST and the caller would shade garbage at material 0.
 def private march(ro, rd : float3; t : float) : float2 {
     var dist = 0.0f
     var mat = 0.0f

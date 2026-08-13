@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 // Phase-4 GPU-gate shaders: a textured quad transformed by a UBO matrix and modulated by a

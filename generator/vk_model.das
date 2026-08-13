@@ -1,4 +1,5 @@
 ﻿options gen2
+options _comment_hygiene = true
 options indenting = 4
 
 module vk_model shared
@@ -392,8 +393,7 @@ def private parse_features(root : xml_node; var reg : VkRegistry) {
     for (f in each_child(root, "feature")) {
         continue if (!api_ok(f))
         var guard = cs(f["name"] as string)      // VK_VERSION_1_0 etc -- also a header define
-        // internal sub-features (VK_BASE/COMPUTE/GRAPHICS_VERSION_x_y, registry >= 1.4.3xx)
-        // are not header defines -- fold them into the public VK_VERSION_x_y guard
+        // internal sub-features (registry >= 1.4.3xx) are not header defines -- fold into VK_VERSION_x_y
         if ((f["apitype"] as string) == "internal") {
             let vpos = guard |> find("VERSION_")
             if (vpos >= 0) {
