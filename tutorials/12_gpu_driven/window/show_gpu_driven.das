@@ -80,7 +80,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
         let t = float(glfwGetTime())
         let wall_x = 5.0f * sin(t * 1.05f)                // sweep the wall across the field (~6 s round trip)
@@ -121,7 +121,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

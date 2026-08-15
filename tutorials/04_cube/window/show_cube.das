@@ -83,7 +83,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
         let t = float(glfwGetTime())
         // 20-second lemniscate orbit -- one full pass per 20s of wall clock.
@@ -128,7 +128,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

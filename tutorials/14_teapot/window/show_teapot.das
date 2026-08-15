@@ -89,7 +89,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
         let t = float(glfwGetTime())
         update_teapot_uniforms(res, device, t, false)
@@ -131,7 +131,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

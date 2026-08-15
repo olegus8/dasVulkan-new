@@ -80,7 +80,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (fbw != swap.width || fbh != swap.height) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
         let t = float(glfwGetTime())
         // 24-second camera orbit; sun rotates at its own rate inside update_shadow_uniforms.
@@ -124,7 +124,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))
             delete swap
-            swap <- create_swapchain(device, phys, surface, fbw, fbh)   // nolint:PERF030 - deleted just above
+            swap <- create_swapchain(device, phys, surface, fbw, fbh)
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

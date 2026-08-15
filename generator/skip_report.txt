@@ -149,7 +149,7 @@ vkGetMemoryRemoteAddressNV: param pAddress: unknown param type VkRemoteAddressNV
 vkGetPhysicalDeviceCooperativeMatrixPropertiesNV: param pProperties: param type VkCooperativeMatrixPropertiesNV not emitted
 vkWriteResourceDescriptorsEXT: param pResources: param type VkResourceDescriptorInfoEXT not emitted
 
-== boost structs skipped: 44 ==
+== boost structs skipped: 46 ==
 VkAccelerationStructureVersionInfoKHR: member pVersionData (uint8_t x1) not mappable
 VkAllocationCallbacks: member pUserData (void x1) not mappable
 VkBaseInStructure: member pNext (VkBaseInStructure x1) not mappable
@@ -178,6 +178,8 @@ VkImageToMemoryCopy: member pHostPointer (void x1) not mappable
 VkImportMemoryHostPointerInfoEXT: member pHostPointer (void x1) not mappable
 VkInitializePerformanceApiInfoINTEL: member pUserData (void x1) not mappable
 VkInstanceCreateInfo: member ppEnabledLayerNames (char x2) not mappable
+VkLayerSettingEXT: member pValues len valueCount counts typed values, stride from a sibling field
+VkLayerSettingsCreateInfoEXT: member pSettings (VkLayerSettingEXT x1) not mappable
 VkMemoryMapPlacedInfoEXT: member pPlacedAddress (void x1) not mappable
 VkMemoryToImageCopy: member pHostPointer (void x1) not mappable
 VkMicromapVersionInfoEXT: member pVersionData (uint8_t x1) not mappable
