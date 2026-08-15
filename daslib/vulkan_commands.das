@@ -590,8 +590,8 @@ def create_shaders_e_x_t(device : Device; var create_infos : array<ShaderCreateI
     let n = length(create_infos)
     var vkraw : array<VkShaderCreateInfoEXT>
     vkraw |> resize(n)
-    for (vki in range(n)) {
-        vkraw[vki] = vk_view_create_unsafe(create_infos[vki])
+    for (vkv, vke in vkraw, create_infos) {
+        vkv = vk_view_create_unsafe(vke)
     }
     var vkout : array<VkShaderEXT>
     vkout |> resize(n)

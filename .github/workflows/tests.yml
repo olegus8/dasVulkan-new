@@ -124,7 +124,9 @@ jobs:
         # stays untouched) and diff the regenerated skip report against the committed
         # generator/skip_report.txt. An emitter change that silently GROWS the skip
         # tail (drops structs/commands from the generated surface) fails here; a
-        # justified change regenerates the report in the same commit.
+        # justified change regenerates the report in the same commit. The copyability
+        # report rides the same regen (written beside the skip report), so a
+        # copyable -> non-copyable flip in the boost surface fails here too.
         working-directory: ${{ github.workspace }}/dasVulkan
         run: |
           set -eux
@@ -136,6 +138,7 @@ jobs:
             --boost-out /tmp/vk_regen_daslib \
             --skip-report /tmp/vk_skip_report.txt
           diff -u generator/skip_report.txt /tmp/vk_skip_report.txt
+          diff -u generator/copyability_report.txt /tmp/copyability_report.txt
 
       - name: "Lint: every committed .das must be clean (paranoid + perf + style)"
         # The unified linter (daslang's utils/lint/main.das) runs all three passes over the whole

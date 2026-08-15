@@ -53,16 +53,19 @@ def public camel_to_screaming(s : string) : string {
 
 //! split a trailing vendor tag off a type name: "VkColorSpaceKHR" -> ("VkColorSpace", "KHR")
 def public strip_vendor_tag(s : string; tags : array<string>) : tuple<base : string; tag : string> {
-    for (t in tags) {
-        if (s |> ends_with(t)) {
-            let base = s |> slice(0, length(s) - length(t))
+    var found_base = s
+    var found_tag = ""
+    peek_data(s) $(d) {
+        for (t in tags) {
             // require a lowercase char right before the tag so "VkASTC..." doesn't lose a fake tag
-            if (!empty(base)) {
-                return (base = base, tag = t)
+            if (d |> ends_with(t) && length(d) > length(t)) {
+                found_base = d |> slice(0, length(d) - length(t))
+                found_tag = t
+                break
             }
         }
     }
-    return (base = s, tag = "")
+    return (base = found_base, tag = found_tag)
 }
 
 //! the SCREAMING_CASE_ prefix shared by an enum's value names: VkAccessFlagBits2 -> "VK_ACCESS_2_"

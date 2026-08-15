@@ -177,7 +177,7 @@ def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhys
     vkDeviceWaitIdle(boost_value_to_vk(device))
     let keep_format = sc.format     // preserve the format across resize (the render pass was built for it)
     delete sc       // release the old swapchain before making a new one (the surface is app-owned)
-    sc <- create_swapchain(device, phys, surface, width, height, keep_format)   // nolint:PERF030 - deleted just above
+    sc <- create_swapchain(device, phys, surface, width, height, keep_format)
     build_swapchain_framebuffers(device, sc, render_pass)
 }
 

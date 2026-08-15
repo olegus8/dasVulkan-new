@@ -253,14 +253,7 @@ def private after_present(ok : bool) {
 
 def public harness_end_frame() {
     //! Render the UI and present. Call after building the UI.
-    end_of_frame()
-    Render()
-    imgui_vk_update_textures(g_app.igvk, g_app.device, g_app.phys, g_app.queue, g_app.pool)
-    let ok = vk_live_draw_frame(g_app.render_pass, g_app.sync,
-                                clear_color(0.10f, 0.11f, 0.14f, 1.0f), true) $(cmd) {
-        imgui_vk_render(g_app.igvk, g_app.device, g_app.phys, cmd)
-    }
-    after_present(ok)
+    harness_end_frame() $(_cmd) {}
 }
 
 def public harness_end_frame(scene : block<(cmd : CommandBuffer) : void>) {

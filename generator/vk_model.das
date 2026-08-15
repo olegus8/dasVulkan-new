@@ -132,17 +132,19 @@ def private parse_decl_into(m : xml_node; var mem : VkMember) {
     mem.num_ptrs = txt |> count("*")
     mem.is_const = txt |> contains("const")
     // numeric array dims: [4] or [3][4] in the raw text (enum-named dims handled above)
-    var rest = txt
-    while (true) {
-        let lb = rest |> find("[")
-        break if (lb < 0)
-        let rb = rest |> find("]")
-        break if (rb < lb)
-        let dim = rest |> slice(lb + 1, rb) |> trim()
-        if (!empty(dim)) {
-            mem.arr_dims |> push(dim)
+    peek_data(txt) $(d) {
+        var pos = 0
+        while (true) {
+            let lb = d |> find("[", pos)
+            break if (lb < 0)
+            let rb = d |> find("]", pos)
+            break if (rb < lb)
+            let dim = d |> slice(lb + 1, rb) |> trim()
+            if (!empty(dim)) {
+                mem.arr_dims |> push(dim)
+            }
+            pos = rb + 1
         }
-        rest = rest |> slice(rb + 1)
     }
     // C bitfield width -- ":24"
     let colon = txt |> find(":")

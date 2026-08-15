@@ -585,6 +585,18 @@ def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_fam
 //! Superset of create_device_storage_8_16_int_dot that ALSO enables cooperative matrix, and OPPORTUNISTICALLY:
 //! memory_priority + pageable (residency), timelineSemaphore, external_memory_host. ``transfer_family`` >= 0
 //! adds a second queue (pair ``select_transfer_queue_family`` + a timeline semaphore to overlap uploads).
+def private push_memory_management_extensions(var ext : array<string>; with_memprio, with_pageable, with_extmemhost : bool) {
+    if (with_memprio) {
+        ext |> push("VK_EXT_memory_priority")
+    }
+    if (with_pageable) {
+        ext |> push("VK_EXT_pageable_device_local_memory")
+    }
+    if (with_extmemhost) {
+        ext |> push("VK_EXT_external_memory_host")
+    }
+}
+
 def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {
     var q12 = VkPhysicalDeviceVulkan12Features()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -635,15 +647,7 @@ def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; q
     if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
         ext |> push("VK_KHR_shader_integer_dot_product")
     }
-    if (with_memprio) {
-        ext |> push("VK_EXT_memory_priority")
-    }
-    if (with_pageable) {
-        ext |> push("VK_EXT_pageable_device_local_memory")
-    }
-    if (with_extmemhost) {
-        ext |> push("VK_EXT_external_memory_host")
-    }
+    push_memory_management_extensions(ext, with_memprio, with_pageable, with_extmemhost)
     var fams <- [queue_family]
     if (transfer_family >= 0 && uint(transfer_family) != queue_family) {
         fams |> push(uint(transfer_family))
@@ -840,15 +844,7 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     if (with_coopvec) {
         ext |> push("VK_NV_cooperative_vector")
     }
-    if (with_memprio) {
-        ext |> push("VK_EXT_memory_priority")
-    }
-    if (with_pageable) {
-        ext |> push("VK_EXT_pageable_device_local_memory")
-    }
-    if (with_extmemhost) {
-        ext |> push("VK_EXT_external_memory_host")
-    }
+    push_memory_management_extensions(ext, with_memprio, with_pageable, with_extmemhost)
     var fams <- [queue_family]
     if (transfer_family >= 0 && uint(transfer_family) != queue_family) {
         fams |> push(uint(transfer_family))
@@ -1760,6 +1756,12 @@ def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layou
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
 }
 
+def private set_extent_2d(var ici : ImageCreateInfo; width, height : int) {
+    ici.extent.width = uint(width)
+    ici.extent.height = uint(height)
+    ici.extent.depth = 1u
+}
+
 //!@nolint
 //! Run a compute shader that writes an Rgba8 storage image (set=0/binding=0, 8x8 local size) and return
 //! the w*h RGBA8 pixels. One-shot: own instance/device/pipeline/pool; w,h must be positive multiples of 8.
@@ -1786,9 +1788,7 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     // the storage image (STORAGE for the compute write + TRANSFER_SRC for the readback), device-local + view
     var ici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt, mipLevels = 1u, arrayLayers = 1u,
         tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
-    ici.extent.width = uint(w)
-    ici.extent.height = uint(h)
-    ici.extent.depth = 1u
+    set_extent_2d(ici, w, h)
     ici.samples._1 = true
     ici.usage.storage = true
     ici.usage.transfer_src = true
@@ -1816,9 +1816,7 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
     if (srgb_encode) {
         var sici = ImageCreateInfo(imageType = VkImageType._2D, format = srgb_fmt, mipLevels = 1u, arrayLayers = 1u,
             tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
-        sici.extent.width = uint(w)
-        sici.extent.height = uint(h)
-        sici.extent.depth = 1u
+        set_extent_2d(sici, w, h)
         sici.samples._1 = true
         sici.usage.transfer_dst = true
         sici.usage.transfer_src = true
@@ -1973,9 +1971,7 @@ def public build_offscreen_target(device : Device; phys : VkPhysicalDevice; widt
                                   extra_usage : VkImageUsageFlags) : OffscreenTarget {
     var ici = ImageCreateInfo(imageType = VkImageType._2D, format = format, mipLevels = 1u, arrayLayers = 1u,
         samples = samples, tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
-    ici.extent.width = uint(width)
-    ici.extent.height = uint(height)
-    ici.extent.depth = 1u
+    set_extent_2d(ici, width, height)
     ici.usage = extra_usage
     ici.usage.color_attachment = true
     var inscope image <- create_image(device, ici)
@@ -2038,9 +2034,7 @@ def public build_offscreen_depth(device : Device; phys : VkPhysicalDevice; width
                                  samples : VkSampleCountFlags) : OffscreenDepth {
     var ici = ImageCreateInfo(imageType = VkImageType._2D, format = format, mipLevels = 1u, arrayLayers = 1u,
         samples = samples, tiling = VkImageTiling.OPTIMAL, initialLayout = VkImageLayout.UNDEFINED)
-    ici.extent.width = uint(width)
-    ici.extent.height = uint(height)
-    ici.extent.depth = 1u
+    set_extent_2d(ici, width, height)
     ici.usage = extra_usage
     ici.usage.depth_stencil_attachment = true
     var inscope image <- create_image(device, ici)
