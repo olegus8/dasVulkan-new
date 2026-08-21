@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **ARCHIVED — dasVulkan lives in the main daslang repository now.**
+> The module merged into [GaijinEntertainment/daScript](https://github.com/GaijinEntertainment/daScript)
+> at `modules/dasVulkan` and builds by default — `require vulkan` works out of the box.
+> Documentation moved to [daslang.io](https://daslang.io/doc/stdlib/sec_vulkan.html).
+> This repository is frozen with its full history; development continues in-tree.
+
 # dasVulkan
 
 Vulkan bindings for [daslang](https://dascript.org/), generated from the Khronos `vk.xml` registry.
